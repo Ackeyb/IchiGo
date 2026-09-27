@@ -532,4 +532,381 @@ Do not knowingly leave:
 - broken production builds
 - placeholder implementations presented as complete
 
-If an unrelated pre-existing failure exists, identify
+If an unrelated pre-existing failure exists, identify it separately.
+
+---
+
+## 26. Scope Control
+
+Keep changes focused on the requested task.
+
+Avoid unrelated:
+
+- refactors
+- formatting rewrites
+- dependency upgrades
+- renaming
+- folder restructuring
+- visual redesigns
+
+unless required for the requested implementation.
+
+A task should produce a reviewable diff.
+
+---
+
+## 27. Existing Code
+
+Do not delete or rewrite working code merely because another architecture is personally preferable.
+
+Refactor when there is a concrete benefit such as:
+
+- correctness
+- testability
+- eliminating duplicated game logic
+- resolving a specification conflict
+- enabling the requested feature
+
+Prefer incremental changes over unnecessary rewrites.
+
+---
+
+## 28. Comments
+
+Use comments to explain:
+
+- non-obvious rules
+- invariants
+- architectural constraints
+- reasons for unusual implementation decisions
+
+Do not add comments that merely restate obvious code.
+
+Important game-rule comments should reference the relevant concept from `docs/SPEC.md` where useful.
+
+---
+
+## 29. User-Facing Language
+
+The primary user-facing language is Japanese.
+
+Code identifiers should normally remain English.
+
+Examples:
+
+```text
+UI:
+残り
+ROLL可能
+OUT
+完走
+ペナルティ
+
+Code:
+remainingDice
+activeDice
+strandedDice
+completed
+penaltyMultiplier
+```
+
+Avoid mixing Japanese identifiers into TypeScript unless there is a strong reason.
+
+---
+
+## 30. Responsive Design
+
+The primary target is smartphone play.
+
+However, desktop and tablet layouts must remain usable.
+
+Do not implement mobile support as a separate game implementation.
+
+Use one responsive application.
+
+Prioritize visibility of:
+
+- current player
+- dice field
+- ROLL button
+- score
+- remaining dice
+- OUT count
+- penalty multiplier
+
+---
+
+## 31. Accessibility
+
+Where practical:
+
+- buttons must have meaningful accessible labels
+- disabled states must be programmatically represented
+- important game information must not depend only on color
+- dialogs should manage focus correctly
+- keyboard interaction should remain usable on desktop
+- respect reduced-motion preferences for nonessential animation
+
+Accessibility changes must not alter game rules.
+
+---
+
+## 32. Sound
+
+Sound is optional presentation state.
+
+Game behavior must remain identical whether sound is ON or OFF.
+
+Never use sound completion callbacks as authoritative game-state triggers if avoidable.
+
+---
+
+## 33. Performance
+
+Avoid premature optimization.
+
+However:
+
+- do not recreate the 3D renderer unnecessarily
+- clean up event listeners
+- clean up animation loops
+- clean up audio resources
+- avoid React render loops
+- avoid accumulating stale dice objects
+
+Mobile performance is important.
+
+---
+
+## 34. Security
+
+Do not commit:
+
+- API keys
+- tokens
+- passwords
+- credentials
+- private keys
+- machine-specific secrets
+
+Use environment variables where external credentials are ever required.
+
+This game should not require secrets for core gameplay.
+
+---
+
+## 35. Git Safety
+
+Before making changes, inspect:
+
+```bash
+git status
+```
+
+Do not overwrite unrelated uncommitted user changes.
+
+Never run destructive Git commands merely to obtain a clean working tree.
+
+Avoid commands such as:
+
+```bash
+git reset --hard
+git clean -fd
+```
+
+unless the user explicitly requests and understands the destructive action.
+
+Do not force-push unless explicitly requested.
+
+---
+
+## 36. Branches
+
+Work on the currently assigned branch unless explicitly instructed otherwise.
+
+Do not silently switch branches.
+
+Do not create unnecessary branches.
+
+If the user requests a feature branch, use a descriptive name such as:
+
+```text
+feature/game-engine
+feature/out-system
+feature/3d-dice
+fix/ranking-tie
+```
+
+---
+
+## 37. Commits
+
+When explicitly asked to commit, create focused commits.
+
+Use clear commit messages.
+
+Examples:
+
+```text
+feat: implement core dice scoring engine
+
+feat: add OUT dice resolution
+
+feat: implement ranking and tie handling
+
+feat: add sudden death state reset
+
+feat: implement penalty calculation
+
+test: add OUT system edge cases
+
+fix: prevent duplicate roll resolution
+```
+
+Do not claim a commit was created unless it actually exists.
+
+---
+
+## 38. Push Policy
+
+Do not push automatically unless the user explicitly requests pushing or the current task explicitly authorizes it.
+
+Before pushing:
+
+1. confirm relevant tests/checks have run
+2. inspect `git status`
+3. inspect the intended commit(s)
+4. confirm the target branch
+5. push without force unless explicitly authorized otherwise
+
+If authentication or network access prevents push, report that clearly.
+
+Do not repeatedly retry authentication failures.
+
+---
+
+## 39. Do Not Commit Generated Noise
+
+Do not commit unnecessary generated files.
+
+Follow `.gitignore`.
+
+Typical files that should normally remain untracked include:
+
+```text
+node_modules/
+dist/
+coverage/
+.env
+.env.local
+OS/editor temporary files
+```
+
+Exceptions are allowed only when the repository intentionally tracks them.
+
+---
+
+## 40. Documentation
+
+When implementation changes an architectural detail, update relevant technical documentation if needed.
+
+Do not modify the game specification merely to match an implementation mistake.
+
+`docs/SPEC.md` represents intended behavior.
+
+Implementation must conform to the specification, not the reverse.
+
+---
+
+## 41. Specification Changes
+
+If the user requests a game-rule change:
+
+1. identify the affected specification sections
+2. update `docs/SPEC.md`
+3. update implementation
+4. update tests
+5. verify affected behavior
+
+Do not leave specification, code, and tests contradicting each other.
+
+---
+
+## 42. Task Completion Report
+
+At the end of a development task, provide a concise summary containing:
+
+```text
+Implemented:
+- ...
+
+Tests/checks:
+- ...
+
+Files changed:
+- ...
+
+Remaining issues:
+- ...
+```
+
+If everything requested is complete, say so.
+
+If something is incomplete, state exactly what remains.
+
+Do not hide failed tests or unresolved problems.
+
+---
+
+## 43. Definition of Agent Success
+
+A task is successful when:
+
+```text
+✓ requested scope is implemented
+✓ behavior matches docs/SPEC.md
+✓ game invariants remain valid
+✓ relevant tests pass
+✓ type/build checks pass where available
+✓ unrelated code is not unnecessarily changed
+✓ no duplicate game-rule implementations are introduced
+✓ no secrets are committed
+✓ Git state is understood
+✓ remaining limitations are clearly reported
+```
+
+---
+
+## 44. Final Rule
+
+When there is tension between:
+
+```text
+"this animation would look cooler"
+```
+
+and:
+
+```text
+"this is what the game rules require"
+```
+
+the game rules win.
+
+When there is tension between:
+
+```text
+"the library naturally behaves this way"
+```
+
+and:
+
+```text
+"docs/SPEC.md requires different behavior"
+```
+
+adapt the library.
+
+Do not adapt the rules.
+
+`docs/SPEC.md` is authoritative.
