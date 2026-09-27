@@ -17,6 +17,7 @@ export type PenaltyEntry = Readonly<{ playerId: string; diceCount: number }> & (
   | (Readonly<{ status: 'resolved' }> & PenaltyResult)
 );
 export type PenaltyState = Readonly<{
+  penaltyId: string;
   totalCompletionCount: number;
   penalties: readonly PenaltyEntry[];
 }>;
@@ -46,8 +47,11 @@ export function rollPenaltyDice(count: number, random: RandomSource): readonly D
 export function calculatePenalty(dice: readonly DieValue[], totalCompletionCount: number): PenaltyResult {
   assertDiceCount(dice.length);
   const multiplier = getMultiplier(totalCompletionCount);
-  if (dice.some((value) => !Number.isInteger(value) || value < 1 || value > 6)) {
-    throw new RangeError('Penalty results must be D6 values.');
+  // Iteration visits sparse entries too; Array.some would silently skip them.
+  for (const value of dice) {
+    if (!Number.isInteger(value) || value < 1 || value > 6) {
+      throw new RangeError('Penalty results must be D6 values.');
+    }
   }
   const basePenalty = dice.reduce<number>((sum, value) => sum + value, 0);
   const finalPenalty = basePenalty * multiplier;
@@ -58,7 +62,8 @@ export function calculatePenalty(dice: readonly DieValue[], totalCompletionCount
 }
 
 /** Snapshot the decisive round's loser counts in the original fixed play order. */
-export function createPenaltyState(round: DecisiveRound): PenaltyState {
+export function createPenaltyState(round: DecisiveRound, penaltyId: string): PenaltyState {
+  if (!penaltyId) throw new RangeError('Penalty requires a unique phase ID.');
   getMultiplier(round.totalCompletionCount);
   const ids = new Set(round.participants.map(({ id }) => id));
   if (ids.size < 2 || ids.size > 10 || ids.size !== round.participants.length
@@ -78,11 +83,12 @@ export function createPenaltyState(round: DecisiveRound): PenaltyState {
       assertDiceCount(diceCount);
       return { playerId: id, diceCount, status: 'pending' };
     });
-  return { totalCompletionCount: round.totalCompletionCount, penalties };
+  return { penaltyId, totalCompletionCount: round.totalCompletionCount, penalties };
 }
 
 /** Apply to the latest state. Duplicate/out-of-order requests consume no randomness. */
-export function rollPenalty(state: PenaltyState, playerId: string, random: RandomSource): PenaltyState {
+export function rollPenalty(state: PenaltyState, playerId: string, random: RandomSource, expectedPenaltyId: string): PenaltyState {
+  if (expectedPenaltyId !== state.penaltyId) return state;
   const index = state.penalties.findIndex((entry) => entry.status === 'pending');
   const pending = state.penalties[index];
   if (!pending || pending.playerId !== playerId) return state;
@@ -90,6 +96,7 @@ export function rollPenalty(state: PenaltyState, playerId: string, random: Rando
   const result = calculatePenalty(rollPenaltyDice(pending.diceCount, random), state.totalCompletionCount);
   const resolved: PenaltyEntry = { ...pending, status: 'resolved', ...result };
   return {
+    penaltyId: state.penaltyId,
     totalCompletionCount: state.totalCompletionCount,
     penalties: state.penalties.map((entry, i) => i === index ? resolved : entry),
   };

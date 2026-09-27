@@ -52,7 +52,7 @@ describe('SPEC §77 cases 23–24: sudden death eligibility', () => {
     expect(startSuddenDeath(state, 0)).toBe(state);
   });
   it('does not treat initial zero-score states or in-progress turns as completed ties', () => {
-    const initial = createTurn().player;
+    const initial = createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }).player;
     expect(shouldStartSuddenDeath([initial, initial])).toBe(false);
     const state = round([player('a', 0, 7), { ...initial, id: 'b' }]);
     expect(shouldStartSuddenDeath(state.players)).toBe(false);
@@ -114,7 +114,7 @@ describe('SPEC §77 cases 25–28: explicit round reset', () => {
       // Resolve a complete, non-scoring round with the existing Phase 1 engine.
       state = {
         ...next,
-        players: next.players.map(({ id }) => ({ id, ...rollTurn(createTurn(next.throwStyle), 1, { next: () => 0 }).player })),
+        players: next.players.map(({ id }) => ({ id, ...rollTurn(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }, next.throwStyle), 1, { next: () => 0 }, 'test-turn').player })),
         currentPlayerIndex: 1,
       };
     }
@@ -153,7 +153,7 @@ describe('SPEC §77 cases 25–28: explicit round reset', () => {
     const first = next.players[0]!;
     const second = next.players[1]!;
     const ranking = calculateFinalRanking([
-      { ...first, ...rollTurn(createTurn(), 1, { next: () => 0 }).player },
+      { ...first, ...rollTurn(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }), 1, { next: () => 0 }, 'test-turn').player },
       { ...second, ...player(second.id, 350, 0) },
     ]);
     expect(ranking.rankings).toEqual([{ playerId: 'b', rank: 1 }, { playerId: 'a', rank: 2 }]);

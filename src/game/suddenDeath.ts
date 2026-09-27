@@ -63,7 +63,10 @@ export function startSuddenDeath(
   // SPEC §31, §98: whitelist retained fields; never spread old player/round results.
   return {
     participants: state.participants.map(({ id, name }) => ({ id, name })),
-    players: state.participants.map(({ id }) => ({ id, ...createTurn(state.throwStyle).player })),
+    players: state.participants.map(({ id }) => ({
+      id,
+      ...createTurn({ turnId: id, totalCompletionCount: state.totalCompletionCount }, state.throwStyle).player,
+    })),
     currentPlayerIndex: 0,
     throwStyle: state.throwStyle,
     totalCompletionCount: state.totalCompletionCount,

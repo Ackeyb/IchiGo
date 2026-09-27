@@ -23,7 +23,13 @@ export type RollResolution = Readonly<{
   player: PlayerTurn;
 }>;
 
-type TurnBase = Readonly<{
+export type TurnContext = Readonly<{
+  /** Unique across games, rounds and players; supplied by the caller. */
+  turnId: string;
+  totalCompletionCount: number;
+}>;
+
+type TurnBase = TurnContext & Readonly<{
   throwStyle: ThrowStyle;
   player: PlayerTurn;
   /** Starts at 1; identifies the next accepted roll within this turn. */

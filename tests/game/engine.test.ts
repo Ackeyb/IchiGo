@@ -37,7 +37,7 @@ describe('SPEC §77 cases 01–17: normal roll resolution', () => {
     ['all ones', results(1, 1, 1, 1, 1, 1, 1), 700, 0, 0, 7, 'complete'],
     ['all fives', results(5, 5, 5, 5, 5, 5, 5), 350, 0, 0, 7, 'complete'],
   ] as const)('%s', (_label, dice, score, activeDice, strandedDice, removedDice, outcome) => {
-    const initial = Object.freeze(createTurn().player);
+    const initial = Object.freeze(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }).player);
     const resolved = resolveRoll(initial, Object.freeze(dice));
     expect(resolved.player).toEqual({
       score, activeDice, strandedDice, removedDice,
@@ -48,12 +48,12 @@ describe('SPEC §77 cases 01–17: normal roll resolution', () => {
     expect(resolved.scoringCount).toBe(removedDice);
     expect(resolved.outCount).toBe(strandedDice);
     expect(getRemainingDice(resolved.player)).toBe(activeDice + strandedDice);
-    expect(initial).toEqual(createTurn().player);
+    expect(initial).toEqual(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }).player);
     assertPlayerTurn(resolved.player);
   });
 
   it.each([1, 5] as const)('05/06 last %i completes after previous scoring', (value) => {
-    const first = resolveRoll(createTurn().player, results(1, 1, 1, 1, 1, 1, 2));
+    const first = resolveRoll(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }).player, results(1, 1, 1, 1, 1, 1, 2));
     const last = resolveRoll(first.player, [safe(value)]);
     expect(last.outcome).toBe('complete');
     expect(last.player).toEqual({
@@ -63,7 +63,7 @@ describe('SPEC §77 cases 01–17: normal roll resolution', () => {
   });
 
   it('13 last die OUT ends without completion and preserves accumulated score', () => {
-    const first = resolveRoll(createTurn().player, results(1, 1, 1, 1, 1, 1, 2));
+    const first = resolveRoll(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }).player, results(1, 1, 1, 1, 1, 1, 2));
     const last = resolveRoll(first.player, [out]);
     expect(last.player).toEqual({
       score: 600, activeDice: 0, strandedDice: 1, removedDice: 6,
@@ -74,16 +74,16 @@ describe('SPEC §77 cases 01–17: normal roll resolution', () => {
   });
 
   it('14 last two dice five + OUT end without completion', () => {
-    const first = resolveRoll(createTurn().player, results(1, 1, 1, 1, 1, 2, 2));
+    const first = resolveRoll(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }).player, results(1, 1, 1, 1, 1, 2, 2));
     const last = resolveRoll(first.player, results(5, 'out'));
     expect(last.player).toMatchObject({ score: 550, activeDice: 0, strandedDice: 1, removedDice: 6, completed: false, turnFinished: true });
     expect(last.outcome).toBe('turnEnd');
   });
 
   it('15 rerolls only active dice; earlier OUT prevents completion', () => {
-    const first = rollTurn(createTurn(), 1, sourceFor(1, 5, 3, 6, 2, 'out', 'out'));
+    const first = rollTurn(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }), 1, sourceFor(1, 5, 3, 6, 2, 'out', 'out'), 'test-turn');
     const random = sourceFor(1, 1, 5);
-    const last = rollTurn(continueTurn(first, 1), 2, random);
+    const last = rollTurn(continueTurn(first, 1, 'test-turn'), 2, random, 'test-turn');
     expect(random.calls).toBe(6);
     expect(last.player).toEqual({
       score: 400, activeDice: 0, strandedDice: 2, removedDice: 5,
@@ -93,7 +93,7 @@ describe('SPEC §77 cases 01–17: normal roll resolution', () => {
   });
 
   it('a later no-score roll ends the turn without losing earlier points', () => {
-    const first = resolveRoll(createTurn().player, results(1, 5, 2, 2, 2, 2, 2));
+    const first = resolveRoll(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }).player, results(1, 5, 2, 2, 2, 2, 2));
     const last = resolveRoll(first.player, results(2, 3, 4, 6, 'out'));
     expect(last.player).toMatchObject({ score: 150, activeDice: 4, strandedDice: 1, removedDice: 2, turnFinished: true });
     expect(last.gainedScore).toBe(0);
@@ -110,8 +110,8 @@ describe('SPEC §77 cases 35–38: deterministic random generation', () => {
   });
 
   it('38 defaults to normal / 3%', () => {
-    expect(createTurn().throwStyle).toBe('normal');
-    expect(rollTurn(createTurn(), 1, new SequenceRandom(Array(7).fill(0.02))).player.strandedDice).toBe(7);
+    expect(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }).throwStyle).toBe('normal');
+    expect(rollTurn(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }), 1, new SequenceRandom(Array(7).fill(0.02)), 'test-turn').player.strandedDice).toBe(7);
   });
 
   it.each([0, 1, 2, 3, 4, 5])('maps the lower boundary of D6 bucket %i', (bucket) => {
@@ -128,47 +128,47 @@ describe('SPEC §77 cases 35–38: deterministic random generation', () => {
   });
 
   it('produces the same state from identical state and random input', () => {
-    const input = createTurn('careful');
-    expect(rollTurn(input, 1, sourceFor(1, 5, 2, 'out', 3, 4, 6)))
-      .toEqual(rollTurn(input, 1, sourceFor(1, 5, 2, 'out', 3, 4, 6)));
+    const input = createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }, 'careful');
+    expect(rollTurn(input, 1, sourceFor(1, 5, 2, 'out', 3, 4, 6), 'test-turn'))
+      .toEqual(rollTurn(input, 1, sourceFor(1, 5, 2, 'out', 3, 4, 6), 'test-turn'));
   });
 });
 
 describe('SPEC §77 case 39: explicit, atomic turn transitions', () => {
   it('rejects duplicate rolls and stale roll numbers without drawing randomness', () => {
-    const initial = Object.freeze(createTurn());
-    const first = rollTurn(initial, 1, sourceFor(1, 2, 2, 2, 2, 2, 2));
+    const initial = Object.freeze(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }));
+    const first = rollTurn(initial, 1, sourceFor(1, 2, 2, 2, 2, 2, 2), 'test-turn');
     const forbidden = new SequenceRandom([]);
     expect(first.phase).toBe('result');
-    expect(rollTurn(first, 1, forbidden)).toBe(first);
-    expect(rollTurn(first, 2, forbidden)).toBe(first);
-    expect(continueTurn(first, 99)).toBe(first);
-    const ready = continueTurn(first, 1);
+    expect(rollTurn(first, 1, forbidden, 'test-turn')).toBe(first);
+    expect(rollTurn(first, 2, forbidden, 'test-turn')).toBe(first);
+    expect(continueTurn(first, 99, 'test-turn')).toBe(first);
+    const ready = continueTurn(first, 1, 'test-turn');
     expect(ready.phase).toBe('ready');
-    expect(continueTurn(ready, 1)).toBe(ready);
-    expect(rollTurn(ready, 1, forbidden)).toBe(ready);
-    expect(rollTurn(ready, 3, forbidden)).toBe(ready);
+    expect(continueTurn(ready, 1, 'test-turn')).toBe(ready);
+    expect(rollTurn(ready, 1, forbidden, 'test-turn')).toBe(ready);
+    expect(rollTurn(ready, 3, forbidden, 'test-turn')).toBe(ready);
     expect(forbidden.calls).toBe(0);
-    const second = rollTurn(ready, 2, sourceFor(5, 2, 2, 2, 2, 2));
+    const second = rollTurn(ready, 2, sourceFor(5, 2, 2, 2, 2, 2), 'test-turn');
     expect(second.player.score).toBe(150);
-    expect(continueTurn(second, 1)).toBe(second);
-    expect(initial).toEqual(createTurn());
+    expect(continueTurn(second, 1, 'test-turn')).toBe(second);
+    expect(initial).toEqual(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }));
   });
 
   it.each([1, 2, 'out'] as const)('cannot resume or reroll a finished turn (%s)', (value) => {
-    const finished = rollTurn(createTurn(), 1, sourceFor(...Array<DieValue | 'out'>(7).fill(value)));
+    const finished = rollTurn(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }), 1, sourceFor(...Array<DieValue | 'out'>(7).fill(value)), 'test-turn');
     const forbidden = new SequenceRandom([]);
     expect(finished.player.turnFinished).toBe(true);
-    expect(continueTurn(finished, 1)).toBe(finished);
-    expect(rollTurn(finished, 2, forbidden)).toBe(finished);
+    expect(continueTurn(finished, 1, 'test-turn')).toBe(finished);
+    expect(rollTurn(finished, 2, forbidden, 'test-turn')).toBe(finished);
     expect(forbidden.calls).toBe(0);
     expect(() => resolveRoll(finished.player, [])).toThrow();
   });
 
   it('keeps the input state unchanged when the random source fails mid-roll', () => {
-    const initial = createTurn();
-    expect(() => rollTurn(initial, 1, sourceFor(1))).toThrow('Unexpected random draw');
-    expect(initial).toEqual(createTurn());
+    const initial = createTurn({ turnId: 'test-turn', totalCompletionCount: 0 });
+    expect(() => rollTurn(initial, 1, sourceFor(1), 'test-turn')).toThrow('Unexpected random draw');
+    expect(initial).toEqual(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }));
   });
 });
 
@@ -180,7 +180,7 @@ describe('invalid input and invariants', () => {
   });
 
   it('rejects unknown throw styles', () => {
-    expect(() => createTurn('invalid' as ThrowStyle)).toThrow(RangeError);
+    expect(() => createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }, 'invalid' as ThrowStyle)).toThrow(RangeError);
     expect(() => rollGameDice(7, 'invalid' as ThrowStyle, new SequenceRandom([]))).toThrow(RangeError);
   });
 
@@ -189,25 +189,25 @@ describe('invalid input and invariants', () => {
     { score: 50 }, { completed: true },
     { activeDice: 0, removedDice: 7, score: 700, completed: true },
   ])('rejects inconsistent player state %j', (patch) => {
-    const player = { ...createTurn().player, ...patch };
+    const player = { ...createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }).player, ...patch };
     const random = new SequenceRandom([]);
-    expect(() => rollTurn({ ...createTurn(), player }, 1, random)).toThrow(RangeError);
+    expect(() => rollTurn({ ...createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }), player }, 1, random, 'test-turn')).toThrow(RangeError);
     expect(random.calls).toBe(0);
   });
 
   it('rejects mismatched result counts and invalid result values', () => {
-    expect(() => resolveRoll(createTurn().player, [safe(1)])).toThrow(RangeError);
+    expect(() => resolveRoll(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }).player, [safe(1)])).toThrow(RangeError);
     const invalid = { status: 'out', value: 1 } as unknown as DieResult;
-    expect(() => resolveRoll(createTurn().player, [invalid, ...results(2, 2, 2, 2, 2, 2)])).toThrow(RangeError);
+    expect(() => resolveRoll(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }).player, [invalid, ...results(2, 2, 2, 2, 2, 2)])).toThrow(RangeError);
     const invalidSafe = { status: 'safe', value: 7 } as unknown as DieResult;
-    expect(() => resolveRoll(createTurn().player, [invalidSafe, ...results(2, 2, 2, 2, 2, 2)])).toThrow(RangeError);
+    expect(() => resolveRoll(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }).player, [invalidSafe, ...results(2, 2, 2, 2, 2, 2)])).toThrow(RangeError);
   });
 
   it('preserves invariants for all seven-die combinations of OUT, one, five and non-scoring', () => {
     const choices = [out, safe(1), safe(5), safe(2)] as const;
     for (let code = 0; code < 4 ** 7; code++) {
       const dice = Array.from({ length: 7 }, (_, index) => choices[Math.floor(code / 4 ** index) % 4]!);
-      const { player } = resolveRoll(createTurn().player, dice);
+      const { player } = resolveRoll(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }).player, dice);
       assertPlayerTurn(player);
       if (player.strandedDice > 0 && player.completed) throw new Error('OUT must prevent completion');
     }
@@ -215,7 +215,7 @@ describe('invalid input and invariants', () => {
 
   it('does not share mutable result objects with caller input', () => {
     const dice = results(1, 2, 2, 2, 2, 2, 2);
-    const resolved = resolveRoll(createTurn().player, dice);
+    const resolved = resolveRoll(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }).player, dice);
     expect(resolved.dice).not.toBe(dice);
     expect(resolved.dice[0]).not.toBe(dice[0]);
   });

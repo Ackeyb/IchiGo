@@ -94,15 +94,15 @@ describe('SPEC §77 cases 18–22 and 30: ranking and losers', () => {
   });
 
   it('accepts Phase 1 resolved turn state without changing that engine', () => {
-    const complete = resolveRoll(createTurn().player, Array.from({ length: 7 }, () => ({ status: 'safe' as const, value: 5 as const })));
-    const ended = resolveRoll(createTurn().player, Array.from({ length: 7 }, () => ({ status: 'out' as const, value: null })));
+    const complete = resolveRoll(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }).player, Array.from({ length: 7 }, () => ({ status: 'safe' as const, value: 5 as const })));
+    const ended = resolveRoll(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }).player, Array.from({ length: 7 }, () => ({ status: 'out' as const, value: null })));
     expect(calculateFinalRanking([{ ...ended.player, id: 'out' }, { ...complete.player, id: 'complete' }]).loserIds).toEqual(['out']);
   });
 });
 
 describe('SPEC §39: provisional ranking', () => {
   it('excludes both unplayed and in-progress players, even when their score is higher', () => {
-    const unplayed = { ...createTurn().player, id: 'unplayed' };
+    const unplayed = { ...createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }).player, id: 'unplayed' };
     const playing = { ...player('playing', 600, 1), turnFinished: false };
     expect(calculateProvisionalRanking([unplayed, player('done', 100, 5), playing])).toEqual({
       rankings: [entry('done', 1)], bottomIds: ['done'],
@@ -111,12 +111,12 @@ describe('SPEC §39: provisional ranking', () => {
 
   it('marks all tied provisional bottom players, including zero-score finished turns', () => {
     expect(calculateProvisionalRanking([
-      player('a', 100, 5), player('b', 0, 7), { ...createTurn().player, id: 'new' }, player('c', 0, 7, 3),
+      player('a', 100, 5), player('b', 0, 7), { ...createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }).player, id: 'new' }, player('c', 0, 7, 3),
     ])).toEqual({ rankings: [entry('a', 1), entry('b', 2), entry('c', 2)], bottomIds: ['b', 'c'] });
   });
 
   it('returns no rankings or bottom players before any turn ends', () => {
-    expect(calculateProvisionalRanking([{ ...createTurn().player, id: 'a' }, { ...createTurn().player, id: 'b' }]))
+    expect(calculateProvisionalRanking([{ ...createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }).player, id: 'a' }, { ...createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }).player, id: 'b' }]))
       .toEqual({ rankings: [], bottomIds: [] });
   });
 
@@ -128,7 +128,7 @@ describe('SPEC §39: provisional ranking', () => {
 
 describe('ranking API boundaries', () => {
   it('rejects final ranking before all turns finish', () => {
-    expect(() => calculateFinalRanking([{ ...createTurn().player, id: 'a' }, player('b', 0, 7)]))
+    expect(() => calculateFinalRanking([{ ...createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }).player, id: 'a' }, player('b', 0, 7)]))
       .toThrow('all turns');
   });
   it('returns empty results for empty collections', () => {

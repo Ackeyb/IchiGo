@@ -7,9 +7,9 @@ Phase 1の1人分の通常ターンを扱う純粋なTypeScriptエンジンで�
 
 ## API
 
-- `createTurn(throwStyle?)`: 7個・0点で開始。省略時は普通（3%）。
-- `rollTurn(state, rollNumber, random)`: 最新状態にROLL要求を適用し、新しい確定状態を返します。
-- `continueTurn(state, rollNumber)`: 継続可能な結果を次ROLLの受付状態へ進めます。抽選しません。
+- `createTurn({ turnId, totalCompletionCount }, throwStyle?)`: 7個・0点で開始。投げ方省略時は普通（3%）。
+- `rollTurn(state, rollNumber, random, expectedTurnId)`: 最新状態にROLL要求を適用し、新しい確定状態を返します。完走時は累積完走数も同時に1加算します。
+- `continueTurn(state, rollNumber, expectedTurnId)`: 継続可能な結果を次ROLLの受付状態へ進めます。抽選しません。
 - `resolveRoll(player, dice)`: 確定出目から得点・ダイス状態・継続／終了／完走を計算します。
 - `getRemainingDice(player)`: `activeDice + strandedDice`を返します。
 - `rollGameDice(count, throwStyle, random)`: ダイスごとにOUTを先に判定し、SAFEだけD6を抽選します。
@@ -20,7 +20,9 @@ Phase 1の1人分の通常ターンを扱う純粋なTypeScriptエンジンで�
 
 ## 二重処理防止の境界
 
-ROLL番号はターン内で1から増加します。受付中の番号と一致しない要求、
+`turnId`は呼び出し元がゲーム・ラウンド・プレイヤーをまたいで再利用しないIDを指定します。
+要求には操作時点のIDを保持し、適用時の最新状態のIDに置き換えないでください。
+ROLL番号はターン内で1から増加します。ターンIDまたは受付中の番号と一致しない要求、
 結果確認中や終了後の要求は同じ状態を返し、乱数を消費しません。
 継続には直前のROLL番号が必要です。終了後の継続は拒否します。
 
@@ -33,7 +35,9 @@ ROLL番号はターン内で1から増加します。受付中の番号と一致
 `tests/game/engine.test.ts`でSPEC §77の01〜17、35〜39を検証します。
 乱数境界、不正入力、入力の非変更、16,384通りの初回ROLLの不変条件も確認します。
 
-プレイヤーの完走状態は確定しますが、複数人・複数ラウンドの累積完走数管理は含めません。
+初回の累積完走数は0です。次プレイヤー・次ラウンドでは直前に確定した`totalCompletionCount`を
+`createTurn`へ渡し、ROLLが返した累積値をラウンド状態へ採用してください。
+完走数をUI側で再加算してはいけません。非完走・継続・拒否された要求では加算しません。
 UI接続、3D、演出、音、保存復旧は後続Phaseです。
 
 ## Ranking（STEP 4）
@@ -66,7 +70,7 @@ SPEC §29・30のサドンデス判定や敗者確定フェーズへの進行は
 新ラウンドのダイス状態は既存の `createTurn` を再利用します。
 
 `totalCompletionCount` は呼び出し元ですでに確定された累積値をそのまま保持し、リセット時に再加算しません。
-このSTEPでは累積値の加算処理や通常ターンの進行制御を追加していません。
+加算は`rollTurn`が行います。サドンデス開始前に、その戻り値をラウンド状態へ採用してください。
 `throwStyle` を維持し、OUT確率は既存の対応表から導出します。
 `suddenDeathCount` は開始成功時だけ1増加します。
 
@@ -79,8 +83,8 @@ SPEC §29・30のサドンデス判定や敗者確定フェーズへの進行は
 
 ## Penalty（STEP 6）
 
-- `createPenaltyState(round)`: 最終ラウンドの終了状態、元の全参加者一覧、確定済み累積完走数からペナルティ状態を生成します。
-- `rollPenalty(state, playerId, random)`: 固定順の次の未処理敗者だけを1回ROLLし、新しい確定状態を返します。
+- `createPenaltyState(round, penaltyId)`: 最終ラウンドの終了状態、元の全参加者一覧、確定済み累積完走数からペナルティ状態を生成します。
+- `rollPenalty(state, playerId, random, expectedPenaltyId)`: 固定順の次の未処理敗者だけを1回ROLLし、新しい確定状態を返します。
 - `rollPenaltyDice(count, random)`: OUT判定をせず、指定個数のD6用乱数だけを消費する低水準関数です。
 - `calculatePenalty(dice, totalCompletionCount)`: 出目合計・倍率・最終ポイントを計算し、出目のコピーとともに返します。
 
@@ -90,7 +94,8 @@ SPEC §29・30のサドンデス判定や敗者確定フェーズへの進行は
 各結果は `penalties` 内でプレイヤーIDに対応した `penaltyRoll / basePenalty / multiplier / finalPenalty` として保持します。
 通常ROLLの抽選・得点解決処理は呼びません。ゲーム本編の状態は書き換えません。
 
-重複・順番違い・敗者以外のROLL要求は同じ状態を返し、乱数を消費しません。
+`penaltyId`はゲームをまたいで再利用しないIDを指定し、要求には操作時点のIDを保持します。
+ID不一致・重複・順番違い・敗者以外のROLL要求は同じ状態を返し、乱数を消費しません。
 全員が `resolved` なら処理完了です。完了後のROLLも拒否します。
 初期化関数は確定前の状態を作る関数なので、ペナルティ開始時に一度だけ呼び出してください。
 呼び出し元は常に最新のPenaltyStateを渡し、戻り値を採用してから次の要求を処理します。
@@ -98,3 +103,10 @@ SPEC §29・30のサドンデス判定や敗者確定フェーズへの進行は
 
 `tests/game/penalty.test.ts` はSPEC §77の31〜34、1〜7個の最小・最大合計、倍率×1/×2/×10、
 OUTなし、1/5の通常加算、元の順序、個別結果、二重確定防止、入力非変更、乱数境界を検証します。
+
+## Core Logic Audit（STEP 7）
+
+`tests/game/audit.test.ts`でSPEC §77の29、2人・10人の複数ラウンドからペナルティまでの接続、
+ターン／ペナルティIDの違う古い要求、累積値の一度だけの更新、欠損出目の拒否、
+通常ROLLで到達する状態の不変条件を検証します。
+必須ケースの対応表と監査結果は `docs/CORE_LOGIC_AUDIT.md` を参照してください。

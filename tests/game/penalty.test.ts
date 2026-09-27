@@ -34,9 +34,9 @@ function round(loser: RoundPlayer, totalCompletionCount = 1): DecisiveRound {
 describe('SPEC §77 cases 31–33: penalty dice and calculation', () => {
   it.each([1, 7])('uses remainingDice=%i and draws exactly once per die', (count) => {
     const loser = player('loser', (7 - count) * 100, count);
-    const initial = createPenaltyState(round(loser));
+    const initial = createPenaltyState(round(loser), 'test-penalty');
     const random = new SequenceRandom(Array<number>(count).fill(0));
-    const next = rollPenalty(initial, 'loser', random);
+    const next = rollPenalty(initial, 'loser', random, 'test-penalty');
     expect(next.penalties[0]).toEqual({
       playerId: 'loser', diceCount: count, status: 'resolved',
       penaltyRoll: Array<number>(count).fill(1), basePenalty: count, multiplier: 2, finalPenalty: count * 2,
@@ -44,22 +44,22 @@ describe('SPEC §77 cases 31–33: penalty dice and calculation', () => {
     expect(random.calls).toBe(count);
   });
   it('31: includes stranded dice in the decisive-round remaining count', () => {
-    const initial = createPenaltyState(round(player('loser', 150, 5, 2)));
+    const initial = createPenaltyState(round(player('loser', 150, 5, 2)), 'test-penalty');
     const random = sourceFor(6, 4, 5, 2, 6);
-    const next = rollPenalty(initial, 'loser', random);
+    const next = rollPenalty(initial, 'loser', random, 'test-penalty');
     expect(next.penalties[0]).toMatchObject({ diceCount: 5, penaltyRoll: [6, 4, 5, 2, 6], basePenalty: 23, finalPenalty: 46 });
     expect(random.calls).toBe(5);
   });
   it('31/32: even an all-OUT loser rolls seven ordinary dice', () => {
-    const initial = createPenaltyState(round(player('loser', 0, 7, 7)));
+    const initial = createPenaltyState(round(player('loser', 0, 7, 7)), 'test-penalty');
     const random = new SequenceRandom(Array<number>(7).fill(0));
-    expect(rollPenalty(initial, 'loser', random).penalties[0]).toMatchObject({ penaltyRoll: [1, 1, 1, 1, 1, 1, 1], basePenalty: 7 });
+    expect(rollPenalty(initial, 'loser', random, 'test-penalty').penalties[0]).toMatchObject({ penaltyRoll: [1, 1, 1, 1, 1, 1, 1], basePenalty: 7 });
     expect(random.calls).toBe(7);
   });
   it('33: 1 and 5 are summed with no scoring/removal/reroll effects (§36)', () => {
-    const initial = createPenaltyState(round(player('loser', 150, 4)));
+    const initial = createPenaltyState(round(player('loser', 150, 4)), 'test-penalty');
     const random = sourceFor(1, 5, 5, 6);
-    expect(rollPenalty(initial, 'loser', random).penalties[0]).toMatchObject({
+    expect(rollPenalty(initial, 'loser', random, 'test-penalty').penalties[0]).toMatchObject({
       status: 'resolved', diceCount: 4, penaltyRoll: [1, 5, 5, 6], basePenalty: 17, multiplier: 2, finalPenalty: 34,
     });
     expect(random.calls).toBe(4);
@@ -87,18 +87,18 @@ describe('SPEC §77 case 34: independent ordered loser processing', () => {
     totalCompletionCount: 9,
   };
   it('includes every tied loser in original order, not ranking-input or alphabetical order', () => {
-    expect(createPenaltyState(input)).toEqual({ totalCompletionCount: 9, penalties: [
+    expect(createPenaltyState(input, 'test-penalty')).toEqual({ penaltyId: 'test-penalty', totalCompletionCount: 9, penalties: [
       { playerId: 'z', diceCount: 3, status: 'pending' },
       { playerId: 'a', diceCount: 3, status: 'pending' },
     ] });
   });
   it('rolls each loser separately, keeps different results and preserves the fixed multiplier', () => {
-    const initial = createPenaltyState(input);
+    const initial = createPenaltyState(input, 'test-penalty');
     const random = sourceFor(1, 2, 3, 4, 5, 6);
-    const first = rollPenalty(initial, 'z', random);
+    const first = rollPenalty(initial, 'z', random, 'test-penalty');
     expect(random.calls).toBe(3);
     expect(first.penalties[1]?.status).toBe('pending');
-    const last = rollPenalty(first, 'a', random);
+    const last = rollPenalty(first, 'a', random, 'test-penalty');
     expect(random.calls).toBe(6);
     expect(last.penalties).toEqual([
       { playerId: 'z', diceCount: 3, status: 'resolved', penaltyRoll: [1, 2, 3], basePenalty: 6, multiplier: 10, finalPenalty: 60 },
@@ -107,13 +107,13 @@ describe('SPEC §77 case 34: independent ordered loser processing', () => {
     expect(last.totalCompletionCount).toBe(9);
   });
   it('rejects duplicate, winner, unknown and out-of-order requests without random draws', () => {
-    const initial = createPenaltyState(input);
+    const initial = createPenaltyState(input, 'test-penalty');
     const forbidden = new SequenceRandom([]);
-    for (const id of ['a', 'winner', 'unknown']) expect(rollPenalty(initial, id, forbidden)).toBe(initial);
-    const first = rollPenalty(initial, 'z', sourceFor(1, 1, 1));
-    expect(rollPenalty(first, 'z', forbidden)).toBe(first);
-    const last = rollPenalty(first, 'a', sourceFor(6, 6, 6));
-    for (const id of ['z', 'a']) expect(rollPenalty(last, id, forbidden)).toBe(last);
+    for (const id of ['a', 'winner', 'unknown']) expect(rollPenalty(initial, id, forbidden, 'test-penalty')).toBe(initial);
+    const first = rollPenalty(initial, 'z', sourceFor(1, 1, 1), 'test-penalty');
+    expect(rollPenalty(first, 'z', forbidden, 'test-penalty')).toBe(first);
+    const last = rollPenalty(first, 'a', sourceFor(6, 6, 6), 'test-penalty');
+    for (const id of ['z', 'a']) expect(rollPenalty(last, id, forbidden, 'test-penalty')).toBe(last);
     expect(forbidden.calls).toBe(0);
   });
   it('does not mutate the decisive round or pending state and is deterministic', () => {
@@ -122,20 +122,20 @@ describe('SPEC §77 case 34: independent ordered loser processing', () => {
       players: Object.freeze(input.players.map((p) => Object.freeze({ ...p }))),
     });
     const snapshot = structuredClone(frozen);
-    const base = createPenaltyState(frozen);
+    const base = createPenaltyState(frozen, 'test-penalty');
     const initial = Object.freeze({ ...base, penalties: Object.freeze(base.penalties.map((p) => Object.freeze(p))) });
     const before = structuredClone(initial);
-    expect(rollPenalty(initial, 'z', sourceFor(1, 5, 6))).toEqual(rollPenalty(initial, 'z', sourceFor(1, 5, 6)));
+    expect(rollPenalty(initial, 'z', sourceFor(1, 5, 6), 'test-penalty')).toEqual(rollPenalty(initial, 'z', sourceFor(1, 5, 6), 'test-penalty'));
     expect(frozen).toEqual(snapshot);
     expect(initial).toEqual(before);
   });
   it('snapshots counts and completion total, with no shared reference to later round changes', () => {
     const mutable = { ...input, players: input.players.map((p) => ({ ...p })) };
-    const initial = createPenaltyState(mutable);
+    const initial = createPenaltyState(mutable, 'test-penalty');
     mutable.totalCompletionCount = 20;
     mutable.players[0]!.activeDice = 7;
-    const first = rollPenalty(initial, 'z', sourceFor(1, 2, 3));
-    const last = rollPenalty(first, 'a', sourceFor(1, 2, 3));
+    const first = rollPenalty(initial, 'z', sourceFor(1, 2, 3), 'test-penalty');
+    const last = rollPenalty(first, 'a', sourceFor(1, 2, 3), 'test-penalty');
     expect(last.totalCompletionCount).toBe(9);
     expect(last.penalties[1]).toMatchObject({ diceCount: 3, multiplier: 10 });
   });
@@ -152,7 +152,7 @@ describe('penalty input boundaries', () => {
   });
   it.each([-1, 0.5, NaN, Infinity])('rejects invalid completion count %s', (count) => {
     expect(() => calculatePenalty([1], count)).toThrow(RangeError);
-    expect(() => createPenaltyState(round(player('loser', 0, 7), count))).toThrow(RangeError);
+    expect(() => createPenaltyState(round(player('loser', 0, 7), count), 'test-penalty')).toThrow(RangeError);
   });
   it('rejects invalid faces and counts rather than accepting OUT or empty penalties', () => {
     for (const dice of [[], [0], [7], [1.5], [NaN], [null], Array(8).fill(1)]) {
@@ -160,9 +160,9 @@ describe('penalty input boundaries', () => {
     }
   });
   it('does not partially commit when the random source fails mid-roll', () => {
-    const initial = createPenaltyState(round(player('loser', 0, 7)));
+    const initial = createPenaltyState(round(player('loser', 0, 7)), 'test-penalty');
     const before = structuredClone(initial);
-    expect(() => rollPenalty(initial, 'loser', sourceFor(1))).toThrow('Unexpected random draw');
+    expect(() => rollPenalty(initial, 'loser', sourceFor(1), 'test-penalty')).toThrow('Unexpected random draw');
     expect(initial).toEqual(before);
   });
   it('copies result dice instead of retaining a caller-mutable array', () => {
@@ -174,15 +174,15 @@ describe('penalty input boundaries', () => {
   });
   it('rejects incomplete rounds and both kinds of sudden-death round', () => {
     const base = round(player('loser', 350, 0));
-    expect(() => createPenaltyState(base)).toThrow('sudden death');
+    expect(() => createPenaltyState(base, 'test-penalty')).toThrow('sudden death');
     const tied = { ...base, players: [player('winner', 0, 7), player('loser', 0, 7, 3)] };
-    expect(() => createPenaltyState(tied)).toThrow('sudden death');
-    expect(() => createPenaltyState({ ...tied, players: tied.players.map((p) => ({ ...p, turnFinished: false })) })).toThrow('all turns');
+    expect(() => createPenaltyState(tied, 'test-penalty')).toThrow('sudden death');
+    expect(() => createPenaltyState({ ...tied, players: tied.players.map((p) => ({ ...p, turnFinished: false })) }, 'test-penalty')).toThrow('all turns');
   });
   it('rejects missing or duplicated roster members', () => {
     const base = round(player('loser', 0, 7));
-    expect(() => createPenaltyState({ ...base, participants: [base.participants[0]!] })).toThrow();
-    expect(() => createPenaltyState({ ...base, players: [base.players[0]!, base.players[0]!] })).toThrow('unique');
-    expect(() => createPenaltyState({ ...base, participants: [base.participants[0]!, base.participants[0]!] })).toThrow();
+    expect(() => createPenaltyState({ ...base, participants: [base.participants[0]!] }, 'test-penalty')).toThrow();
+    expect(() => createPenaltyState({ ...base, players: [base.players[0]!, base.players[0]!] }, 'test-penalty')).toThrow('unique');
+    expect(() => createPenaltyState({ ...base, participants: [base.participants[0]!, base.participants[0]!] }, 'test-penalty')).toThrow();
   });
 });
