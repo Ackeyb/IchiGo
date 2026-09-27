@@ -1,6 +1,6 @@
 # Ichi-Go Game
 
-STEP 2の開発基盤とSTEP 3（Phase 1）の純粋なゲームエンジンを実装しています。
+STEP 2の開発基盤、Phase 1の純粋なゲームエンジン、STEP 4（Ranking）を実装しています。
 画面は起動確認用のままで、ゲームエンジンには接続していません。
 仕様の正本は [docs/SPEC.md](docs/SPEC.md)、開発規約は [AGENTS.md](AGENTS.md) です。
 
@@ -37,5 +37,6 @@ npm run dev
 - `vite.config.ts`: 開発・ビルド・Node環境テストの設定。
 
 ゲームエンジンのAPIと対象範囲は [src/game/README.md](src/game/README.md) を参照してください。
-Ranking、Sudden Death、Penalty、ゲームUI、3D描画、演出、サウンド、保存復旧はまだ実装していません。
+順位・敗者判定・ターン終了済みプレイヤーの暫定順位は `src/game/ranking.ts` に分離しています。
+Sudden Death、Penalty、ゲームUI、3D描画、演出、サウンド、保存復旧はまだ実装していません。
 依存関係は `package-lock.json` で固定し、生成物はGit管理から除外します。
