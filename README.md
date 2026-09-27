@@ -1,6 +1,7 @@
 # Ichi-Go Game
 
-STEP 2（プロジェクト初期化）の開発基盤です。ゲーム機能は未実装です。
+STEP 2の開発基盤とSTEP 3（Phase 1）の純粋なゲームエンジンを実装しています。
+画面は起動確認用のままで、ゲームエンジンには接続していません。
 仕様の正本は [docs/SPEC.md](docs/SPEC.md)、開発規約は [AGENTS.md](AGENTS.md) です。
 
 ## 開発環境
@@ -30,10 +31,11 @@ npm run dev
 
 - `src/main.tsx`: ブラウザーの起動処理。
 - `src/app/`: 起動確認用の最小React画面。
-- `src/game/`: 後続STEPの純粋なゲームエンジン用。現在は責務を記したREADMEのみ。
-- `tests/`: TypeScript/JSXとReactを読み込むスモークテスト。ゲームルールのテストではありません。
+- `src/game/`: 通常ROLL、OUT、得点、ダイス除外、継続・終了・完走を扱う純粋なエンジン。
+- `tests/game/`: 注入した乱数によるゲームエンジンの決定論的テスト。
+- `tests/app.test.tsx`: TypeScript/JSXとReactを読み込むスモークテスト。
 - `vite.config.ts`: 開発・ビルド・Node環境テストの設定。
 
-ゲームエンジンは後続STEPで純粋なTypeScriptとして追加します。
-3D描画、サウンド、保存復旧、ゲーム操作はまだ実装していません。
+ゲームエンジンのAPIと対象範囲は [src/game/README.md](src/game/README.md) を参照してください。
+Ranking、Sudden Death、Penalty、ゲームUI、3D描画、演出、サウンド、保存復旧はまだ実装していません。
 依存関係は `package-lock.json` で固定し、生成物はGit管理から除外します。
