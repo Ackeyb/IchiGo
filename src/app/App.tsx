@@ -18,6 +18,8 @@ import { RankingBoard } from './RankingBoard';
 import { ConfirmDialog } from './ConfirmDialog';
 import { WebAudioSoundPlayer } from './sound';
 import type { SoundCue, SoundPlayer } from './sound';
+import { recoveryNoticeText } from '../storage/sessionRecovery';
+import type { RecoveryNotice, SessionRecovery } from '../storage/sessionRecovery';
 import './app.css';
 
 function ActionButton({ children, disabled, onClick }: { children: ReactNode; disabled: boolean; onClick: (button: HTMLButtonElement) => void }) {
@@ -25,17 +27,21 @@ function ActionButton({ children, disabled, onClick }: { children: ReactNode; di
     onKeyDown={(event) => { if (event.repeat) event.preventDefault(); }}>{children}</button>;
 }
 
-export function App({ random = mathRandomSource, store: suppliedStore, dicePresentation, soundPlayer: suppliedSound }: {
+export function App({ random = mathRandomSource, store: suppliedStore, dicePresentation, soundPlayer: suppliedSound, recovery: suppliedRecovery }: {
   random?: RandomSource;
   store?: GameStore;
   dicePresentation?: DicePresentationConfig;
   soundPlayer?: SoundPlayer;
+  recovery?: SessionRecovery;
 } = {}) {
-  const [store] = useState(() => suppliedStore ?? createGameStore(random));
+  const [recovery] = useState(() => suppliedRecovery);
+  const [store] = useState(() => suppliedStore ?? createGameStore(random, recovery));
   const [sound] = useState(() => suppliedSound ?? new WebAudioSoundPlayer());
-  const [soundEnabled, setSoundEnabled] = useState(true);
-  const soundEnabledRef = useRef(true);
-  const { state: committedState, visibleState: state, busy, error } = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+  const [initialSound] = useState(() => recovery?.loadSound() ?? { enabled: true });
+  const [soundEnabled, setSoundEnabled] = useState(initialSound.enabled);
+  const soundEnabledRef = useRef(initialSound.enabled);
+  const [soundRecoveryNotice, setSoundRecoveryNotice] = useState<RecoveryNotice | undefined>(initialSound.notice);
+  const { state: committedState, visibleState: state, busy, error, recovered, recoveryNotice } = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const [confirm, setConfirm] = useState<{ action: 'newGame' | 'replay'; revision: number; opener: HTMLElement } | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const playCue = useCallback((cue: SoundCue) => {
@@ -62,6 +68,13 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
   };
   const action = (label: string, type: Exclude<FlowAction['type'], 'start'>) => <ActionButton disabled={busy || !!confirm}
     onClick={() => send({ type })}>{label}</ActionButton>;
+  const toggleSound = () => {
+    const next = !soundEnabledRef.current;
+    soundEnabledRef.current = next;
+    setSoundEnabled(next);
+    setSoundRecoveryNotice(recovery?.saveSound(next));
+    if (next) { try { sound.play('ui'); } catch { /* sound is fail-open */ } }
+  };
   let content: ReactNode;
   if (state.phase === 'setup') content = <SetupScreen busy={busy} focusOnMount={state.revision > 0} onStart={(setup) => send({ type: 'start', setup })} />;
   else {
@@ -153,14 +166,11 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
   }
   return <main>
     <header className="site-header"><div className="brand-mark" aria-hidden="true">⚄</div><h1>Ichi-Go Game</h1><span>7 DICE GAME</span>
-      <button className="sound-toggle" aria-pressed={soundEnabled} aria-label={`サウンド ${soundEnabled ? 'ON' : 'OFF'}`} onClick={() => {
-        setSoundEnabled((current) => {
-          const next = !current;
-          soundEnabledRef.current = next;
-          if (next) { try { sound.play('ui'); } catch { /* sound is fail-open */ } }
-          return next;
-        });
-      }}>Sound {soundEnabled ? 'ON' : 'OFF'}</button></header>
+      <button className="sound-toggle" aria-pressed={soundEnabled} aria-label={`サウンド ${soundEnabled ? 'ON' : 'OFF'}`} onClick={toggleSound}>
+        Sound {soundEnabled ? 'ON' : 'OFF'}</button></header>
+    {recovered && <p className="recovery-status" role="status">ゲームを復旧しました。</p>}
+    {(recoveryNotice ?? soundRecoveryNotice) && <p className="recovery-warning" role="status">
+      {recoveryNoticeText((recoveryNotice ?? soundRecoveryNotice)!)}</p>}
     {state.phase !== 'setup' && <div className="game-summary" aria-label="ゲーム情報">
       <span>{state.game.suddenDeathCount ? `サドンデス ${state.game.suddenDeathCount}` : '通常ラウンド'}</span>
       <span>投げ方：{styleLabels[state.game.throwStyle]}</span><span>累積完走：{state.game.totalCompletionCount}</span>

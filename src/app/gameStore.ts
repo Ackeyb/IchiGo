@@ -1,11 +1,27 @@
 import { advanceFlow, initialFlow } from '../game/gameFlow';
 import type { FlowAction } from '../game/gameFlow';
 import type { RandomSource } from '../game/randomSource';
+import type { RecoveryNotice, SessionRecovery } from '../storage/sessionRecovery';
 
 /** Owned by one mounted app, not a React updater: StrictMode cannot replay random draws. */
-export function createGameStore(random: RandomSource) {
-  const initial = initialFlow();
-  let snapshot = { state: initial, visibleState: initial, busy: false, error: '' };
+export function createGameStore(random: RandomSource, recovery?: Pick<SessionRecovery, 'loadGame' | 'saveGame'>) {
+  const loaded = recovery?.loadGame();
+  const initial = loaded?.state ?? initialFlow();
+  let snapshot: Readonly<{
+    state: typeof initial;
+    visibleState: typeof initial;
+    busy: boolean;
+    error: string;
+    recovered: boolean;
+    recoveryNotice: RecoveryNotice | undefined;
+  }> = {
+    state: initial,
+    visibleState: initial,
+    busy: false,
+    error: '',
+    recovered: loaded?.recovered ?? false,
+    recoveryNotice: loaded?.notice,
+  };
   const listeners = new Set<() => void>();
   const emit = () => listeners.forEach((notify) => notify());
   return {
@@ -19,11 +35,17 @@ export function createGameStore(random: RandomSource) {
         const state = advanceFlow(before, revision, action, random);
         const waitsForDice = state !== before && (action.type === 'roll' || action.type === 'rollPenalty');
         snapshot = {
+          ...snapshot,
           state,
           visibleState: waitsForDice ? snapshot.visibleState : state,
           busy: state !== before,
           error: '',
+          recovered: false,
         };
+        if (state !== before && recovery) {
+          // State is authoritative in memory before persistence; storage failure is fail-open.
+          snapshot = { ...snapshot, recoveryNotice: recovery.saveGame(state) };
+        }
       } catch (error) {
         snapshot = { ...snapshot, state: before, busy: false, error: error instanceof Error ? error.message : '処理できませんでした。' };
       }

@@ -59,6 +59,17 @@ Three.jsはdynamic importし、RendererからEngineへ結果を返さない。�
 - AudioContextの生成・resume・再生・破棄失敗はすべてfail-openとし、ゲーム進行やrevealを待たせない。
 - `prefers-reduced-motion: reduce`では3Dと段階待機を省略し、確定結果を2Dとテキストで即時に提示する。
 
+## STEP 13 — Session Recovery
+
+`src/storage/sessionRecovery.ts`が`sessionStorage`との境界、version 1の保存形式、復旧validationを担当する。`gameStore`はEngineが返した次のauthoritative stateをまずmemoryへcommitし、その直後に保存を試みてからsubscriberへ通知する。保存成否はゲームルール、Presentation、interaction unlockへ影響させない。
+
+- 保存するのはauthoritative `FlowState`だけであり、`visibleState`、busy、animation stage、Three.js resource、Promise、timer、RAF、AudioContextは保存しない。
+- reload時は保存済みstateを`visibleState`にも設定し、busy=falseで開始する。確定済みROLL／Penaltyを再抽選せず、次の有効な操作から再開する。
+- プレイヤー数・ID・固定順、ダイス不変条件、得点・完走、手番、phase、累積完走数、turnId・roll番号、penaltyId・計算結果を検証する。不正値は補正せず破棄する。
+- `newGame`確定時はゲーム保存を削除する。削除失敗時はcleared markerへの置換を試み、古いゲームの復活を防ぐ。`replay`はリセット後の新しいゲームを保存する。
+- Sound設定はゲームstateと別キーで保存し、reload後も同一タブ内で維持する。
+- access／read／write／remove失敗時は非侵襲的な警告を表示し、memory-onlyでゲームを継続する。
+
 ## 検証と範囲
 
 - 既存テストを維持し、reveal timing、古いrevision、OUT落下軌道、段階的な得点／Penalty表示、Sound設定とfail-openを検証する。
@@ -67,5 +78,5 @@ Three.jsはdynamic importし、RendererからEngineへ結果を返さない。�
 - Chromium実ブラウザーでSetupとROLL、ダイアログ、320／390／768／1280px幅の横はみ出しを確認。
 - ブラウザー確認用の生成物は`output/playwright/`に置き、コミットしない。
 
-Session Recovery、Web Storage、振動・シェイク操作は未実装。
-ブラウザー再読み込み時は初期Setupへ戻る。実機Safari等でのプレイテストは後続STEP 9で行う。
+振動・シェイク操作は未実装。
+実機Safari等でのプレイテストは後続STEP 9で行う。
