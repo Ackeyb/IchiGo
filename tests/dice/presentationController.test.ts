@@ -19,6 +19,12 @@ function fakeRenderer(overrides: Partial<DiceRenderer> = {}): DiceRenderer {
   };
 }
 
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
 const container = {} as HTMLElement;
 
 afterEach(() => {
@@ -66,6 +72,20 @@ describe('DicePresentationController', () => {
     expect(renderer.dispose).toHaveBeenCalledOnce();
   });
 
+  it('still resolves fallback when renderer cleanup throws after a presentation failure', async () => {
+    const renderer = fakeRenderer({
+      present: vi.fn(async () => { throw new Error('render failed'); }),
+      dispose: vi.fn(() => { throw new Error('dispose failed'); }),
+    });
+    const controller = new DicePresentationController(container, {
+      createRenderer: async () => renderer,
+      prefersReducedMotion: () => false,
+    });
+
+    await expect(controller.present(request)).resolves.toEqual({ mode: 'fallback', reason: 'presentation' });
+    expect(renderer.dispose).toHaveBeenCalledOnce();
+  });
+
   it('times out, disposes the renderer and falls back without requesting another result', async () => {
     vi.useFakeTimers();
     const renderer = fakeRenderer({ present: vi.fn(() => new Promise<void>(() => undefined)) });
@@ -78,6 +98,43 @@ describe('DicePresentationController', () => {
     await vi.runAllTimersAsync();
     await expect(completion).resolves.toEqual({ mode: 'fallback', reason: 'timeout' });
     expect(renderer.present).toHaveBeenCalledOnce();
+    expect(renderer.dispose).toHaveBeenCalledOnce();
+  });
+
+  it('times out renderer initialization instead of leaving the UI permanently busy', async () => {
+    vi.useFakeTimers();
+    const renderer = fakeRenderer({ initialize: vi.fn(() => new Promise<void>(() => undefined)) });
+    const controller = new DicePresentationController(container, {
+      createRenderer: async () => renderer,
+      prefersReducedMotion: () => false,
+      timeoutMs: 25,
+    });
+
+    const completion = controller.present(request);
+    await Promise.resolve();
+    await Promise.resolve();
+    await vi.runAllTimersAsync();
+
+    await expect(completion).resolves.toEqual({ mode: 'fallback', reason: 'timeout' });
+    expect(renderer.present).not.toHaveBeenCalled();
+    expect(renderer.dispose).toHaveBeenCalledOnce();
+  });
+
+  it('does not resurrect or present a renderer disposed during initialization', async () => {
+    const initialization = deferred();
+    const renderer = fakeRenderer({ initialize: vi.fn(() => initialization.promise) });
+    const controller = new DicePresentationController(container, {
+      createRenderer: async () => renderer,
+      prefersReducedMotion: () => false,
+    });
+
+    const completion = controller.present(request);
+    await vi.waitFor(() => expect(renderer.initialize).toHaveBeenCalledOnce());
+    controller.dispose();
+    initialization.resolve();
+    await completion;
+
+    expect(renderer.present).not.toHaveBeenCalled();
     expect(renderer.dispose).toHaveBeenCalledOnce();
   });
 

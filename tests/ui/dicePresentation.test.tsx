@@ -109,6 +109,30 @@ describe('3D dice React integration', () => {
     expect(random.calls).toBe(14);
   });
 
+  it('reveals the committed result and unlocks after renderer initialization times out', async () => {
+    const random = new Sequence(normal(1, 2, 3, 4, 5, 6, 2));
+    const store = createGameStore(random);
+    const stalled = renderer({ initialize: vi.fn(() => new Promise<void>(() => undefined)) });
+    render(<App store={store} dicePresentation={{
+      createRenderer: async () => stalled,
+      prefersReducedMotion: () => false,
+      timeoutMs: 5,
+    }} />);
+    fireEvent.change(screen.getByLabelText('プレイヤー 1', { exact: true }), { target: { value: 'A' } });
+    fireEvent.change(screen.getByLabelText('プレイヤー 2', { exact: true }), { target: { value: 'B' } });
+    fireEvent.click(screen.getByRole('button', { name: 'ゲーム開始' }));
+    paint();
+    fireEvent.click(screen.getByRole('button', { name: 'ROLL' }));
+
+    await waitFor(() => expect(screen.getByText('3D表示が時間内に完了しないため2D表示')).toBeTruthy());
+    expect(screen.getByRole('list', { name: '確定したダイスの出目' })).toBeTruthy();
+    expect(random.calls).toBe(14);
+    paint();
+    expect((screen.getByRole('button', { name: '続けてROLL' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(stalled.present).not.toHaveBeenCalled();
+    expect(stalled.dispose).toHaveBeenCalledOnce();
+  });
+
   it('reuses one renderer across consecutive ROLL presentations', async () => {
     const random = new Sequence([
       ...normal(1, 2, 2, 2, 2, 2, 2),

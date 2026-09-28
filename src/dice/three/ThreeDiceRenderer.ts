@@ -80,8 +80,10 @@ export class ThreeDiceRenderer implements DiceRenderer {
   private activeReject: ((reason: unknown) => void) | undefined;
   private initialized = false;
   private disposed = false;
+  private contextLost = false;
   private readonly onContextLost = (event: Event) => {
     event.preventDefault();
+    this.contextLost = true;
     const reject = this.activeReject;
     this.activeReject = undefined;
     reject?.(new DiceRendererError('context-lost', 'WebGL context was lost'));
@@ -150,6 +152,9 @@ export class ThreeDiceRenderer implements DiceRenderer {
   }
 
   present(request: DicePresentationRequest): Promise<void> {
+    if (this.contextLost) {
+      return Promise.reject(new DiceRendererError('context-lost', 'WebGL context was lost'));
+    }
     if (!this.initialized || !this.renderer || !this.scene || !this.camera || !this.group || !this.geometry || !this.materials) {
       return Promise.reject(new DiceRendererError('presentation', 'Renderer is not initialized'));
     }
