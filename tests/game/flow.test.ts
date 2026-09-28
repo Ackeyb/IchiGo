@@ -73,7 +73,16 @@ describe('authoritative flow and operation identity', () => {
     expect(calls).toBe(0);
     store.presented(1); store.dispatch(1, { type: 'roll' });
     expect(calls).toBe(7);
+    const committed = store.getSnapshot().state;
+    const hidden = store.getSnapshot().visibleState;
+    expect(committed.revision).toBe(2);
+    expect(hidden.revision).toBe(1);
+    store.reveal(1);
+    expect(store.getSnapshot().visibleState).toBe(hidden);
     store.presented(1);
+    expect(store.getSnapshot().busy).toBe(true);
+    store.reveal(2);
+    expect(store.getSnapshot().visibleState).toBe(committed);
     expect(store.getSnapshot().busy).toBe(true);
     store.presented(2);
     expect(store.getSnapshot().busy).toBe(false);

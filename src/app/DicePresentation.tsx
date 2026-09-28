@@ -33,6 +33,7 @@ export function DicePresentation({
   kind,
   revision,
   busy,
+  onReveal,
   onPresented,
   config,
 }: {
@@ -40,16 +41,19 @@ export function DicePresentation({
   kind: DicePresentationKind;
   revision: number;
   busy: boolean;
+  onReveal: (revision: number) => void;
   onPresented: (revision: number) => void;
   config?: DicePresentationConfig | undefined;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const controller = useRef<DicePresentationController | undefined>(undefined);
   const [outcome, setOutcome] = useState<DicePresentationOutcome>();
+  const [completedId, setCompletedId] = useState<string>();
   const createRenderer = config?.createRenderer ?? defaultRendererFactory;
   const timeoutMs = config?.timeoutMs;
   const prefersReducedMotion = config?.prefersReducedMotion;
   const requestId = `${kind}/${revision}`;
+  const hasDice = !!dice;
 
   useEffect(() => {
     if (!container.current) return;
@@ -67,9 +71,10 @@ export function DicePresentation({
   }, [createRenderer, prefersReducedMotion, timeoutMs]);
 
   useEffect(() => {
-    if (!dice) {
+    if (!hasDice || !dice) {
       controller.current?.clear();
       setOutcome(undefined);
+      setCompletedId(undefined);
       return;
     }
     if (!busy || !controller.current) return;
@@ -80,6 +85,8 @@ export function DicePresentation({
     const finish = (next: DicePresentationOutcome) => {
       if (!current) return;
       setOutcome(next);
+      setCompletedId(requestId);
+      onReveal(revision);
       firstFrame = requestAnimationFrame(() => {
         secondFrame = requestAnimationFrame(() => onPresented(revision));
       });
@@ -92,13 +99,15 @@ export function DicePresentation({
       cancelAnimationFrame(firstFrame);
       cancelAnimationFrame(secondFrame);
     };
-  }, [busy, dice, kind, onPresented, requestId, revision]);
+  }, [busy, hasDice, kind, onPresented, onReveal, requestId, revision]);
 
-  const useThree = outcome?.mode !== 'fallback';
+  const currentOutcome = completedId === requestId ? outcome : undefined;
+  const revealed = !!dice && (!busy || completedId === requestId);
+  const useThree = currentOutcome?.mode !== 'fallback';
   return <div className={`dice-presentation ${dice ? '' : 'is-idle'} ${useThree ? 'use-three' : 'use-fallback'}`}>
     <div ref={container} className="three-dice-stage" aria-hidden="true" />
-    {outcome?.mode === 'fallback' && <p className="renderer-status">{fallbackLabels[outcome.reason]}</p>}
-    {dice && <div className="dice-result-details">
+    {currentOutcome?.mode === 'fallback' && <p className="renderer-status">{fallbackLabels[currentOutcome.reason]}</p>}
+    {revealed && <div className="dice-result-details">
       <DiceView dice={dice} scoring={kind === 'normal'} />
     </div>}
   </div>;

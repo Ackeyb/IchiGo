@@ -17,11 +17,12 @@ Setup → 通常ターン →「次へ」→ 次プレイヤー →「結果を�
 
 - `src/game/gameFlow.ts`: フェーズの可否確認と既存Engine呼び出し。React・DOMに依存しない。
 - `src/app/gameStore.ts`: 最新のauthoritative stateを所有。Reactのrender、effect、state updater内では乱数を消費しない。
+- `visibleState`は最後にreveal済みのauthoritative stateへの参照であり、ゲームルールのSource of Truthではない。ROLL commitからpresentation完了までは直前の表示だけを維持する。
 - 各イベントは表示時の`revision`を保持する。古いイベントは最新状態へ適用せず、乱数も消費しない。
 - 同じストア内でゲーム番号とrevisionを巻き戻さない。turnIdはゲーム番号・ラウンド番号・プレイヤーID、penaltyIdはゲーム番号から作る。
 - ROLLのplayerと累積完走数は既存Engineの戻り値をそのまま同じ遷移で採用する。
   Reactで得点、残数、順位、サドンデス条件、倍率、ペナルティを再計算しない。
-- 遷移開始時に同期ロックし、確定状態が描画された後のフレームで解除する。ロック中は最新revisionでも次の操作を拒否。
+- 遷移開始時に同期ロックする。ダイス停止後に同じrevisionの結果をrevealし、確定状態が描画された後のフレームで解除する。ロック中は最新revisionでも次の操作を拒否。
   古い描画完了通知は解除に使わない。ダブルクリックの2回目とキーリピートも抑止する。
 - Setupの人数・名前・順番・投げ方は開始後の画面から編集できない。
 
@@ -41,16 +42,16 @@ Penaltyではハイライトを無効にして全ての出目を通常D6とし�
 依存方向はGame Engine → committed `DieResult[]` → `DicePresentationController` → `DiceRenderer`。
 Three.jsはdynamic importし、RendererからEngineへ結果を返さない。通常ROLLとPenaltyは、Engineが確定した配列順と値をそのまま表示する。
 
-- SAFEは指定面を上にする最終quaternionへ収束させる。OUTは数値面を持たない専用色で場外へ移動する。
+- SAFEは複数回バウンドしながら指定面を上にする最終quaternionへ収束させる。OUTは数値面を持たない専用色で盤面を転がり、縁を越えて重力落下する。
 - `DiceRenderer`は`initialize / present / clear / dispose`を持ち、同一request IDを重複実行しない。
-- 3D完了通知は表示時のrevisionで`gameStore.presented`へ渡す。古い通知では新しいbusy状態を解除できない。
+- 3D完了通知は表示時のrevisionで`gameStore.reveal`へ渡し、結果描画後に`gameStore.presented`でロック解除する。古い通知では新しい結果のrevealもbusy解除もできない。
 - dynamic import、WebGL初期化、presentation、timeout、context lossの失敗時は、抽選を繰り返さず同じ確定結果を2D表示する。
 - `prefers-reduced-motion: reduce`ではThree.jsを初期化せず2D表示する。
 - RendererはROLL間でcanvas、scene、camera、geometry、material、textureを再利用する。停止後は連続描画せず、破棄時にRAF、observer、listener、GPU resourceを解放する。
 
 ## 検証と範囲
 
-- 既存184テストを維持。3D境界・orientation・fallback・lifecycleの21件を加えて205件。
+- 既存205テストを維持。reveal timing・古いrevision・OUT落下軌道の5件を加えて210件。
 - 決定論的RandomSourceで、2人・10人、継続、完走、暫定順位、連続サドンデス、複数敗者、個別Penalty、再プレイ／初期Setup、重複操作を検証。
 - React StrictModeでも抽選が重複しないことと、キーボード操作・ダイアログのフォーカスを検証。
 - Chromium実ブラウザーでSetupとROLL、ダイアログ、320／390／768／1280px幅の横はみ出しを確認。

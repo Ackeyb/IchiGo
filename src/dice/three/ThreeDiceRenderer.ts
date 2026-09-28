@@ -8,7 +8,6 @@ import {
   Mesh,
   MeshStandardMaterial,
   PerspectiveCamera,
-  PlaneGeometry,
   Quaternion,
   Scene,
   SRGBColorSpace,
@@ -17,6 +16,7 @@ import {
 } from 'three';
 import type { DieValue } from '../../game/types';
 import { getD6TargetQuaternion } from '../d6Orientation';
+import { getOutTrajectory, isOutAnimationComplete } from '../outTrajectory';
 import { toPresentedDice } from '../presentationDice';
 import type { PresentedDie } from '../presentationDice';
 import type { DicePresentationRequest, DiceRenderer } from '../types';
@@ -73,7 +73,7 @@ export class ThreeDiceRenderer implements DiceRenderer {
   private materials: MeshStandardMaterial[] | undefined;
   private outMaterials: MeshStandardMaterial[] | undefined;
   private textures: CanvasTexture[] | undefined;
-  private trayGeometry: PlaneGeometry | undefined;
+  private trayGeometry: BoxGeometry | undefined;
   private trayMaterial: MeshStandardMaterial | undefined;
   private resizeObserver: ResizeObserver | undefined;
   private frame: number | undefined;
@@ -117,13 +117,12 @@ export class ThreeDiceRenderer implements DiceRenderer {
       light.position.set(-4, 8, 5);
       scene.add(light);
 
-      const trayGeometry = new PlaneGeometry(13, 7);
+      const trayGeometry = new BoxGeometry(13, 0.38, 7);
       const trayMaterial = new MeshStandardMaterial({ color: '#315b48', roughness: 0.92, metalness: 0 });
       this.trayGeometry = trayGeometry;
       this.trayMaterial = trayMaterial;
       const tray = new Mesh(trayGeometry, trayMaterial);
-      tray.rotation.x = -Math.PI / 2;
-      tray.position.y = -1.05;
+      tray.position.y = -0.83;
       scene.add(tray);
 
       const geometry = new BoxGeometry(1.28, 1.28, 1.28, 2, 2, 2);
@@ -160,7 +159,7 @@ export class ThreeDiceRenderer implements DiceRenderer {
     const renderer = this.renderer;
     const scene = this.scene;
     const camera = this.camera;
-    const duration = 820;
+    const duration = 1_050;
 
     return new Promise<void>((resolve, reject) => {
       this.activeReject = reject;
@@ -175,7 +174,7 @@ export class ThreeDiceRenderer implements DiceRenderer {
             return;
           }
           for (const die of animated) {
-            if (die.result.status === 'out') this.group?.remove(die.mesh);
+            if (die.result.status === 'out' && isOutAnimationComplete(progress)) this.group?.remove(die.mesh);
           }
           renderer.render(scene, camera);
           this.frame = undefined;
@@ -239,7 +238,7 @@ export class ThreeDiceRenderer implements DiceRenderer {
     const target = result.status === 'out'
       ? new Vector3(result.index % 2 ? 9 : -9, 2.5 + result.index * 0.18, -1)
       : new Vector3(localColumn * 1.6, 0, count > 4 ? (secondRow ? 0.65 : -0.9) : -0.2);
-    const start = new Vector3(column * 0.7, 4.5 + (result.index % 3) * 0.45, -4.5);
+    const start = new Vector3(column * 0.82 + Math.sin(result.index * 1.7) * 0.45, 5.8 + (result.index % 3) * 0.55, -6.2);
     mesh.position.copy(start);
     mesh.rotation.set(result.index * 0.7, result.index * 0.4, result.index * 0.9);
     this.group!.add(mesh);
@@ -249,24 +248,29 @@ export class ThreeDiceRenderer implements DiceRenderer {
       start,
       target,
       targetQuaternion: result.status === 'safe' ? getD6TargetQuaternion(result.value, result.index * 0.61) : undefined,
-      spin: new Vector3(7.5 + result.index, 9 + result.index * 0.7, 6.5 + result.index * 0.4),
+      spin: new Vector3(11 + result.index * 1.3, 13 + result.index * 0.9, 9.5 + result.index * 0.7),
     };
   }
 
   private updateDice(dice: readonly AnimatedDie[], progress: number): void {
-    const travel = smoothstep(Math.min(1, progress / 0.78));
+    const travel = smoothstep(Math.min(1, progress / 0.82));
     for (const die of dice) {
-      die.mesh.position.lerpVectors(die.start, die.target, travel);
       if (die.result.status === 'safe') {
-        die.mesh.position.y += Math.sin(travel * Math.PI * 3) * (1 - travel) * 0.85;
-        if (progress < 0.72) {
+        die.mesh.position.lerpVectors(die.start, die.target, travel);
+        const direction = die.result.index % 2 === 0 ? -1 : 1;
+        die.mesh.position.x += Math.sin(travel * Math.PI) * direction * (0.5 + (die.result.index % 3) * 0.12);
+        die.mesh.position.z += Math.sin(travel * Math.PI * 2) * direction * 0.28;
+        die.mesh.position.y += Math.abs(Math.sin(travel * Math.PI * 4)) * (1 - travel) * 1.05;
+        if (progress < 0.76) {
           die.mesh.rotation.set(die.spin.x * progress, die.spin.y * progress, die.spin.z * progress);
         } else {
-          die.mesh.quaternion.slerp(die.targetQuaternion!, smoothstep((progress - 0.72) / 0.28));
+          die.mesh.quaternion.slerp(die.targetQuaternion!, smoothstep((progress - 0.76) / 0.24));
         }
         if (progress === 1) die.mesh.quaternion.copy(die.targetQuaternion!);
       } else {
-        die.mesh.rotation.set(die.spin.x * progress, die.spin.y * progress, die.spin.z * progress);
+        const position = getOutTrajectory(die.start, die.result.index, progress);
+        die.mesh.position.set(position.x, position.y, position.z);
+        die.mesh.rotation.set(die.spin.x * progress * 1.25, die.spin.y * progress * 1.4, die.spin.z * progress * 1.2);
       }
     }
   }
