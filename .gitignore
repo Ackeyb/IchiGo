@@ -10,3 +10,4 @@ coverage/
 Thumbs.db
 .idea/
 .vscode/
+output/playwright/

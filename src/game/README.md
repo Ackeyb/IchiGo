@@ -38,7 +38,7 @@ ROLL番号はターン内で1から増加します。ターンIDまたは受付�
 初回の累積完走数は0です。次プレイヤー・次ラウンドでは直前に確定した`totalCompletionCount`を
 `createTurn`へ渡し、ROLLが返した累積値をラウンド状態へ採用してください。
 完走数をUI側で再加算してはいけません。非完走・継続・拒否された要求では加算しません。
-UI接続、3D、演出、音、保存復旧は後続Phaseです。
+UI接続はSTEP 8で追加しています。3D、演出、音、保存復旧は後続Phaseです。
 
 ## Ranking（STEP 4）
 
@@ -87,6 +87,7 @@ SPEC §29・30のサドンデス判定や敗者確定フェーズへの進行は
 - `rollPenalty(state, playerId, random, expectedPenaltyId)`: 固定順の次の未処理敗者だけを1回ROLLし、新しい確定状態を返します。
 - `rollPenaltyDice(count, random)`: OUT判定をせず、指定個数のD6用乱数だけを消費する低水準関数です。
 - `calculatePenalty(dice, totalCompletionCount)`: 出目合計・倍率・最終ポイントを計算し、出目のコピーとともに返します。
+- `getPenaltyMultiplier(totalCompletionCount)`: 既存の倍率計算をUI表示にも公開しています。
 
 初期化時は既存Rankingから同率最下位全員を取得し、元の参加者一覧順に並べます。
 全員のターン終了と参加者の整合性を検証し、サドンデス対象ラウンドは拒否します。
@@ -110,3 +111,14 @@ OUTなし、1/5の通常加算、元の順序、個別結果、二重確定防�
 ターン／ペナルティIDの違う古い要求、累積値の一度だけの更新、欠損出目の拒否、
 通常ROLLで到達する状態の不変条件を検証します。
 必須ケースの対応表と監査結果は `docs/CORE_LOGIC_AUDIT.md` を参照してください。
+
+## Playable UI（STEP 8）
+
+`gameFlow.ts`は既存エンジンを呼び出す純粋な進行制御です。得点・順位などのルールは再実装しません。
+`advanceFlow(state, expectedRevision, action, random)`は古いリビジョンと不正なフェーズの要求を拒否します。
+ゲーム開始／再開始でもリビジョンを戻さず、`gameNumber`を増やしてターンIDとペナルティIDの再利用を防ぎます。
+ラウンドの現在プレイヤー状態と累積値は、ROLLが返した確定値から同じ遷移内で更新します。
+ターン結果表示中は`result`を保持し、次の明示的なROLL操作でのみ`continueTurn`と`rollTurn`を呼びます。
+
+`setup.ts`は2〜10人・一意なID・trim後1〜12 graphemeの名前を検証します。同名を許可します。
+Reactとは独立してテスト可能です。UI側の操作ロックと描画完了通知は `src/app/gameStore.ts` が担当します。

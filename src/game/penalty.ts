@@ -29,7 +29,7 @@ function assertDiceCount(count: number): void {
   }
 }
 
-function getMultiplier(totalCompletionCount: number): number {
+export function getPenaltyMultiplier(totalCompletionCount: number): number {
   if (!Number.isSafeInteger(totalCompletionCount) || totalCompletionCount < 0
     || !Number.isSafeInteger(totalCompletionCount + 1)) {
     throw new RangeError('Invalid committed completion count.');
@@ -46,7 +46,7 @@ export function rollPenaltyDice(count: number, random: RandomSource): readonly D
 /** SPEC §36, §66: all faces, including 1 and 5, contribute only their face value. */
 export function calculatePenalty(dice: readonly DieValue[], totalCompletionCount: number): PenaltyResult {
   assertDiceCount(dice.length);
-  const multiplier = getMultiplier(totalCompletionCount);
+  const multiplier = getPenaltyMultiplier(totalCompletionCount);
   // Iteration visits sparse entries too; Array.some would silently skip them.
   for (const value of dice) {
     if (!Number.isInteger(value) || value < 1 || value > 6) {
@@ -64,7 +64,7 @@ export function calculatePenalty(dice: readonly DieValue[], totalCompletionCount
 /** Snapshot the decisive round's loser counts in the original fixed play order. */
 export function createPenaltyState(round: DecisiveRound, penaltyId: string): PenaltyState {
   if (!penaltyId) throw new RangeError('Penalty requires a unique phase ID.');
-  getMultiplier(round.totalCompletionCount);
+  getPenaltyMultiplier(round.totalCompletionCount);
   const ids = new Set(round.participants.map(({ id }) => id));
   if (ids.size < 2 || ids.size > 10 || ids.size !== round.participants.length
     || round.players.length !== ids.size || round.players.some(({ id }) => !ids.has(id))) {
@@ -92,7 +92,7 @@ export function rollPenalty(state: PenaltyState, playerId: string, random: Rando
   const index = state.penalties.findIndex((entry) => entry.status === 'pending');
   const pending = state.penalties[index];
   if (!pending || pending.playerId !== playerId) return state;
-  getMultiplier(state.totalCompletionCount);
+  getPenaltyMultiplier(state.totalCompletionCount);
   const result = calculatePenalty(rollPenaltyDice(pending.diceCount, random), state.totalCompletionCount);
   const resolved: PenaltyEntry = { ...pending, status: 'resolved', ...result };
   return {
