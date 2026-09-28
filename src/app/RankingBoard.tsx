@@ -14,7 +14,8 @@ export function RankingBoard({ game, final = false, currentHasRolled = false }: 
       const index = game.participants.findIndex((p) => p.id === id);
       const rank = result.rankings.find((entry) => entry.playerId === id)?.rank;
       const playing = !player.turnFinished && index === game.currentPlayerIndex;
-      return <li key={id} className={bottom.includes(id) ? 'bottom' : ''}>
+      const classes = [bottom.includes(id) ? 'bottom' : '', player.completed ? 'complete' : '', playing ? 'current' : '', !player.turnFinished ? 'unplayed' : ''].filter(Boolean).join(' ');
+      return <li key={id} className={classes}>
         <span className="rank">{rank ? `${rank}位` : '—'}</span>
         <div><strong>{game.participants[index]!.name}</strong><small>プレイヤー {index + 1} · {player.completed ? '完走' : player.turnFinished ? '終了' : playing ? currentHasRolled ? 'プレイ中' : '未プレイ・現在の手番' : '未プレイ'}</small>
           {!player.turnFinished && playing && <small>順位対象外・未終了</small>}

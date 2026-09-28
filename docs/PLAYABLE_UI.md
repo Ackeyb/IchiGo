@@ -80,3 +80,12 @@ Three.jsはdynamic importし、RendererからEngineへ結果を返さない。�
 
 振動・シェイク操作は未実装。
 実機Safari等でのプレイテストは後続STEP 9で行う。
+
+## STEP 14 — Responsive / Final UI Polish
+
+単一のレスポンシブUIを維持し、320pxからdesktopまで、Setup・ゲーム本編・順位・サドンデス・敗者発表・Penalty・最終結果・確認dialogが横にはみ出さない構成とする。主要ボタンと並べ替え操作は44px以上のタップ領域を持ち、端末のsafe areaはviewportとページ余白で確保する。
+
+- 狭幅ではダイス領域の高さ、カード余白、数値表示を圧縮しつつ、1〜7個のダイスとSAFE / OUTラベルを読める大きさに保つ。
+- 順位行はrank・名前／状態・score／残りを分け、狭幅ではscore情報を次段へ送る。完走・現在手番・暫定最下位は文字と枠／背景を併用する。
+- Penaltyは確定値を再計算せず、既存のbase・multiplier・finalを数式として読み取れる配置にする。
+- reduced motion、2D fallback、Sound OFF、Recovery通知でも同じ情報と操作を維持する。

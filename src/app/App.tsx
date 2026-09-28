@@ -97,7 +97,7 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
       const current = game.participants[game.currentPlayerIndex]!;
       content = <div className="game-layout"><section className="play panel">
         <p className="eyebrow">PLAYER {game.currentPlayerIndex + 1} / {game.participants.length}</p>
-        <h2 ref={heading} tabIndex={-1}>現在プレイヤー：{current.name}</h2>
+        <h2 className="current-player" ref={heading} tabIndex={-1}><span>現在プレイヤー：</span>{current.name}</h2>
         <div className="dice-field">
           {result ? <p>直前のROLL · 確定結果</p> : <p>ダイスを振って、ゲームを始めよう。</p>}
           <DicePresentation dice={committedResult?.dice} kind="normal" revision={committedState.revision}
@@ -151,7 +151,7 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
           kind="penalty" revision={committedState.revision} busy={busy} presentation={penaltyPresentation} onCue={playCue}
           onReveal={store.reveal} onPresented={store.presented} config={dicePresentation} />
         {entry.status === 'pending' ? <><ReadyDice count={entry.diceCount} /><p>通常のD6を1回。OUT判定や1・5の特殊効果はありません。</p>{action('ペナルティROLL', 'rollPenalty')}</>
-          : <><dl className="metrics"><div><dt>BASE PENALTY</dt><dd>{entry.basePenalty}</dd></div><div><dt>MULTIPLIER</dt><dd>×{entry.multiplier}</dd></div><div><dt>FINAL PENALTY</dt><dd>{entry.finalPenalty}<small>pt</small></dd></div></dl>
+          : <><dl className="metrics penalty-metrics"><div><dt>BASE PENALTY</dt><dd>{entry.basePenalty}</dd></div><div><dt>MULTIPLIER</dt><dd>×{entry.multiplier}</dd></div><div><dt>FINAL PENALTY</dt><dd>{entry.finalPenalty}<small>pt</small></dd></div></dl>
             {state.penaltyIndex < state.penalty.penalties.length - 1 ? action('次の敗者へ', 'nextPenalty') : action('最終結果を見る', 'finish')}</>}
       </section>;
     } else if (state.phase === 'finished') {
@@ -166,7 +166,7 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
   }
   return <main>
     <header className="site-header"><div className="brand-mark" aria-hidden="true">⚄</div><h1>Ichi-Go Game</h1><span>7 DICE GAME</span>
-      <button className="sound-toggle" aria-pressed={soundEnabled} aria-label={`サウンド ${soundEnabled ? 'ON' : 'OFF'}`} onClick={toggleSound}>
+      <button className="sound-toggle" data-sound={soundEnabled ? 'on' : 'off'} aria-pressed={soundEnabled} aria-label={`サウンド ${soundEnabled ? 'ON' : 'OFF'}`} onClick={toggleSound}>
         Sound {soundEnabled ? 'ON' : 'OFF'}</button></header>
     {recovered && <p className="recovery-status" role="status">ゲームを復旧しました。</p>}
     {(recoveryNotice ?? soundRecoveryNotice) && <p className="recovery-warning" role="status">
