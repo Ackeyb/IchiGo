@@ -58,7 +58,7 @@ describe('3D dice React integration', () => {
     const onPresented = vi.fn();
     const onReveal = vi.fn();
     render(<StrictMode><DicePresentation dice={[{ status: 'safe', value: 2 }]} kind="normal" revision={7} busy
-      onReveal={onReveal} onPresented={onPresented} config={{ createRenderer: factory, prefersReducedMotion: () => false }} /></StrictMode>);
+      onReveal={onReveal} onPresented={onPresented} config={{ createRenderer: factory, prefersReducedMotion: () => false, resultStepMs: 0 }} /></StrictMode>);
     await waitFor(() => expect(instance.present).toHaveBeenCalledOnce());
     expect(factory).toHaveBeenCalledOnce();
     expect(instance.initialize).toHaveBeenCalledOnce();
@@ -72,7 +72,7 @@ describe('3D dice React integration', () => {
     const instance = renderer({ present: vi.fn(() => animations[index++]!.promise) });
     const onReveal = vi.fn();
     const onPresented = vi.fn();
-    const config = { createRenderer: async () => instance, prefersReducedMotion: () => false };
+    const config = { createRenderer: async () => instance, prefersReducedMotion: () => false, resultStepMs: 0 };
     const view = render(<DicePresentation dice={[{ status: 'safe', value: 1 }]} kind="normal" revision={1} busy
       onReveal={onReveal} onPresented={onPresented} config={config} />);
     await waitFor(() => expect(instance.present).toHaveBeenCalledTimes(1));
@@ -94,7 +94,7 @@ describe('3D dice React integration', () => {
     const random = new Sequence(normal(1, 2, 3, 4, 5, 6, 2));
     const store = createGameStore(random);
     const failing = renderer({ present: vi.fn(async () => { throw new Error('animation failure'); }) });
-    render(<App store={store} dicePresentation={{ createRenderer: async () => failing, prefersReducedMotion: () => false }} />);
+    render(<App store={store} dicePresentation={{ createRenderer: async () => failing, prefersReducedMotion: () => false, resultStepMs: 0 }} />);
     fireEvent.change(screen.getByLabelText('プレイヤー 1', { exact: true }), { target: { value: 'A' } });
     fireEvent.change(screen.getByLabelText('プレイヤー 2', { exact: true }), { target: { value: 'B' } });
     fireEvent.click(screen.getByRole('button', { name: 'ゲーム開始' }));
@@ -117,6 +117,7 @@ describe('3D dice React integration', () => {
       createRenderer: async () => stalled,
       prefersReducedMotion: () => false,
       timeoutMs: 5,
+      resultStepMs: 0,
     }} />);
     fireEvent.change(screen.getByLabelText('プレイヤー 1', { exact: true }), { target: { value: 'A' } });
     fireEvent.change(screen.getByLabelText('プレイヤー 2', { exact: true }), { target: { value: 'B' } });
@@ -141,7 +142,7 @@ describe('3D dice React integration', () => {
     const store = createGameStore(random);
     const instance = renderer();
     const factory = vi.fn(async () => instance);
-    render(<App store={store} dicePresentation={{ createRenderer: factory, prefersReducedMotion: () => false }} />);
+    render(<App store={store} dicePresentation={{ createRenderer: factory, prefersReducedMotion: () => false, resultStepMs: 0 }} />);
     fireEvent.change(screen.getByLabelText('プレイヤー 1', { exact: true }), { target: { value: 'A' } });
     fireEvent.change(screen.getByLabelText('プレイヤー 2', { exact: true }), { target: { value: 'B' } });
     fireEvent.click(screen.getByRole('button', { name: 'ゲーム開始' }));
@@ -169,7 +170,7 @@ describe('3D dice React integration', () => {
     const animations = [deferred(), deferred(), deferred()];
     let animationIndex = 0;
     const instance = renderer({ present: vi.fn(() => animations[animationIndex++]!.promise) });
-    render(<App store={store} dicePresentation={{ createRenderer: async () => instance, prefersReducedMotion: () => false }} />);
+    render(<App store={store} dicePresentation={{ createRenderer: async () => instance, prefersReducedMotion: () => false, resultStepMs: 0 }} />);
     fireEvent.change(screen.getByLabelText('プレイヤー 1', { exact: true }), { target: { value: 'A' } });
     fireEvent.change(screen.getByLabelText('プレイヤー 2', { exact: true }), { target: { value: 'B' } });
     fireEvent.click(screen.getByRole('button', { name: 'ゲーム開始' }));
@@ -218,5 +219,90 @@ describe('3D dice React integration', () => {
     expect(penaltyMetrics?.textContent).toContain('BASE PENALTY22');
     expect(penaltyMetrics?.textContent).toContain('FINAL PENALTY44pt');
     expect(random.calls).toBe(28);
+  });
+
+  it('presents multiple scoring dice only after they stop, then reveals score, removal, and COMPLETE in order', async () => {
+    const animation = deferred();
+    const instance = renderer({ present: vi.fn(() => animation.promise) });
+    const onReveal = vi.fn();
+    const onPresented = vi.fn();
+    render(<DicePresentation dice={[{ status: 'safe', value: 1 }, { status: 'safe', value: 5 }]}
+      kind="normal" revision={11} busy onReveal={onReveal} onPresented={onPresented}
+      presentation={{ kind: 'normal', gainedScore: 150, scoringCount: 2, outCount: 0, outcome: 'complete', totalCompletionCount: 9, multiplier: 10 }}
+      config={{ createRenderer: async () => instance, prefersReducedMotion: () => false, resultStepMs: 120 }} />);
+
+    await waitFor(() => expect(instance.present).toHaveBeenCalledOnce());
+    expect(screen.queryByRole('list', { name: '確定したダイスの出目' })).toBeNull();
+    expect(screen.queryByText('今回 +150点')).toBeNull();
+
+    await act(async () => { animation.resolve(); await animation.promise; });
+    expect(screen.getAllByText(/\+(100|50)/)).toHaveLength(2);
+    expect(screen.queryByText('今回 +150点')).toBeNull();
+    expect(onReveal).not.toHaveBeenCalled();
+
+    await waitFor(() => expect(screen.getByText('今回 +150点')).toBeTruthy());
+    expect(screen.queryByText('得点ダイス 2個を除外')).toBeNull();
+    await waitFor(() => expect(screen.getByText('得点ダイス 2個を除外')).toBeTruthy());
+    expect(screen.queryByText('COMPLETE!')).toBeNull();
+    await waitFor(() => expect(screen.getByText('COMPLETE!')).toBeTruthy());
+    expect(screen.getByText('累積完走 9 · ペナルティ倍率 ×10')).toBeTruthy();
+    await waitFor(() => expect(onReveal).toHaveBeenCalledWith(11));
+    paint();
+    expect(onPresented).toHaveBeenCalledWith(11);
+  });
+
+  it('shows OUT and NO SCORE without applying a scoring presentation before TURN END', async () => {
+    const animation = deferred();
+    const instance = renderer({ present: vi.fn(() => animation.promise) });
+    const onReveal = vi.fn();
+    render(<DicePresentation dice={[{ status: 'out', value: null }, { status: 'safe', value: 2 }]}
+      kind="normal" revision={12} busy onReveal={onReveal} onPresented={vi.fn()}
+      presentation={{ kind: 'normal', gainedScore: 0, scoringCount: 0, outCount: 1, outcome: 'turnEnd', totalCompletionCount: 3, multiplier: 4 }}
+      config={{ createRenderer: async () => instance, prefersReducedMotion: () => false, resultStepMs: 30 }} />);
+
+    await waitFor(() => expect(instance.present).toHaveBeenCalledOnce());
+    await act(async () => { animation.resolve(); await animation.promise; });
+    expect(screen.getByText('OUT')).toBeTruthy();
+    expect(screen.queryByText('得点・除外')).toBeNull();
+    expect(screen.queryByText(/\+(100|50)/)).toBeNull();
+    await waitFor(() => expect(screen.getByText('NO SCORE')).toBeTruthy());
+    expect(screen.queryByText('TURN END')).toBeNull();
+    await waitFor(() => expect(screen.getByText('TURN END')).toBeTruthy());
+    await waitFor(() => expect(onReveal).toHaveBeenCalledWith(12));
+  });
+
+  it('reveals penalty BASE, multiplier, and FINAL in sequence after the dice stop', async () => {
+    const animation = deferred();
+    const instance = renderer({ present: vi.fn(() => animation.promise) });
+    const onReveal = vi.fn();
+    render(<DicePresentation dice={[{ status: 'safe', value: 1 }, { status: 'safe', value: 5 }]}
+      kind="penalty" revision={13} busy onReveal={onReveal} onPresented={vi.fn()}
+      presentation={{ kind: 'penalty', basePenalty: 6, multiplier: 4, finalPenalty: 24 }}
+      config={{ createRenderer: async () => instance, prefersReducedMotion: () => false, resultStepMs: 120 }} />);
+
+    await waitFor(() => expect(instance.present).toHaveBeenCalledOnce());
+    await act(async () => { animation.resolve(); await animation.promise; });
+    expect(screen.queryByText('BASE')).toBeNull();
+    await waitFor(() => expect(screen.getByText('BASE')).toBeTruthy());
+    expect(screen.queryByText('MULTIPLIER')).toBeNull();
+    await waitFor(() => expect(screen.getByText('MULTIPLIER')).toBeTruthy());
+    expect(screen.queryByText('FINAL')).toBeNull();
+    await waitFor(() => expect(screen.getByText('FINAL')).toBeTruthy());
+    expect(screen.getByText('24 pt')).toBeTruthy();
+    await waitFor(() => expect(onReveal).toHaveBeenCalledWith(13));
+  });
+
+  it('skips motion staging under reduced motion while preserving the committed result', async () => {
+    const factory = vi.fn(async () => renderer());
+    const onReveal = vi.fn();
+    render(<DicePresentation dice={[{ status: 'safe', value: 5 }]} kind="normal" revision={14} busy
+      onReveal={onReveal} onPresented={vi.fn()}
+      presentation={{ kind: 'normal', gainedScore: 50, scoringCount: 1, outCount: 0, outcome: 'continue', totalCompletionCount: 2, multiplier: 3 }}
+      config={{ createRenderer: factory, prefersReducedMotion: () => true, resultStepMs: 999 }} />);
+
+    await waitFor(() => expect(onReveal).toHaveBeenCalledWith(14));
+    expect(factory).not.toHaveBeenCalled();
+    expect(screen.getByText('今回 +50点')).toBeTruthy();
+    expect(screen.getByText('次のROLLへ')).toBeTruthy();
   });
 });

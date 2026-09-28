@@ -13,7 +13,7 @@ export type DicePresentationControllerOptions = Readonly<{
   prefersReducedMotion?: () => boolean;
 }>;
 
-const defaultReducedMotion = () =>
+export const prefersReducedMotion = () =>
   typeof window === 'undefined' || typeof window.matchMedia !== 'function'
     ? true
     : window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -37,7 +37,7 @@ export class DicePresentationController {
     if (this.disposed || this.unavailableReason) {
       return { mode: 'fallback', reason: this.unavailableReason ?? 'unsupported' };
     }
-    if ((this.options.prefersReducedMotion ?? defaultReducedMotion)()) {
+    if ((this.options.prefersReducedMotion ?? prefersReducedMotion)()) {
       return { mode: 'fallback', reason: 'reduced-motion' };
     }
     if (this.current?.id === request.id) return this.current.completion;

@@ -49,13 +49,23 @@ Three.jsはdynamic importし、RendererからEngineへ結果を返さない。�
 - `prefers-reduced-motion: reduce`ではThree.jsを初期化せず2D表示する。
 - RendererはROLL間でcanvas、scene、camera、geometry、material、textureを再利用する。停止後は連続描画せず、破棄時にRAF、observer、listener、GPU resourceを解放する。
 
+## STEP 12 — Result Animation / Sound
+
+ダイス停止後の結果表示は`DicePresentation`が段階制御する。通常ROLLは得点ダイスの強調、今回得点、除外表示、結果種別の順、Penaltyはbase、multiplier、finalの順で表示し、その後に同じrevisionの`visibleState`をrevealして操作ロックを解除する。段階表示は確定済みEngine結果だけを参照し、得点・OUT・完走数・倍率を再計算しない。
+
+- 1 / 5は出目、得点ラベル、outline、pulseで識別し、OUTには得点演出を適用しない。
+- NO SCORE / TURN END、COMPLETE、Sudden Death、Loser Reveal、Penaltyの意味は文字でも表示する。
+- SoundはWeb Audio APIで短い効果音を生成するPresentation専用サブシステム。初期値はONで、同じタブ内のゲーム遷移を跨いで設定を維持する。
+- AudioContextの生成・resume・再生・破棄失敗はすべてfail-openとし、ゲーム進行やrevealを待たせない。
+- `prefers-reduced-motion: reduce`では3Dと段階待機を省略し、確定結果を2Dとテキストで即時に提示する。
+
 ## 検証と範囲
 
-- 既存205テストを維持。reveal timing・古いrevision・OUT落下軌道の5件を加えて210件。
+- 既存テストを維持し、reveal timing、古いrevision、OUT落下軌道、段階的な得点／Penalty表示、Sound設定とfail-openを検証する。
 - 決定論的RandomSourceで、2人・10人、継続、完走、暫定順位、連続サドンデス、複数敗者、個別Penalty、再プレイ／初期Setup、重複操作を検証。
 - React StrictModeでも抽選が重複しないことと、キーボード操作・ダイアログのフォーカスを検証。
 - Chromium実ブラウザーでSetupとROLL、ダイアログ、320／390／768／1280px幅の横はみ出しを確認。
 - ブラウザー確認用の生成物は`output/playwright/`に置き、コミットしない。
 
-豪華なAnimation、Sound、Session Recovery、Web Storage、振動・シェイク操作は未実装。
+Session Recovery、Web Storage、振動・シェイク操作は未実装。
 ブラウザー再読み込み時は初期Setupへ戻る。実機Safari等でのプレイテストは後続STEP 9で行う。

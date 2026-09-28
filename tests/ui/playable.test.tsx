@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/app/App';
 import { createGameStore } from '../../src/app/gameStore';
+import type { SoundCue, SoundPlayer } from '../../src/app/sound';
 import type { RandomSource } from '../../src/game/randomSource';
 
 class Sequence implements RandomSource {
@@ -33,10 +34,18 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-function mount(values: number[] = []) {
+class FakeSound implements SoundPlayer {
+  readonly cues: SoundCue[] = [];
+  disposed = 0;
+  constructor(private readonly fail = false) {}
+  play(cue: SoundCue) { this.cues.push(cue); if (this.fail) throw new Error('audio unavailable'); }
+  dispose() { this.disposed += 1; }
+}
+
+function mount(values: number[] = [], soundPlayer?: SoundPlayer) {
   const random = new Sequence(values);
   const store = createGameStore(random);
-  render(<StrictMode><App store={store} /></StrictMode>);
+  render(<StrictMode><App store={store} {...(soundPlayer ? { soundPlayer } : {})} /></StrictMode>);
   return { store, random };
 }
 function click(name: string) {
@@ -99,6 +108,7 @@ describe('Setup', () => {
 describe('playable flows', () => {
   it('plays a two-player game through continuation, complete, ranking, loser, penalty and replay', () => {
     const { store, random } = mount([...normal(1, 2, 2, 2, 2, 2, 2), ...normal(2, 2, 2, 2, 2, 2), ...seven(1), ...[1, 2, 3, 4, 5, 6].map((face) => (face - 0.5) / 6)]);
+    click('サウンド ON');
     names(); fireEvent.click(screen.getByLabelText('乱暴 5%')); click('ゲーム開始');
     expectHeading('現在プレイヤー：あき');
     expect(random.calls).toBe(0);
@@ -140,16 +150,21 @@ describe('playable flows', () => {
     expect(replay.gameNumber).toBe(finished.gameNumber + 1);
     expect(replay).not.toHaveProperty('penalty');
     expect(random.calls).toBe(46);
+    expect(screen.getByRole('button', { name: 'サウンド OFF' })).toBeTruthy();
   });
 
   it('requires an explicit start for repeated sudden death and preserves completion totals', () => {
     const { store, random } = mount([...seven(1), ...seven(5), ...seven('out'), ...seven('out')]);
-    names(); click('ゲーム開始');
+    click('サウンド ON'); names(); click('ゲーム開始');
     for (let round = 0; round < 2; round++) {
       click('ROLL'); click('次へ'); click('ROLL'); click('結果を見る');
       expectHeading('FINAL RANKING');
       expect(screen.queryByRole('button', { name: '敗者発表' })).toBeNull();
       click('サドンデスへ'); expectHeading('SUDDEN DEATH');
+      expect(screen.getByText('全プレイヤー参加')).toBeTruthy();
+      expect(screen.getByText('score / dice / OUTをリセット')).toBeTruthy();
+      expect(screen.getByText(/累積完走 2を維持/)).toBeTruthy();
+      expect(screen.getByText(/倍率 ×3を維持/)).toBeTruthy();
       const calls = random.calls;
       expect(store.getSnapshot().state.phase).toBe('suddenDeath');
       click('開始');
@@ -160,12 +175,13 @@ describe('playable flows', () => {
       if (state.phase !== 'turn') throw new Error('Expected turn');
       expect(state.game.suddenDeathCount).toBe(round + 1);
       expect(state.game.players.every((p) => p.activeDice === 7 && p.score === 0 && p.strandedDice === 0 && !p.turnFinished)).toBe(true);
+      expect(screen.getByRole('button', { name: 'サウンド OFF' })).toBeTruthy();
     }
   });
 
   it('reveals all tied losers and rolls their independent penalties in the fixed order', () => {
     const { random } = mount([...seven(1), ...seven('out'), ...seven(2), ...Array<number>(7).fill(0), ...Array<number>(7).fill(0.99)]);
-    names(['勝者', '敗者A', '敗者B']); click('ゲーム開始');
+    click('サウンド ON'); names(['勝者', '敗者A', '敗者B']); click('ゲーム開始');
     click('ROLL'); click('次へ'); click('ROLL');
     expect(screen.getByText('OUTあり・完走不能。OUTダイスは再ROLLされません。')).toBeTruthy();
     click('次へ'); click('ROLL');
@@ -184,6 +200,50 @@ describe('playable flows', () => {
     expect((screen.getByLabelText('プレイヤー人数') as HTMLSelectElement).value).toBe('2');
     expect(screen.getAllByRole('textbox').map((input) => (input as HTMLInputElement).value)).toEqual(['', '']);
     expect((screen.getByLabelText('普通 3%') as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole('button', { name: 'サウンド OFF' })).toBeTruthy();
+  });
+});
+
+describe('sound presentation', () => {
+  it('starts ON, toggles accessibly, and emits distinct gameplay cues', () => {
+    const sound = new FakeSound();
+    mount(seven('out'), sound);
+    const toggle = screen.getByRole('button', { name: 'サウンド ON' });
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    names(); click('ゲーム開始'); click('ROLL');
+    expect(sound.cues).toContain('roll');
+    expect(sound.cues).toContain('impact');
+    expect(sound.cues).toContain('out');
+    expect(sound.cues).toContain('turn-end');
+
+    click('サウンド ON');
+    expect(screen.getByRole('button', { name: 'サウンド OFF' }).getAttribute('aria-pressed')).toBe('false');
+    const cueCount = sound.cues.length;
+    click('次へ');
+    expect(sound.cues).toHaveLength(cueCount);
+  });
+
+  it('keeps gameplay moving when the sound subsystem throws', () => {
+    const sound = new FakeSound(true);
+    const { store } = mount([...seven('out'), ...seven(2)], sound);
+    names(); click('ゲーム開始'); click('ROLL');
+    expectHeading('現在プレイヤー：あき');
+    expect(screen.getByText('TURN END · ターン終了')).toBeTruthy();
+    click('次へ'); click('ROLL');
+    expectHeading('現在プレイヤー：はる');
+    const state = store.getSnapshot().state;
+    expect(state.phase === 'turn' && state.turn.player.turnFinished).toBe(true);
+  });
+
+  it('uses distinct cues for scoring, completion, OUT, loser reveal, and penalty', () => {
+    const sound = new FakeSound();
+    mount([...seven(1), ...seven('out'), ...Array<number>(7).fill(0)], sound);
+    names(); click('ゲーム開始');
+    click('ROLL'); click('次へ'); click('ROLL'); click('結果を見る');
+    click('敗者発表'); click('ペナルティへ'); click('ペナルティROLL');
+    expect(sound.cues).toEqual(expect.arrayContaining([
+      'roll', 'impact', 'scoring', 'complete', 'out', 'turn-end', 'loser-reveal', 'penalty',
+    ]));
   });
 });
 
