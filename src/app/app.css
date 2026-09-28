@@ -46,6 +46,15 @@ input[type="radio"] { accent-color: #315e43; margin-right: 7px; }
 .play { min-width: 0; }
 .dice-field { background: #244536; border-radius: 14px; padding: 20px 14px; color: #f0f6ec; text-align: center; }
 .dice-field > p { font-size: 12px; color: #d6e2d3; }
+.dice-presentation { position: relative; }
+.dice-presentation.is-idle { display: none; }
+.three-dice-stage { width: 100%; height: clamp(190px, 32vw, 260px); border-radius: 10px; overflow: hidden; pointer-events: none; touch-action: none; }
+.three-dice-canvas { display: block; width: 100%; height: 100%; pointer-events: none; }
+.dice-presentation.use-fallback .three-dice-stage { display: none; }
+.renderer-status { margin: 8px 0 0; color: #d6e2d3; font-size: 11px; }
+.dice-result-details .dice { margin-bottom: 12px; }
+.dice-presentation.use-three .dice-result-details .die { width: 58px; min-height: 64px; }
+.dice-presentation.use-three .dice-result-details .die strong { font-size: 23px; }
 .dice { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; list-style: none; padding: 0; margin: 12px 0 20px; }
 .die { background: #fdfbf1; color: #304737; width: 68px; min-height: 78px; border: 2px solid #dbddcf; border-radius: 11px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
 .die strong { font-size: 29px; line-height: 1.2; }
@@ -103,6 +112,8 @@ dialog h2 { font-size: 22px; }
   .game-summary strong { margin-left: 0; }
   .metrics dd { font-size: 28px; }
   .die { width: 58px; min-height: 70px; }
+  .three-dice-stage { height: 210px; }
+  .dice-presentation.use-three .dice-result-details .die { width: 48px; min-height: 58px; }
   .dice { gap: 7px; }
   .styles { gap: 5px; }
   .styles label { padding: 10px 5px; font-size: 12px; }

@@ -10,7 +10,9 @@ import type { FlowAction } from '../game/gameFlow';
 import { createGameStore } from './gameStore';
 import type { GameStore } from './gameStore';
 import { SetupScreen, styleLabels } from './SetupScreen';
-import { DiceView, ReadyDice } from './DiceView';
+import { ReadyDice } from './DiceView';
+import { DicePresentation } from './DicePresentation';
+import type { DicePresentationConfig } from './DicePresentation';
 import { RankingBoard } from './RankingBoard';
 import { ConfirmDialog } from './ConfirmDialog';
 import './app.css';
@@ -20,14 +22,17 @@ function ActionButton({ children, disabled, onClick }: { children: ReactNode; di
     onKeyDown={(event) => { if (event.repeat) event.preventDefault(); }}>{children}</button>;
 }
 
-export function App({ random = mathRandomSource, store: suppliedStore }: { random?: RandomSource; store?: GameStore } = {}) {
+export function App({ random = mathRandomSource, store: suppliedStore, dicePresentation }: { random?: RandomSource; store?: GameStore; dicePresentation?: DicePresentationConfig } = {}) {
   const [store] = useState(() => suppliedStore ?? createGameStore(random));
   const { state, busy, error } = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const [confirm, setConfirm] = useState<{ action: 'newGame' | 'replay'; revision: number; opener: HTMLElement } | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
-  // One committed paint before accepting a new action. This never executes game rules.
+  // Non-dice transitions unlock after a committed paint. Dice transitions unlock from their presenter.
   useEffect(() => {
     if (!busy) return;
+    const hasDicePresentation = (state.phase === 'turn' && state.turn.phase === 'result')
+      || (state.phase === 'penalty' && state.penalty.penalties[state.penaltyIndex]?.status === 'resolved');
+    if (hasDicePresentation) return;
     let second = 0;
     const first = requestAnimationFrame(() => { second = requestAnimationFrame(() => store.presented(state.revision)); });
     return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
@@ -49,7 +54,9 @@ export function App({ random = mathRandomSource, store: suppliedStore }: { rando
         <p className="eyebrow">PLAYER {game.currentPlayerIndex + 1} / {game.participants.length}</p>
         <h2 ref={heading} tabIndex={-1}>現在プレイヤー：{current.name}</h2>
         <div className="dice-field">
-          {result ? <><p>直前のROLL · 確定結果</p><DiceView dice={result.dice} /></> : <p>ダイスを振って、ゲームを始めよう。</p>}
+          {result ? <p>直前のROLL · 確定結果</p> : <p>ダイスを振って、ゲームを始めよう。</p>}
+          <DicePresentation dice={result?.dice} kind="normal" revision={state.revision}
+            busy={busy} onPresented={store.presented} config={dicePresentation} />
           <p className="ready-label">現在ROLL可能：{player.activeDice}個</p><ReadyDice count={player.activeDice} />
         </div>
         <dl className="metrics" aria-label="現在のプレイヤー状態">
@@ -86,9 +93,10 @@ export function App({ random = mathRandomSource, store: suppliedStore }: { rando
       const entry = state.penalty.penalties[state.penaltyIndex]!;
       content = <section className="panel results"><p className="eyebrow">PENALTY {state.penaltyIndex + 1} / {state.penalty.penalties.length}</p>
         <h2 ref={heading} tabIndex={-1}>ペナルティ：{name(entry.playerId)}</h2><p>ペナルティダイス：{entry.diceCount}個（OUT分を含む）</p>
+        <DicePresentation dice={entry.status === 'resolved' ? entry.penaltyRoll.map((value) => ({ status: 'safe', value })) : undefined}
+          kind="penalty" revision={state.revision} busy={busy} onPresented={store.presented} config={dicePresentation} />
         {entry.status === 'pending' ? <><ReadyDice count={entry.diceCount} /><p>通常のD6を1回。OUT判定や1・5の特殊効果はありません。</p>{action('ペナルティROLL', 'rollPenalty')}</>
-          : <><DiceView dice={entry.penaltyRoll.map((value) => ({ status: 'safe', value }))} scoring={false} />
-            <dl className="metrics"><div><dt>BASE PENALTY</dt><dd>{entry.basePenalty}</dd></div><div><dt>MULTIPLIER</dt><dd>×{entry.multiplier}</dd></div><div><dt>FINAL PENALTY</dt><dd>{entry.finalPenalty}<small>pt</small></dd></div></dl>
+          : <><dl className="metrics"><div><dt>BASE PENALTY</dt><dd>{entry.basePenalty}</dd></div><div><dt>MULTIPLIER</dt><dd>×{entry.multiplier}</dd></div><div><dt>FINAL PENALTY</dt><dd>{entry.finalPenalty}<small>pt</small></dd></div></dl>
             {state.penaltyIndex < state.penalty.penalties.length - 1 ? action('次の敗者へ', 'nextPenalty') : action('最終結果を見る', 'finish')}</>}
       </section>;
     } else if (state.phase === 'finished') {

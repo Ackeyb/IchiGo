@@ -30,19 +30,31 @@ Setup → 通常ターン →「次へ」→ 次プレイヤー →「結果を�
 `DiceView`は確定済み`DieResult[]`の表示専用。OUT／SAFE／得点・除外を文字でも区別する。
 直前の出目と現在ROLL可能な個数を分けて表示し、OUTを再ROLL候補に見せない。
 Penaltyではハイライトを無効にして全ての出目を通常D6として表示する。
-将来の3D Rendererはこの表示部分を交換し、論理状態や抽選を変更しない。
+`DicePresentation`は同じ確定結果を3D Rendererへ渡し、`DiceView`を常に文字情報と2D fallbackとして維持する。
 
 名前は`Intl.Segmenter`でgrapheme単位に検証。ラベル・入力エラー・disabled状態を付与。
 画面／結果の更新後は見出しへフォーカスし、Tabで主操作へ進める。
 確認ダイアログはネイティブのmodal dialogを使用し、Tab循環・Escape取消・起点へのフォーカス復帰を行う。
 
+## STEP 11 — 3D Dice接続
+
+依存方向はGame Engine → committed `DieResult[]` → `DicePresentationController` → `DiceRenderer`。
+Three.jsはdynamic importし、RendererからEngineへ結果を返さない。通常ROLLとPenaltyは、Engineが確定した配列順と値をそのまま表示する。
+
+- SAFEは指定面を上にする最終quaternionへ収束させる。OUTは数値面を持たない専用色で場外へ移動する。
+- `DiceRenderer`は`initialize / present / clear / dispose`を持ち、同一request IDを重複実行しない。
+- 3D完了通知は表示時のrevisionで`gameStore.presented`へ渡す。古い通知では新しいbusy状態を解除できない。
+- dynamic import、WebGL初期化、presentation、timeout、context lossの失敗時は、抽選を繰り返さず同じ確定結果を2D表示する。
+- `prefers-reduced-motion: reduce`ではThree.jsを初期化せず2D表示する。
+- RendererはROLL間でcanvas、scene、camera、geometry、material、textureを再利用する。停止後は連続描画せず、破棄時にRAF、observer、listener、GPU resourceを解放する。
+
 ## 検証と範囲
 
-- 既存169テストを維持。追加のSetup／進行制御8件、UIフロー7件と合わせて184件。
+- 既存184テストを維持。3D境界・orientation・fallback・lifecycleの21件を加えて205件。
 - 決定論的RandomSourceで、2人・10人、継続、完走、暫定順位、連続サドンデス、複数敗者、個別Penalty、再プレイ／初期Setup、重複操作を検証。
 - React StrictModeでも抽選が重複しないことと、キーボード操作・ダイアログのフォーカスを検証。
 - Chromium実ブラウザーでSetupとROLL、ダイアログ、320／390／768／1280px幅の横はみ出しを確認。
 - ブラウザー確認用の生成物は`output/playwright/`に置き、コミットしない。
 
-3D、豪華なAnimation、Sound、Session Recovery、Web Storage、振動・シェイク操作は未実装。
+豪華なAnimation、Sound、Session Recovery、Web Storage、振動・シェイク操作は未実装。
 ブラウザー再読み込み時は初期Setupへ戻る。実機Safari等でのプレイテストは後続STEP 9で行う。
