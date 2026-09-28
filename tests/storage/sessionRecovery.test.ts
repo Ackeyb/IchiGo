@@ -44,6 +44,46 @@ function readSaved(storage: MemoryStorage): FlowState | undefined {
 }
 
 describe('session recovery format and validation', () => {
+  it('rejects a ready flow snapshot carrying an already rolled player', () => {
+    const state = act(activeState(), { type: 'roll' }, new Sequence(normal(1, 2, 2, 2, 2, 2, 2)));
+    if (state.phase !== 'turn') throw new Error('turn expected');
+    expectValidStateToBeRejected({ ...state, turn: { ...state.turn, phase: 'ready' } });
+  });
+
+  it('rejects roll numbers inconsistent with the number of previously removed dice', () => {
+    const state = act(activeState(), { type: 'roll' }, new Sequence(normal(1, 2, 2, 2, 2, 2, 2)));
+    if (state.phase !== 'turn' || state.turn.phase !== 'result') throw new Error('result expected');
+    expectValidStateToBeRejected({ ...state, turn: { ...state.turn, rollNumber: 2, nextRollNumber: 3 } });
+  });
+
+  it('rejects a roll result belonging to a different player snapshot', () => {
+    const continued = act(activeState(), { type: 'roll' }, new Sequence(normal(1, 2, 2, 2, 2, 2, 2)));
+    const ended = act(activeState(), { type: 'roll' }, new Sequence(normal(2, 2, 2, 2, 2, 2, 2)));
+    if (continued.phase !== 'turn' || continued.turn.phase !== 'result'
+      || ended.phase !== 'turn' || ended.turn.phase !== 'result') throw new Error('result expected');
+    expectValidStateToBeRejected({ ...continued, turn: { ...continued.turn, result: ended.turn.result } });
+  });
+
+  it('rejects OUT state under the careful throw style', () => {
+    const state = act(activeState(), { type: 'roll' }, new Sequence(allOut));
+    if (state.phase !== 'turn') throw new Error('turn expected');
+    expectValidStateToBeRejected({ ...state, game: { ...state.game, throwStyle: 'careful' },
+      turn: { ...state.turn, throwStyle: 'careful' } });
+  });
+
+  it('rejects a self-consistent penalty calculated from the wrong number of dice', () => {
+    const random = new Sequence([...complete, ...allOut]);
+    let state = activeState();
+    for (const type of ['roll', 'next', 'roll', 'ranking', 'reveal', 'penalty', 'rollPenalty'] as const) {
+      state = act(state, { type }, random);
+    }
+    if (state.phase !== 'penalty') throw new Error('penalty expected');
+    const entry = state.penalty.penalties[0]!;
+    expectValidStateToBeRejected({ ...state, penalty: { ...state.penalty, penalties: [{ ...entry,
+      status: 'resolved', penaltyRoll: [1], basePenalty: 1, multiplier: 2, finalPenalty: 2,
+    }] } });
+  });
+
   it('saves and loads a versioned valid authoritative state', () => {
     const storage = new MemoryStorage();
     const recovery = new SessionRecovery(() => storage);

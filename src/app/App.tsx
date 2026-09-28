@@ -151,12 +151,12 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
           kind="penalty" revision={committedState.revision} busy={busy} presentation={penaltyPresentation} onCue={playCue}
           onReveal={store.reveal} onPresented={store.presented} config={dicePresentation} />
         {entry.status === 'pending' ? <><ReadyDice count={entry.diceCount} />{action('ペナルティROLL', 'rollPenalty')}</>
-          : <><dl className="metrics penalty-metrics"><div><dt>BASE PENALTY</dt><dd>{entry.basePenalty}</dd></div><div><dt>MULTIPLIER</dt><dd>×{entry.multiplier}</dd></div><div><dt>FINAL PENALTY</dt><dd>{entry.finalPenalty}<small>pt</small></dd></div></dl>
+          : <><dl className="metrics penalty-metrics"><div><dt>BASE PENALTY</dt><dd>{entry.basePenalty}</dd></div><div><dt>MULTIPLIER</dt><dd>×{entry.multiplier}</dd></div><div><dt>ペナルティポイント</dt><dd>{entry.finalPenalty}<small>pt</small></dd></div></dl>
             {state.penaltyIndex < state.penalty.penalties.length - 1 ? action('次の敗者へ', 'nextPenalty') : action('最終結果を見る', 'finish')}</>}
       </section>;
     } else if (state.phase === 'finished') {
       content = <section className="results"><h2 ref={heading} tabIndex={-1}>FINAL RESULT</h2><RankingBoard game={game} final />
-        <section className="panel"><h3>敗者と最終ペナルティ</h3><ul className="losers">{state.penalty.penalties.map((entry) => <li key={entry.playerId}>
+        <section className="panel"><h3>敗者とペナルティポイント</h3><ul className="losers">{state.penalty.penalties.map((entry) => <li key={entry.playerId}>
           <strong>{name(entry.playerId)}</strong><span>{entry.status === 'resolved' ? entry.finalPenalty : '—'} pt</span>
         </li>)}</ul></section>
         <div className="final-actions"><ActionButton disabled={busy || !!confirm} onClick={(opener) => setConfirm({ action: 'replay', revision: state.revision, opener })}>同じメンバーでもう一度</ActionButton>

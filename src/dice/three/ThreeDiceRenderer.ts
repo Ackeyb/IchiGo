@@ -210,20 +210,29 @@ export class ThreeDiceRenderer implements DiceRenderer {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    this.clear();
-    this.resizeObserver?.disconnect();
+    // A failed driver/resource cleanup must not skip the remaining releases.
+    const release = (cleanup: () => void) => { try { cleanup(); } catch { /* best-effort teardown */ } };
+    release(() => this.clear());
+    release(() => this.resizeObserver?.disconnect());
     this.resizeObserver = undefined;
     if (this.renderer) {
-      this.renderer.domElement.removeEventListener('webglcontextlost', this.onContextLost, false);
-      this.renderer.dispose();
-      this.renderer.domElement.remove();
+      const renderer = this.renderer;
+      release(() => renderer.domElement.removeEventListener('webglcontextlost', this.onContextLost, false));
+      release(() => renderer.dispose());
+      release(() => renderer.domElement.remove());
     }
-    this.geometry?.dispose();
-    this.materials?.forEach((material) => material.dispose());
-    this.outMaterials?.forEach((material) => material.dispose());
-    this.textures?.forEach((texture) => texture.dispose());
-    this.trayGeometry?.dispose();
-    this.trayMaterial?.dispose();
+    release(() => this.geometry?.dispose());
+    this.materials?.forEach((material) => release(() => material.dispose()));
+    this.outMaterials?.forEach((material) => release(() => material.dispose()));
+    this.textures?.forEach((texture) => release(() => texture.dispose()));
+    release(() => this.trayGeometry?.dispose());
+    release(() => this.trayMaterial?.dispose());
+    this.geometry = undefined;
+    this.materials = undefined;
+    this.outMaterials = undefined;
+    this.textures = undefined;
+    this.trayGeometry = undefined;
+    this.trayMaterial = undefined;
     this.renderer = undefined;
     this.scene = undefined;
     this.camera = undefined;
@@ -287,6 +296,8 @@ export class ThreeDiceRenderer implements DiceRenderer {
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
+    // setSize clears the drawing buffer; idle scenes have no RAF to repaint it.
+    if (this.scene) this.renderer.render(this.scene, this.camera);
   }
 }
 

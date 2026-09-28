@@ -52,6 +52,25 @@ function deferred() {
 }
 
 describe('3D dice React integration', () => {
+  it.each(['initialization', 'presentation'] as const)('ignores completion after unmount during %s', async (phase) => {
+    const pending = deferred();
+    const instance = renderer(phase === 'initialization'
+      ? { initialize: vi.fn(() => pending.promise) }
+      : { present: vi.fn(() => pending.promise) });
+    const onReveal = vi.fn();
+    const onPresented = vi.fn();
+    const view = render(<DicePresentation dice={[{ status: 'safe', value: 1 }]} kind="normal" revision={1} busy
+      onReveal={onReveal} onPresented={onPresented}
+      config={{ createRenderer: async () => instance, prefersReducedMotion: () => false, resultStepMs: 0 }} />);
+    await waitFor(() => expect(phase === 'initialization' ? instance.initialize : instance.present).toHaveBeenCalledOnce());
+    view.unmount();
+    await act(async () => { pending.resolve(); await pending.promise; });
+    paint();
+    expect(onReveal).not.toHaveBeenCalled();
+    expect(onPresented).not.toHaveBeenCalled();
+    expect(instance.dispose).toHaveBeenCalledOnce();
+  });
+
   it('does not duplicate renderer initialization in StrictMode', async () => {
     const instance = renderer();
     const factory = vi.fn(async () => instance);
@@ -217,7 +236,7 @@ describe('3D dice React integration', () => {
     await waitFor(() => expect(screen.getByText('BASE PENALTY')).toBeTruthy());
     const penaltyMetrics = screen.getByText('BASE PENALTY').closest('dl');
     expect(penaltyMetrics?.textContent).toContain('BASE PENALTY22');
-    expect(penaltyMetrics?.textContent).toContain('FINAL PENALTY44pt');
+    expect(penaltyMetrics?.textContent).toContain('ペナルティポイント44pt');
     expect(random.calls).toBe(28);
   });
 

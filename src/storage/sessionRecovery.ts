@@ -63,6 +63,7 @@ function validRound(value: unknown): value is SuddenDeathState {
     || Number(value.currentPlayerIndex) >= players.length) return false;
   const ids = participants.map((participant) => isRecord(participant) ? participant.id : undefined);
   if (players.some((player, index) => !isRecord(player) || player.id !== ids[index] || !validPlayer(player))) return false;
+  if (value.throwStyle === 'careful' && players.some((player) => player.strandedDice !== 0)) return false;
   const maximumCompletions = participants.length * (Number(value.suddenDeathCount) + 1);
   const currentCompletions = players.filter((player) => (player as unknown as PlayerTurn).completed).length;
   const previousCompletions = Number(value.totalCompletionCount) - currentCompletions;
@@ -99,13 +100,17 @@ function validTurn(value: unknown, game: SuddenDeathState, gameNumber: number, r
     || value.throwStyle !== game.throwStyle || value.totalCompletionCount !== game.totalCompletionCount
     || !Number.isSafeInteger(value.nextRollNumber) || Number(value.nextRollNumber) < 1 || Number(value.nextRollNumber) > revision + 1
     || !validPlayer(value.player) || !same(value.player, currentPlayer)) return false;
-  if (value.phase === 'ready') return !value.player.turnFinished && value.player.activeDice > 0;
+  // Flow commits continuation together with its next roll, never as a ready checkpoint.
+  if (value.phase === 'ready') return value.nextRollNumber === 1 && isInitialPlayer(value.player);
   if (!Number.isSafeInteger(value.rollNumber) || Number(value.rollNumber) < 1
     || Number(value.rollNumber) > revision || value.nextRollNumber !== Number(value.rollNumber) + 1 || !isRecord(value.result)
     || !Array.isArray(value.result.dice) || !value.result.dice.every(validDie)) return false;
   const result = value.result as unknown as RollResolution;
+  if (!same(result.player, currentPlayer)) return false;
   const previous = previousPlayer(result);
   if (!previous) return false;
+  if (value.rollNumber === 1 ? !isInitialPlayer(previous)
+    : previous.removedDice < Number(value.rollNumber) - 1) return false;
   try {
     return same(resolveRoll(previous, result.dice), result);
   } catch {
@@ -117,7 +122,7 @@ function validPenaltyEntry(value: unknown, expected: PenaltyEntry, totalCompleti
   if (!isRecord(value) || value.playerId !== expected.playerId || value.diceCount !== expected.diceCount
     || (value.status !== 'pending' && value.status !== 'resolved')) return false;
   if (value.status === 'pending') return true;
-  if (!Array.isArray(value.penaltyRoll)) return false;
+  if (!Array.isArray(value.penaltyRoll) || value.penaltyRoll.length !== expected.diceCount) return false;
   try {
     const calculated = calculatePenalty(value.penaltyRoll as never, totalCompletionCount);
     return same(calculated, {
