@@ -104,9 +104,9 @@ const INITIAL_DICE = 7;
 選択肢：
 
 ```text
-乱暴    5%
-普通    3%   ← DEFAULT
-丁寧    1%
+乱暴    3%
+普通    1%   ← DEFAULT
+丁寧    0%
 ```
 
 内部表現例：
@@ -115,11 +115,13 @@ const INITIAL_DICE = 7;
 type ThrowStyle = "rough" | "normal" | "careful";
 
 const OUT_PROBABILITIES: Record<ThrowStyle, number> = {
-  rough: 0.05,
-  normal: 0.03,
-  careful: 0.01,
+  rough: 0.03,
+  normal: 0.01,
+  careful: 0,
 };
 ```
+
+ゲームUIでは具体的な確率値を表示せず、「乱暴」「普通」「丁寧」の名称だけを表示する。
 
 デフォルト：
 
@@ -2040,10 +2042,10 @@ completed === false
 32. ペナルティROLLではOUTなし
 33. ペナルティROLLの1/5に特殊効果なし
 34. 複数敗者が個別ROLL
-35. OUT確率1%
-36. OUT確率3%
-37. OUT確率5%
-38. 投げ方デフォルトが普通3%
+35. OUT確率0%（丁寧ではOUTが発生しない）
+36. OUT確率1%
+37. OUT確率3%
+38. 投げ方デフォルトが普通1%
 39. ROLL二重実行防止
 40. sessionStorage復旧
 41. 新ゲーム完全リセット
@@ -2214,9 +2216,9 @@ OUTを含む各種演出。
 ✓ 任意停止不可
 
 ✓ 投げ方3種類
-✓ 乱暴5%
-✓ 普通3% DEFAULT
-✓ 丁寧1%
+✓ 乱暴3%
+✓ 普通1% DEFAULT
+✓ 丁寧0%
 ✓ ダイス単位OUT判定
 ✓ 複数OUT対応
 ✓ OUTは出目なし
@@ -3002,7 +3004,7 @@ FINAL RESULT等から、
 プレイヤー名 = 空欄
 プレイ順 = 初期順
 throwStyle = normal
-OUT probability = 3%
+OUT probability = 1%
 score = 0
 activeDice = 7
 strandedDice = 0

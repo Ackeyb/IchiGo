@@ -7,7 +7,7 @@ Phase 1の1人分の通常ターンを扱う純粋なTypeScriptエンジンで�
 
 ## API
 
-- `createTurn({ turnId, totalCompletionCount }, throwStyle?)`: 7個・0点で開始。投げ方省略時は普通（3%）。
+- `createTurn({ turnId, totalCompletionCount }, throwStyle?)`: 7個・0点で開始。投げ方省略時は普通（1%）。
 - `rollTurn(state, rollNumber, random, expectedTurnId)`: 最新状態にROLL要求を適用し、新しい確定状態を返します。完走時は累積完走数も同時に1加算します。
 - `continueTurn(state, rollNumber, expectedTurnId)`: 継続可能な結果を次ROLLの受付状態へ進めます。抽選しません。
 - `resolveRoll(player, dice)`: 確定出目から得点・ダイス状態・継続／終了／完走を計算します。

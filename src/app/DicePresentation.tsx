@@ -169,7 +169,6 @@ export function DicePresentation({
       {presentation?.kind === 'normal' && <div className="result-sequence" aria-live="polite">
         {stage >= 2 && <strong className={presentation.gainedScore > 0 ? 'score-pop' : 'no-score'}>
           {presentation.gainedScore > 0 ? `今回 +${presentation.gainedScore}点` : 'NO SCORE'}</strong>}
-        {stage >= 3 && presentation.scoringCount > 0 && <span>得点ダイス {presentation.scoringCount}個を除外</span>}
         {stage >= 4 && presentation.outcome === 'turnEnd' && <b>TURN END</b>}
         {stage >= 4 && presentation.outcome === 'continue' && <b>次のROLLへ</b>}
         {stage >= 4 && presentation.outcome === 'complete' && <div className="complete-pop"><b>COMPLETE!</b>

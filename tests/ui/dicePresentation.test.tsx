@@ -103,7 +103,7 @@ describe('3D dice React integration', () => {
     await waitFor(() => expect(screen.getByText('3D表示を完了できないため2D表示')).toBeTruthy());
     expect(random.calls).toBe(14);
     expect(screen.getByRole('list', { name: '確定したダイスの出目' })).toBeTruthy();
-    expect(screen.getAllByText('得点・除外')).toHaveLength(2);
+    expect(screen.getAllByText('GET')).toHaveLength(2);
     paint();
     expect((screen.getByRole('button', { name: '続けてROLL' }) as HTMLButtonElement).disabled).toBe(false);
     expect(random.calls).toBe(14);
@@ -221,7 +221,7 @@ describe('3D dice React integration', () => {
     expect(random.calls).toBe(28);
   });
 
-  it('presents multiple scoring dice only after they stop, then reveals score, removal, and COMPLETE in order', async () => {
+  it('presents multiple scoring dice only after they stop, then reveals score and COMPLETE in order', async () => {
     const animation = deferred();
     const instance = renderer({ present: vi.fn(() => animation.promise) });
     const onReveal = vi.fn();
@@ -236,13 +236,13 @@ describe('3D dice React integration', () => {
     expect(screen.queryByText('今回 +150点')).toBeNull();
 
     await act(async () => { animation.resolve(); await animation.promise; });
+    expect(screen.getAllByText('GET')).toHaveLength(2);
     expect(screen.getAllByText(/\+(100|50)/)).toHaveLength(2);
     expect(screen.queryByText('今回 +150点')).toBeNull();
     expect(onReveal).not.toHaveBeenCalled();
 
     await waitFor(() => expect(screen.getByText('今回 +150点')).toBeTruthy());
-    expect(screen.queryByText('得点ダイス 2個を除外')).toBeNull();
-    await waitFor(() => expect(screen.getByText('得点ダイス 2個を除外')).toBeTruthy());
+    expect(screen.queryByText(/得点ダイス.*個を除外/)).toBeNull();
     expect(screen.queryByText('COMPLETE!')).toBeNull();
     await waitFor(() => expect(screen.getByText('COMPLETE!')).toBeTruthy());
     expect(screen.getByText('累積完走 9 · ペナルティ倍率 ×10')).toBeTruthy();
@@ -263,7 +263,8 @@ describe('3D dice React integration', () => {
     await waitFor(() => expect(instance.present).toHaveBeenCalledOnce());
     await act(async () => { animation.resolve(); await animation.promise; });
     expect(screen.getByText('OUT')).toBeTruthy();
-    expect(screen.queryByText('得点・除外')).toBeNull();
+    expect(screen.queryByText('再ROLL不可')).toBeNull();
+    expect(screen.queryByText('GET')).toBeNull();
     expect(screen.queryByText(/\+(100|50)/)).toBeNull();
     await waitFor(() => expect(screen.getByText('NO SCORE')).toBeTruthy());
     expect(screen.queryByText('TURN END')).toBeNull();

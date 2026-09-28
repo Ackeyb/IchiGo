@@ -82,10 +82,12 @@ describe('Setup', () => {
   });
 
   it('supports ten players, changing order and selecting the throw style', () => {
-    const { store, random } = mount(Array.from({ length: 10 }, () => seven('out')).flat());
+    const { store, random } = mount(Array.from({ length: 10 }, () => seven(2)).flat());
     names(Array.from({ length: 10 }, (_, index) => `名前${index}`));
     click('プレイヤー 2を上へ');
-    fireEvent.click(screen.getByLabelText('丁寧 1%'));
+    expect(document.body.textContent).not.toContain('%');
+    expect(screen.queryByText('再ROLL不可')).toBeNull();
+    fireEvent.click(screen.getByLabelText('丁寧'));
     click('ゲーム開始');
     expectHeading('現在プレイヤー：名前1');
     const state = store.getSnapshot().state;
@@ -101,7 +103,7 @@ describe('Setup', () => {
     click('結果を見る'); expectHeading('FINAL RANKING');
     click('サドンデスへ'); click('開始');
     expectHeading('現在プレイヤー：名前1');
-    expect(random.calls).toBe(70);
+    expect(random.calls).toBe(140);
   });
 });
 
@@ -109,13 +111,16 @@ describe('playable flows', () => {
   it('plays a two-player game through continuation, complete, ranking, loser, penalty and replay', () => {
     const { store, random } = mount([...normal(1, 2, 2, 2, 2, 2, 2), ...normal(2, 2, 2, 2, 2, 2), ...seven(1), ...[1, 2, 3, 4, 5, 6].map((face) => (face - 0.5) / 6)]);
     click('サウンド ON');
-    names(); fireEvent.click(screen.getByLabelText('乱暴 5%')); click('ゲーム開始');
+    names(); fireEvent.click(screen.getByLabelText('乱暴')); click('ゲーム開始');
     expectHeading('現在プレイヤー：あき');
     expect(random.calls).toBe(0);
     click('ROLL');
     expect(screen.getByText('今回の獲得：100点')).toBeTruthy();
     expect(screen.getByText('現在ROLL可能：6個')).toBeTruthy();
-    expect(screen.getByText('得点・除外')).toBeTruthy();
+    expect(screen.getByText('GET')).toBeTruthy();
+    expect(screen.queryByText('直前のROLL · 確定結果')).toBeNull();
+    expect(screen.queryByText(/得点ダイス.*個を除外/)).toBeNull();
+    expect(document.body.textContent).not.toContain('%');
     expect(within(screen.getByRole('region', { name: '暫定順位' })).queryByText('1位')).toBeNull();
     expect(random.calls).toBe(14);
     click('続けてROLL');
@@ -132,9 +137,12 @@ describe('playable flows', () => {
     click('結果を見る'); expectHeading('FINAL RANKING');
     click('敗者発表'); expectHeading('LOSER REVEAL');
     click('ペナルティへ'); expectHeading('ペナルティ：あき');
+    expect(screen.getByText('ペナルティダイス：6個')).toBeTruthy();
+    expect(screen.queryByText(/OUT分を含む/)).toBeNull();
+    expect(screen.queryByText(/通常のD6を1回/)).toBeNull();
     click('ペナルティROLL');
     expect(screen.getByText('42')).toBeTruthy();
-    expect(screen.queryByText('得点・除外')).toBeNull();
+    expect(screen.queryByText('GET')).toBeNull();
     expect(screen.queryByRole('button', { name: 'ペナルティROLL' })).toBeNull();
     click('最終結果を見る'); expectHeading('FINAL RESULT');
     expect(screen.getByText('42 pt')).toBeTruthy();
@@ -199,7 +207,8 @@ describe('playable flows', () => {
     click('新しいゲーム'); click('確認して進む');
     expect((screen.getByLabelText('プレイヤー人数') as HTMLSelectElement).value).toBe('2');
     expect(screen.getAllByRole('textbox').map((input) => (input as HTMLInputElement).value)).toEqual(['', '']);
-    expect((screen.getByLabelText('普通 3%') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('普通') as HTMLInputElement).checked).toBe(true);
+    expect(document.body.textContent).not.toContain('%');
     expect(screen.getByRole('button', { name: 'サウンド OFF' })).toBeTruthy();
   });
 });

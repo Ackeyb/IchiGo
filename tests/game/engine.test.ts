@@ -101,17 +101,23 @@ describe('SPEC §77 cases 01–17: normal roll resolution', () => {
 });
 
 describe('SPEC §77 cases 35–38: deterministic random generation', () => {
-  it.each(['careful', 'normal', 'rough'] as const)('%s uses an independent strict OUT threshold per die', (style) => {
-    const probability = { careful: 0.01, normal: 0.03, rough: 0.05 }[style];
+  it.each([['normal', 0.01], ['rough', 0.03]] as const)('%s uses an independent strict OUT threshold per die', (style, probability) => {
     expect(OUT_PROBABILITIES[style]).toBe(probability);
     const random = new SequenceRandom([probability - 0.000001, probability, 0, probability + 0.000001, 1 - Number.EPSILON]);
     expect(rollGameDice(3, style, random)).toEqual([out, safe(1), safe(6)]);
     expect(random.calls).toBe(5);
   });
 
-  it('38 defaults to normal / 3%', () => {
+  it('careful uses 0% OUT and still draws a D6 face for every die', () => {
+    const random = new SequenceRandom(Array(14).fill(0));
+    expect(OUT_PROBABILITIES.careful).toBe(0);
+    expect(rollGameDice(7, 'careful', random)).toEqual(Array(7).fill(safe(1)));
+    expect(random.calls).toBe(14);
+  });
+
+  it('38 defaults to normal / 1%', () => {
     expect(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }).throwStyle).toBe('normal');
-    expect(rollTurn(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }), 1, new SequenceRandom(Array(7).fill(0.02)), 'test-turn').player.strandedDice).toBe(7);
+    expect(rollTurn(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }), 1, new SequenceRandom(Array(7).fill(0.005)), 'test-turn').player.strandedDice).toBe(7);
   });
 
   it.each([0, 1, 2, 3, 4, 5])('maps the lower boundary of D6 bucket %i', (bucket) => {
@@ -128,7 +134,7 @@ describe('SPEC §77 cases 35–38: deterministic random generation', () => {
   });
 
   it('produces the same state from identical state and random input', () => {
-    const input = createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }, 'careful');
+    const input = createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }, 'normal');
     expect(rollTurn(input, 1, sourceFor(1, 5, 2, 'out', 3, 4, 6), 'test-turn'))
       .toEqual(rollTurn(input, 1, sourceFor(1, 5, 2, 'out', 3, 4, 6), 'test-turn'));
   });

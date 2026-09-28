@@ -3,7 +3,7 @@ import { initialSetup, nameError, validateSetup } from '../game/setup';
 import type { Setup } from '../game/setup';
 import type { ThrowStyle } from '../game/types';
 
-export const styleLabels: Record<ThrowStyle, string> = { rough: '乱暴 5%', normal: '普通 3%', careful: '丁寧 1%' };
+export const styleLabels: Record<ThrowStyle, string> = { rough: '乱暴', normal: '普通', careful: '丁寧' };
 
 export function SetupScreen({ busy, onStart, focusOnMount }: { busy: boolean; onStart: (setup: Setup) => void; focusOnMount: boolean }) {
   const [setup, setSetup] = useState(initialSetup);
@@ -23,7 +23,7 @@ export function SetupScreen({ busy, onStart, focusOnMount }: { busy: boolean; on
       <p className="eyebrow">7 DICE · ONE CHANCE AT A TIME</p>
       <h2>7つのダイスで、<br />最後まで。</h2>
       <p>1と5を出してダイスを減らそう。<br />全て取り除けば、完走。</p>
-      <div className="rule-chips"><span>1 → 100点</span><span>5 → 50点</span><span>OUT → 再ROLL不可</span></div>
+      <div className="rule-chips"><span>1 → 100点</span><span>5 → 50点</span><span>OUT</span></div>
       <p className="subtle">1か5が出たら、残ったダイスで続行。<br />得点がなければ、そのターンは終了です。</p>
     </div>
     <form ref={form} className="panel setup-form" noValidate onSubmit={(event) => {
@@ -63,7 +63,7 @@ export function SetupScreen({ busy, onStart, focusOnMount }: { busy: boolean; on
           </li>;
         })}
       </ol>
-      <fieldset disabled={busy}><legend>投げ方 / ダイスごとのOUT確率</legend>
+      <fieldset disabled={busy}><legend>投げ方</legend>
         <div className="styles">{(['rough', 'normal', 'careful'] as const).map((style) => <label key={style}>
           <input type="radio" name="throw-style" value={style} checked={setup.throwStyle === style} onChange={() => setSetup({ ...setup, throwStyle: style })} />
           {styleLabels[style]}

@@ -63,7 +63,7 @@ describe('cross-phase audit', () => {
     const participants = Array.from({ length: count }, (_, i) => ({ id: `p${i}`, name: '同名' }));
     let round: SuddenDeathState = {
       participants, players: participants.map(({ id }) => ({ ...initial().player, id })),
-      currentPlayerIndex: 0, throwStyle: 'careful', totalCompletionCount: 0, suddenDeathCount: 0,
+      currentPlayerIndex: 0, throwStyle: 'normal', totalCompletionCount: 0, suddenDeathCount: 0,
     };
     const original = structuredClone(round);
     for (let roundIndex = 0; roundIndex < 3; roundIndex++) {
@@ -85,7 +85,7 @@ describe('cross-phase audit', () => {
         expect(shouldStartSuddenDeath(round.players)).toBe(true);
         const next = startSuddenDeath(round, roundIndex);
         expect(next.totalCompletionCount).toBe((roundIndex + 1) * count);
-        expect(next.throwStyle).toBe('careful');
+        expect(next.throwStyle).toBe('normal');
         expect(next.players.map((p) => p.id)).toEqual(participants.map((p) => p.id));
         expect(calculateProvisionalRanking(next.players).rankings).toEqual([]);
         expect(startSuddenDeath(next, roundIndex)).toBe(next);

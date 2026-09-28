@@ -99,7 +99,7 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
         <p className="eyebrow">PLAYER {game.currentPlayerIndex + 1} / {game.participants.length}</p>
         <h2 className="current-player" ref={heading} tabIndex={-1}><span>現在プレイヤー：</span>{current.name}</h2>
         <div className="dice-field">
-          {result ? <p>直前のROLL · 確定結果</p> : <p>ダイスを振って、ゲームを始めよう。</p>}
+          <p className="dice-field-intro" aria-hidden={result ? true : undefined}>{result ? '\u00a0' : 'ダイスを振って、ゲームを始めよう。'}</p>
           <DicePresentation dice={committedResult?.dice} kind="normal" revision={committedState.revision}
             busy={busy} presentation={rollPresentation} onCue={playCue}
             onReveal={store.reveal} onPresented={store.presented} config={dicePresentation} />
@@ -146,11 +146,11 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
         multiplier: committedEntry.multiplier, finalPenalty: committedEntry.finalPenalty,
       } : undefined;
       content = <section className="panel results"><p className="eyebrow">PENALTY {state.penaltyIndex + 1} / {state.penalty.penalties.length}</p>
-        <h2 ref={heading} tabIndex={-1}>ペナルティ：{name(entry.playerId)}</h2><p>ペナルティダイス：{entry.diceCount}個（OUT分を含む）</p>
+        <h2 ref={heading} tabIndex={-1}>ペナルティ：{name(entry.playerId)}</h2><p>ペナルティダイス：{entry.diceCount}個</p>
         <DicePresentation dice={committedEntry.status === 'resolved' ? committedEntry.penaltyRoll.map((value) => ({ status: 'safe', value })) : undefined}
           kind="penalty" revision={committedState.revision} busy={busy} presentation={penaltyPresentation} onCue={playCue}
           onReveal={store.reveal} onPresented={store.presented} config={dicePresentation} />
-        {entry.status === 'pending' ? <><ReadyDice count={entry.diceCount} /><p>通常のD6を1回。OUT判定や1・5の特殊効果はありません。</p>{action('ペナルティROLL', 'rollPenalty')}</>
+        {entry.status === 'pending' ? <><ReadyDice count={entry.diceCount} />{action('ペナルティROLL', 'rollPenalty')}</>
           : <><dl className="metrics penalty-metrics"><div><dt>BASE PENALTY</dt><dd>{entry.basePenalty}</dd></div><div><dt>MULTIPLIER</dt><dd>×{entry.multiplier}</dd></div><div><dt>FINAL PENALTY</dt><dd>{entry.finalPenalty}<small>pt</small></dd></div></dl>
             {state.penaltyIndex < state.penalty.penalties.length - 1 ? action('次の敗者へ', 'nextPenalty') : action('最終結果を見る', 'finish')}</>}
       </section>;

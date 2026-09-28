@@ -5,9 +5,9 @@ import type { DieResult, DieValue, ThrowStyle } from './types';
 export const INITIAL_DICE = 7;
 export const DEFAULT_THROW_STYLE: ThrowStyle = 'normal';
 export const OUT_PROBABILITIES: Readonly<Record<ThrowStyle, number>> = Object.freeze({
-  rough: 0.05,
-  normal: 0.03,
-  careful: 0.01,
+  rough: 0.03,
+  normal: 0.01,
+  careful: 0,
 });
 
 export function rollGameDice(

@@ -55,20 +55,21 @@ input[type="radio"] { accent-color: #315e43; margin-right: 7px; }
 .play { min-width: 0; }
 .dice-field { min-width: 0; background: #244536; border-radius: 14px; padding: 18px 14px; color: #f0f6ec; text-align: center; overflow: hidden; }
 .dice-field > p { font-size: 12px; color: #d6e2d3; }
-.dice-presentation { position: relative; }
-.dice-presentation.is-idle { display: none; }
+.dice-field-intro { min-height: 1.6em; }
+.dice-presentation { position: relative; min-height: 430px; }
+.dice-presentation.is-idle { display: block; visibility: hidden; }
 .three-dice-stage { width: 100%; height: clamp(190px, 32vw, 260px); border-radius: 10px; overflow: hidden; pointer-events: none; touch-action: none; contain: layout paint; }
 .three-dice-canvas { display: block; width: 100%; height: 100%; pointer-events: none; }
 .dice-presentation.use-fallback .three-dice-stage { display: none; }
 .renderer-status { margin: 8px 0 0; color: #d6e2d3; font-size: 11px; }
 .dice-result-details .dice { margin-bottom: 12px; }
-.dice-presentation.use-three .dice-result-details .die { width: 58px; min-height: 64px; }
+.dice-presentation.use-three .dice-result-details .die { min-height: 64px; }
 .dice-presentation.use-three .dice-result-details .die strong { font-size: 23px; }
-.dice { display: flex; min-width: 0; justify-content: center; flex-wrap: wrap; gap: 10px; list-style: none; padding: 0; margin: 12px 0 20px; }
-.die { background: #fdfbf1; color: #304737; width: 68px; min-height: 78px; border: 2px solid #dbddcf; border-radius: 11px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+.dice { display: grid; min-width: 0; grid-template-columns: repeat(var(--dice-count), minmax(0, 68px)); justify-content: center; gap: clamp(3px, 1vw, 10px); list-style: none; padding: 0; margin: 12px 0 20px; }
+.die { background: #fdfbf1; color: #304737; width: 100%; min-width: 0; min-height: 78px; border: 2px solid #dbddcf; border-radius: 11px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
 .die strong { font-size: 29px; line-height: 1.2; }
 .die span { font-size: 10px; margin-top: 6px; }
-.die.scored { background: #e6edb9; border-color: #a7bb71; outline: 3px solid #d8e77f; animation: score-pulse .42s ease-out 2; }
+.die.scored { background: #e6edb9; border-color: #a7bb71; box-shadow: inset 0 0 0 2px #d8e77f; animation: score-pulse .42s ease-out 2; }
 .die.scored.removing { opacity: .38; transform: translateY(-7px) scale(.82); filter: saturate(.6); transition: opacity .2s ease, transform .2s ease, filter .2s ease; }
 .die-points { display: block; margin-top: 3px; color: #365218; font-size: 12px; }
 .die.out { background: #f9ded0; border: 2px dashed #ad4a26; color: #8e3216; }
@@ -82,7 +83,7 @@ input[type="radio"] { accent-color: #315e43; margin-right: 7px; }
 .metrics dt { font-size: 11px; font-weight: 700; color: #59705e; }
 .metrics dd { font-size: 31px; font-weight: 750; line-height: 1.25; margin: 3px 0 0; }
 .metrics small { margin-left: 4px; font-weight: 400; }
-.turn-message { text-align: center; padding: 12px 0; }
+.turn-message { display: flex; min-height: 110px; box-sizing: border-box; flex-direction: column; justify-content: center; text-align: center; padding: 12px 0; }
 .turn-message strong { color: #356145; }
 .turn-message p { font-size: 13px; margin: 6px 0; }
 .result-sequence { min-height: 44px; display: grid; place-items: center; gap: 3px; margin-bottom: 10px; }
@@ -153,9 +154,10 @@ dialog h2 { font-size: 22px; }
   .metrics { margin: 16px 0; gap: 6px; }
   .metrics dt { font-size: 10px; }
   .metrics dd { font-size: 27px; }
-  .die { width: 58px; min-height: 70px; }
+  .dice-presentation { min-height: 380px; }
+  .die { min-height: 70px; }
   .three-dice-stage { height: clamp(168px, 28svh, 210px); }
-  .dice-presentation.use-three .dice-result-details .die { width: 48px; min-height: 58px; }
+  .dice-presentation.use-three .dice-result-details .die { min-height: 58px; }
   .dice { gap: 7px; }
   .styles { gap: 5px; }
   .styles label { padding: 10px 5px; font-size: 12px; }
@@ -175,10 +177,14 @@ dialog h2 { font-size: 22px; }
   .dice-field { padding: 12px 9px; }
   .dice-field > p { margin-bottom: 8px; }
   .three-dice-stage { height: clamp(158px, 27svh, 190px); }
-  .dice { gap: 6px; margin: 9px 0 14px; }
-  .die { width: clamp(45px, 15vw, 54px); min-height: 62px; }
-  .die strong { font-size: 25px; }
-  .dice-presentation.use-three .dice-result-details .die { width: clamp(41px, 13vw, 47px); min-height: 55px; }
+  .dice-presentation { min-height: 350px; }
+  .dice { gap: clamp(3px, 1vw, 5px); margin: 9px 0 14px; }
+  .die { min-height: 62px; border-radius: 8px; }
+  .die strong { font-size: 20px; }
+  .die span { font-size: 8px; }
+  .die-points { font-size: 9px; }
+  .die.out strong { font-size: clamp(12px, 4vw, 17px); }
+  .dice-presentation.use-three .dice-result-details .die { min-height: 55px; }
   .ready-dice { gap: 6px; margin: 8px 0; }
   .ready-dice span { width: 29px; height: 29px; }
   .metrics div { padding: 0 3px; }
@@ -208,10 +214,10 @@ dialog h2 { font-size: 22px; }
   .styles label { min-height: 44px; }
   .game-summary { gap: 5px 9px; }
   .game-summary strong { width: 100%; text-align: center; }
-  .die { width: 44px; }
   .penalty-equation { gap: 5px; }
   .penalty-equation span, .penalty-equation strong { min-width: 58px; padding-inline: 7px; font-size: 18px; }
 }
 @media (prefers-reduced-motion: reduce) {
+  .dice-presentation { min-height: 170px; }
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }

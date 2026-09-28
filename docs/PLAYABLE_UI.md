@@ -28,7 +28,7 @@ Setup → 通常ターン →「次へ」→ 次プレイヤー →「結果を�
 
 ## 表示とアクセシビリティ
 
-`DiceView`は確定済み`DieResult[]`の表示専用。OUT／SAFE／得点・除外を文字でも区別する。
+`DiceView`は確定済み`DieResult[]`の表示専用。OUT／SAFE／GETを文字でも区別する。投げ方は名称だけを表示し、具体的なOUT確率はUIへ表示しない。
 直前の出目と現在ROLL可能な個数を分けて表示し、OUTを再ROLL候補に見せない。
 Penaltyではハイライトを無効にして全ての出目を通常D6として表示する。
 `DicePresentation`は同じ確定結果を3D Rendererへ渡し、`DiceView`を常に文字情報と2D fallbackとして維持する。
@@ -51,7 +51,7 @@ Three.jsはdynamic importし、RendererからEngineへ結果を返さない。�
 
 ## STEP 12 — Result Animation / Sound
 
-ダイス停止後の結果表示は`DicePresentation`が段階制御する。通常ROLLは得点ダイスの強調、今回得点、除外表示、結果種別の順、Penaltyはbase、multiplier、finalの順で表示し、その後に同じrevisionの`visibleState`をrevealして操作ロックを解除する。段階表示は確定済みEngine結果だけを参照し、得点・OUT・完走数・倍率を再計算しない。
+ダイス停止後の結果表示は`DicePresentation`が段階制御する。通常ROLLはGETダイスの強調、今回得点、結果種別の順、Penaltyはbase、multiplier、finalの順で表示し、その後に同じrevisionの`visibleState`をrevealして操作ロックを解除する。段階表示は確定済みEngine結果だけを参照し、得点・OUT・完走数・倍率を再計算しない。
 
 - 1 / 5は出目、得点ラベル、outline、pulseで識別し、OUTには得点演出を適用しない。
 - NO SCORE / TURN END、COMPLETE、Sudden Death、Loser Reveal、Penaltyの意味は文字でも表示する。
@@ -85,7 +85,7 @@ Three.jsはdynamic importし、RendererからEngineへ結果を返さない。�
 
 単一のレスポンシブUIを維持し、320pxからdesktopまで、Setup・ゲーム本編・順位・サドンデス・敗者発表・Penalty・最終結果・確認dialogが横にはみ出さない構成とする。主要ボタンと並べ替え操作は44px以上のタップ領域を持ち、端末のsafe areaはviewportとページ余白で確保する。
 
-- 狭幅ではダイス領域の高さ、カード余白、数値表示を圧縮しつつ、1〜7個のダイスとSAFE / OUTラベルを読める大きさに保つ。
+- 狭幅ではダイス領域の高さ、カード余白、数値表示を圧縮しつつ、1〜7個の結果カードを横1行に保ち、SAFE / GET / OUTラベルを読める大きさにする。Presentation領域はROLL前から必要高を確保してページ高の変動を抑える。
 - 順位行はrank・名前／状態・score／残りを分け、狭幅ではscore情報を次段へ送る。完走・現在手番・暫定最下位は文字と枠／背景を併用する。
 - Penaltyは確定値を再計算せず、既存のbase・multiplier・finalを数式として読み取れる配置にする。
 - reduced motion、2D fallback、Sound OFF、Recovery通知でも同じ情報と操作を維持する。
