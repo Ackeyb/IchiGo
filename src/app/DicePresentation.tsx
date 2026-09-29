@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { DieResult } from '../game/types';
+import type { DiceMode, DieResult } from '../game/types';
 import { DicePresentationController } from '../dice/presentationController';
 import { prefersReducedMotion as defaultReducedMotion } from '../dice/presentationController';
 import type {
@@ -50,6 +50,7 @@ export type DiceResultPresentation =
 
 export function DicePresentation({
   dice,
+  diceMode,
   kind,
   revision,
   busy,
@@ -60,6 +61,7 @@ export function DicePresentation({
   config,
 }: {
   dice?: readonly DieResult[] | undefined;
+  diceMode: DiceMode;
   kind: DicePresentationKind;
   revision: number;
   busy: boolean;
@@ -165,7 +167,7 @@ export function DicePresentation({
     <div ref={container} className="three-dice-stage" aria-hidden="true" />
     {currentOutcome?.mode === 'fallback' && <p className="renderer-status">{fallbackLabels[currentOutcome.reason]}</p>}
     {revealed && <div className="dice-result-details">
-      <DiceView dice={dice} scoring={kind === 'normal'} removing={stage >= 3} />
+      <DiceView dice={dice} diceMode={diceMode} kind={kind} removing={stage >= 3} />
       {presentation?.kind === 'normal' && <div className="result-sequence" aria-live="polite">
         {stage >= 2 && <strong className={presentation.gainedScore > 0 ? 'score-pop' : 'no-score'}>
           {presentation.gainedScore > 0 ? `今回 +${presentation.gainedScore}点` : 'NO SCORE'}</strong>}
@@ -175,9 +177,9 @@ export function DicePresentation({
           <span>累積完走 {presentation.totalCompletionCount} · ペナルティ倍率 ×{presentation.multiplier}</span></div>}
       </div>}
       {presentation?.kind === 'penalty' && <div className="penalty-equation" aria-live="polite">
-        {stage >= 2 && <span><small>BASE</small>{presentation.basePenalty}</span>}
-        {stage >= 3 && <><b>×</b><span><small>MULTIPLIER</small>{presentation.multiplier}</span></>}
-        {stage >= 4 && <><b>=</b><strong><small>FINAL</small>{presentation.finalPenalty} pt</strong></>}
+        {stage >= 2 && <span className="penalty-equation-value"><small>BASE</small>{presentation.basePenalty}</span>}
+        {stage >= 3 && <><b>×</b><span className="penalty-equation-value"><small>MULTIPLIER</small>{presentation.multiplier}</span></>}
+        {stage >= 4 && <><b>=</b><strong className="penalty-equation-value"><small>FINAL</small>{presentation.finalPenalty} pt</strong></>}
       </div>}
     </div>}
   </div>;

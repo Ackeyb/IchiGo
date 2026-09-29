@@ -59,7 +59,7 @@ describe('3D dice React integration', () => {
       : { present: vi.fn(() => pending.promise) });
     const onReveal = vi.fn();
     const onPresented = vi.fn();
-    const view = render(<DicePresentation dice={[{ status: 'safe', value: 1 }]} kind="normal" revision={1} busy
+    const view = render(<DicePresentation dice={[{ status: 'safe', value: 1 }]} diceMode={7} kind="normal" revision={1} busy
       onReveal={onReveal} onPresented={onPresented}
       config={{ createRenderer: async () => instance, prefersReducedMotion: () => false, resultStepMs: 0 }} />);
     await waitFor(() => expect(phase === 'initialization' ? instance.initialize : instance.present).toHaveBeenCalledOnce());
@@ -76,7 +76,7 @@ describe('3D dice React integration', () => {
     const factory = vi.fn(async () => instance);
     const onPresented = vi.fn();
     const onReveal = vi.fn();
-    render(<StrictMode><DicePresentation dice={[{ status: 'safe', value: 2 }]} kind="normal" revision={7} busy
+    render(<StrictMode><DicePresentation dice={[{ status: 'safe', value: 2 }]} diceMode={7} kind="normal" revision={7} busy
       onReveal={onReveal} onPresented={onPresented} config={{ createRenderer: factory, prefersReducedMotion: () => false, resultStepMs: 0 }} /></StrictMode>);
     await waitFor(() => expect(instance.present).toHaveBeenCalledOnce());
     expect(factory).toHaveBeenCalledOnce();
@@ -92,10 +92,10 @@ describe('3D dice React integration', () => {
     const onReveal = vi.fn();
     const onPresented = vi.fn();
     const config = { createRenderer: async () => instance, prefersReducedMotion: () => false, resultStepMs: 0 };
-    const view = render(<DicePresentation dice={[{ status: 'safe', value: 1 }]} kind="normal" revision={1} busy
+    const view = render(<DicePresentation dice={[{ status: 'safe', value: 1 }]} diceMode={7} kind="normal" revision={1} busy
       onReveal={onReveal} onPresented={onPresented} config={config} />);
     await waitFor(() => expect(instance.present).toHaveBeenCalledTimes(1));
-    view.rerender(<DicePresentation dice={[{ status: 'safe', value: 5 }]} kind="normal" revision={2} busy
+    view.rerender(<DicePresentation dice={[{ status: 'safe', value: 5 }]} diceMode={7} kind="normal" revision={2} busy
       onReveal={onReveal} onPresented={onPresented} config={config} />);
     await waitFor(() => expect(instance.present).toHaveBeenCalledTimes(2));
 
@@ -105,8 +105,8 @@ describe('3D dice React integration', () => {
 
     await act(async () => { animations[1]!.resolve(); await animations[1]!.promise; });
     await waitFor(() => expect(onReveal).toHaveBeenCalledWith(2));
-    expect(screen.getByText('5')).toBeTruthy();
-    expect(screen.queryByText('1')).toBeNull();
+    expect(screen.getByLabelText('出目 5、GET')).toBeTruthy();
+    expect(screen.queryByLabelText('出目 1、GET')).toBeNull();
   });
 
   it('falls back with the committed roll and never consumes RandomSource again', async () => {
@@ -209,6 +209,7 @@ describe('3D dice React integration', () => {
     expect(screen.getByRole('list', { name: '確定したダイスの出目' })).toBeTruthy();
     paint();
 
+    expect(screen.getByRole('button', { name: '次へ' }).closest('.turn-action-slot')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '次へ' }));
     paint();
     fireEvent.click(screen.getByRole('button', { name: 'ROLL' }));
@@ -221,6 +222,7 @@ describe('3D dice React integration', () => {
     expect(screen.getByText('OUTあり・完走不能。OUTダイスは再ROLLされません。')).toBeTruthy();
     paint();
 
+    expect(screen.getByRole('button', { name: '結果を見る' }).closest('.turn-action-slot')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '結果を見る' }));
     paint();
     fireEvent.click(screen.getByRole('button', { name: '敗者発表' }));
@@ -235,6 +237,7 @@ describe('3D dice React integration', () => {
     await act(async () => { animations[2]!.resolve(); await animations[2]!.promise; });
     await waitFor(() => expect(screen.getByText('BASE PENALTY')).toBeTruthy());
     const penaltyMetrics = screen.getByText('BASE PENALTY').closest('dl');
+    expect(penaltyMetrics?.querySelectorAll('.penalty-metric')).toHaveLength(3);
     expect(penaltyMetrics?.textContent).toContain('BASE PENALTY22');
     expect(penaltyMetrics?.textContent).toContain('ペナルティポイント44pt');
     expect(random.calls).toBe(28);
@@ -246,7 +249,7 @@ describe('3D dice React integration', () => {
     const onReveal = vi.fn();
     const onPresented = vi.fn();
     render(<DicePresentation dice={[{ status: 'safe', value: 1 }, { status: 'safe', value: 5 }]}
-      kind="normal" revision={11} busy onReveal={onReveal} onPresented={onPresented}
+      diceMode={7} kind="normal" revision={11} busy onReveal={onReveal} onPresented={onPresented}
       presentation={{ kind: 'normal', gainedScore: 150, scoringCount: 2, outCount: 0, outcome: 'complete', totalCompletionCount: 9, multiplier: 10 }}
       config={{ createRenderer: async () => instance, prefersReducedMotion: () => false, resultStepMs: 120 }} />);
 
@@ -275,7 +278,7 @@ describe('3D dice React integration', () => {
     const instance = renderer({ present: vi.fn(() => animation.promise) });
     const onReveal = vi.fn();
     render(<DicePresentation dice={[{ status: 'out', value: null }, { status: 'safe', value: 2 }]}
-      kind="normal" revision={12} busy onReveal={onReveal} onPresented={vi.fn()}
+      diceMode={7} kind="normal" revision={12} busy onReveal={onReveal} onPresented={vi.fn()}
       presentation={{ kind: 'normal', gainedScore: 0, scoringCount: 0, outCount: 1, outcome: 'turnEnd', totalCompletionCount: 3, multiplier: 4 }}
       config={{ createRenderer: async () => instance, prefersReducedMotion: () => false, resultStepMs: 30 }} />);
 
@@ -296,18 +299,25 @@ describe('3D dice React integration', () => {
     const instance = renderer({ present: vi.fn(() => animation.promise) });
     const onReveal = vi.fn();
     render(<DicePresentation dice={[{ status: 'safe', value: 1 }, { status: 'safe', value: 5 }]}
-      kind="penalty" revision={13} busy onReveal={onReveal} onPresented={vi.fn()}
+      diceMode={7} kind="penalty" revision={13} busy onReveal={onReveal} onPresented={vi.fn()}
       presentation={{ kind: 'penalty', basePenalty: 6, multiplier: 4, finalPenalty: 24 }}
       config={{ createRenderer: async () => instance, prefersReducedMotion: () => false, resultStepMs: 120 }} />);
 
     await waitFor(() => expect(instance.present).toHaveBeenCalledOnce());
     await act(async () => { animation.resolve(); await animation.promise; });
+    expect(screen.queryByText('SAFE')).toBeNull();
+    expect(screen.queryByText('GET')).toBeNull();
+    expect(screen.getByLabelText('出目 1').querySelector('.die-face-accent')).toBeTruthy();
+    expect(screen.getByLabelText('出目 5').querySelector('.die-face-accent')).toBeTruthy();
     expect(screen.queryByText('BASE')).toBeNull();
     await waitFor(() => expect(screen.getByText('BASE')).toBeTruthy());
     expect(screen.queryByText('MULTIPLIER')).toBeNull();
     await waitFor(() => expect(screen.getByText('MULTIPLIER')).toBeTruthy());
     expect(screen.queryByText('FINAL')).toBeNull();
     await waitFor(() => expect(screen.getByText('FINAL')).toBeTruthy());
+    expect(screen.getByText('BASE').closest('.penalty-equation-value')).toBeTruthy();
+    expect(screen.getByText('MULTIPLIER').closest('.penalty-equation-value')).toBeTruthy();
+    expect(screen.getByText('FINAL').closest('.penalty-equation-value')).toBeTruthy();
     expect(screen.getByText('24 pt')).toBeTruthy();
     await waitFor(() => expect(onReveal).toHaveBeenCalledWith(13));
   });
@@ -315,7 +325,7 @@ describe('3D dice React integration', () => {
   it('skips motion staging under reduced motion while preserving the committed result', async () => {
     const factory = vi.fn(async () => renderer());
     const onReveal = vi.fn();
-    render(<DicePresentation dice={[{ status: 'safe', value: 5 }]} kind="normal" revision={14} busy
+    render(<DicePresentation dice={[{ status: 'safe', value: 5 }]} diceMode={7} kind="normal" revision={14} busy
       onReveal={onReveal} onPresented={vi.fn()}
       presentation={{ kind: 'normal', gainedScore: 50, scoringCount: 1, outCount: 0, outcome: 'continue', totalCompletionCount: 2, multiplier: 3 }}
       config={{ createRenderer: factory, prefersReducedMotion: () => true, resultStepMs: 999 }} />);

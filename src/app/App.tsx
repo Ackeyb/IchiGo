@@ -106,7 +106,7 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
         <h2 className="current-player" ref={heading} tabIndex={-1}><span>現在プレイヤー：</span>{current.name}</h2>
         <div className="dice-field">
           <p className="dice-field-intro" aria-hidden={result ? true : undefined}>{result ? '\u00a0' : 'ダイスを振って、ゲームを始めよう。'}</p>
-          <DicePresentation dice={committedResult?.dice} kind="normal" revision={committedState.revision}
+          <DicePresentation dice={committedResult?.dice} diceMode={game.diceMode} kind="normal" revision={committedState.revision}
             busy={busy} presentation={rollPresentation} onCue={playCue}
             onReveal={store.reveal} onPresented={store.presented} config={dicePresentation} />
           <p className="ready-label">現在ROLL可能：{player.activeDice}個</p><ReadyDice count={player.activeDice} />
@@ -121,9 +121,12 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
           {result && <p>今回の獲得：{result.gainedScore}点</p>}
           {player.strandedDice > 0 && <p>OUTあり・完走不能。OUTダイスは再ROLLされません。</p>}
         </div>
-        {!player.turnFinished ? action(result ? '続けてROLL' : 'ROLL', 'roll') : game.currentPlayerIndex < game.participants.length - 1
-          ? <><p>次のプレイヤー：{game.participants[game.currentPlayerIndex + 1]!.name}</p>{action('次へ', 'next')}</>
-          : action('結果を見る', 'ranking')}
+        <div className="turn-action-slot">
+          <p className="turn-action-context">{player.turnFinished && game.currentPlayerIndex < game.participants.length - 1
+            ? <>次のプレイヤー：<strong>{game.participants[game.currentPlayerIndex + 1]!.name}</strong></> : '\u00a0'}</p>
+          {!player.turnFinished ? action(result ? '続けてROLL' : 'ROLL', 'roll') : game.currentPlayerIndex < game.participants.length - 1
+            ? action('次へ', 'next') : action('結果を見る', 'ranking')}
+        </div>
       </section><RankingBoard game={game} currentHasRolled={state.turn.nextRollNumber > 1} /></div>;
     } else if (state.phase === 'ranking') {
       const tied = shouldStartSuddenDeath(game.players, game.diceMode);
@@ -154,10 +157,10 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
       content = <section className="panel results"><p className="eyebrow">PENALTY {state.penaltyIndex + 1} / {state.penalty.penalties.length}</p>
         <h2 ref={heading} tabIndex={-1}>ペナルティ：{name(entry.playerId)}</h2><p>ペナルティダイス：{entry.diceCount}個</p>
         <DicePresentation dice={committedEntry.status === 'resolved' ? committedEntry.penaltyRoll.map((value) => ({ status: 'safe', value })) : undefined}
-          kind="penalty" revision={committedState.revision} busy={busy} presentation={penaltyPresentation} onCue={playCue}
+          diceMode={game.diceMode} kind="penalty" revision={committedState.revision} busy={busy} presentation={penaltyPresentation} onCue={playCue}
           onReveal={store.reveal} onPresented={store.presented} config={dicePresentation} />
         {entry.status === 'pending' ? <><ReadyDice count={entry.diceCount} />{action('ペナルティROLL', 'rollPenalty')}</>
-          : <><dl className="metrics penalty-metrics"><div><dt>BASE PENALTY</dt><dd>{entry.basePenalty}</dd></div><div><dt>MULTIPLIER</dt><dd>×{entry.multiplier}</dd></div><div><dt>ペナルティポイント</dt><dd>{entry.finalPenalty}<small>pt</small></dd></div></dl>
+          : <><dl className="metrics penalty-metrics"><div className="penalty-metric"><dt>BASE PENALTY</dt><dd>{entry.basePenalty}</dd></div><div className="penalty-metric"><dt>MULTIPLIER</dt><dd>×{entry.multiplier}</dd></div><div className="penalty-metric"><dt>ペナルティポイント</dt><dd>{entry.finalPenalty}<small>pt</small></dd></div></dl>
             {state.penaltyIndex < state.penalty.penalties.length - 1 ? action('次の敗者へ', 'nextPenalty') : action('最終結果を見る', 'finish')}</>}
       </section>;
     } else if (state.phase === 'finished') {

@@ -71,15 +71,26 @@ input[type="radio"] { accent-color: #315e43; margin-right: 7px; }
 .dice-result-details .dice { margin-bottom: 12px; }
 .dice-presentation.use-three .dice-result-details .die { min-height: 64px; }
 .dice-presentation.use-three .dice-result-details .die strong { font-size: 23px; }
-.dice { display: grid; min-width: 0; grid-template-columns: repeat(var(--dice-count), minmax(0, 68px)); justify-content: center; gap: clamp(3px, 1vw, 10px); list-style: none; padding: 0; margin: 12px 0 20px; }
+.dice { display: grid; min-width: 0; grid-template-columns: repeat(var(--dice-track-count), minmax(0, var(--dice-track-max))); justify-content: center; gap: clamp(3px, 1vw, 10px); list-style: none; padding: 0; margin: 12px 0 20px; }
 .die { background: #fdfbf1; color: #304737; width: 100%; min-width: 0; min-height: 78px; border: 2px solid #dbddcf; border-radius: 11px; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-.die strong { font-size: 29px; line-height: 1.2; }
-.die span { font-size: 10px; margin-top: 6px; }
+.die { grid-column: span var(--dice-card-span); }
+.die-face { position: relative; display: grid; flex: 0 0 auto; width: clamp(25px, 4.4vw, 34px); aspect-ratio: 1; margin: 0; grid-template: repeat(3, 1fr) / repeat(3, 1fr); color: #304737; }
+.die-face-accent { color: #b62924; }
+.die-pip { align-self: center; justify-self: center; width: clamp(4px, .72vw, 6px); aspect-ratio: 1; border-radius: 50%; background: currentColor; }
+.die-pip-top-left { grid-area: 1 / 1; }
+.die-pip-top-right { grid-area: 1 / 3; }
+.die-pip-middle-left { grid-area: 2 / 1; }
+.die-pip-center { grid-area: 2 / 2; }
+.die-pip-middle-right { grid-area: 2 / 3; }
+.die-pip-bottom-left { grid-area: 3 / 1; }
+.die-pip-bottom-right { grid-area: 3 / 3; }
+.die-status { font-size: 10px; margin-top: 6px; }
+.die-out-label { font-size: 21px; line-height: 1.2; }
 .die.scored { background: #e6edb9; border-color: #a7bb71; box-shadow: inset 0 0 0 2px #d8e77f; animation: score-pulse .42s ease-out 2; }
 .die.scored.removing { opacity: .38; transform: translateY(-7px) scale(.82); filter: saturate(.6); transition: opacity .2s ease, transform .2s ease, filter .2s ease; }
 .die-points { display: block; margin-top: 3px; color: #365218; font-size: 12px; }
 .die.out { background: #f9ded0; border: 2px dashed #ad4a26; color: #8e3216; }
-.die.out strong { font-size: 21px; }
+.die.out .die-out-label { font-size: 21px; }
 .ready-dice { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
 .ready-dice span { border: 1px dashed #a7ba9c; border-radius: 6px; width: 32px; height: 32px; text-align: center; color: inherit; }
 .ready-label { margin-bottom: 4px; }
@@ -92,6 +103,9 @@ input[type="radio"] { accent-color: #315e43; margin-right: 7px; }
 .turn-message { display: flex; min-height: 110px; box-sizing: border-box; flex-direction: column; justify-content: center; text-align: center; padding: 12px 0; }
 .turn-message strong { color: #356145; }
 .turn-message p { font-size: 13px; margin: 6px 0; }
+.turn-action-slot { display: grid; min-height: 96px; align-content: end; gap: 8px; }
+.turn-action-context { min-height: 1.6em; margin: 0; text-align: center; overflow-wrap: anywhere; }
+.turn-action-context strong { color: #356145; }
 .result-sequence { min-height: 44px; display: grid; place-items: center; gap: 3px; margin-bottom: 10px; }
 .result-sequence > * { margin: 0; animation: result-pop .22s ease-out both; }
 .result-sequence .score-pop { color: #f0f5ad; font-size: 22px; }
@@ -102,6 +116,7 @@ input[type="radio"] { accent-color: #315e43; margin-right: 7px; }
 .penalty-equation { min-height: 60px; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
 .penalty-equation > * { animation: result-pop .22s ease-out both; }
 .penalty-equation span, .penalty-equation strong { display: grid; min-width: 66px; padding: 7px 10px; border-radius: 8px; background: #edf0e5; color: #294536; font-size: 20px; }
+.penalty-equation-value { place-items: center; text-align: center; }
 .penalty-equation strong { background: #e4e9bd; }
 .penalty-equation small { font-size: 9px; letter-spacing: .8px; }
 .phase-reveal, .sudden-death-reveal { animation: phase-in .35s ease-out both; }
@@ -137,6 +152,7 @@ input[type="radio"] { accent-color: #315e43; margin-right: 7px; }
 .losers li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; justify-content: space-between; border-bottom: 1px solid #dce1d8; padding: 16px 0; overflow-wrap: anywhere; }
 .losers span { text-align: right; }
 .penalty-metrics > div { position: relative; }
+.penalty-metrics .penalty-metric { display: grid; place-content: center; justify-items: center; text-align: center; }
 .penalty-metrics > div:last-child::before { content: "="; position: absolute; top: 50%; left: -10px; transform: translate(-50%, -10%); color: #5b6d62; font-size: 18px; font-weight: 750; }
 .penalty-metrics > div:last-child dd { color: #315d40; }
 .final-actions { display: grid; gap: 12px; }
@@ -202,10 +218,9 @@ dialog h2 { font-size: 22px; }
   .dice-presentation { min-height: 350px; }
   .dice { gap: clamp(3px, 1vw, 5px); margin: 9px 0 14px; }
   .die { min-height: 62px; border-radius: 8px; }
-  .die strong { font-size: 20px; }
-  .die span { font-size: 8px; }
+  .die-status { font-size: 8px; }
   .die-points { font-size: 9px; }
-  .die.out strong { font-size: clamp(12px, 4vw, 17px); }
+  .die.out .die-out-label { font-size: clamp(12px, 4vw, 17px); }
   .dice-presentation.use-three .dice-result-details .die { min-height: 55px; }
   .ready-dice { gap: 6px; margin: 8px 0; }
   .ready-dice span { width: 29px; height: 29px; }
