@@ -6,6 +6,8 @@ import type { RandomSource } from '../../src/game/randomSource';
 import {
   SESSION_GAME_KEY,
   SESSION_SCHEMA_VERSION,
+  SESSION_SOUND_KEY,
+  SOUND_SCHEMA_VERSION,
   SessionRecovery,
 } from '../../src/storage/sessionRecovery';
 import type { StorageAdapter } from '../../src/storage/sessionRecovery';
@@ -93,19 +95,66 @@ describe('session recovery format and validation', () => {
     expect(new SessionRecovery(() => storage).loadGame()).toEqual({ state, recovered: true });
   });
 
-  it('minimally adapts a fixed-seven v1 snapshot without changing the schema version', () => {
+  it.each([5, 7, 10] as const)('saves and restores an editable %i-dice setup draft with blank names', (diceMode) => {
+    const storage = new MemoryStorage();
+    const recovery = new SessionRecovery(() => storage);
+    const draft: FlowState = {
+      phase: 'setup', revision: 4, gameNumber: 1, setupKind: 'newGame',
+      draft: { participants: [{ id: 'kept-b', name: '' }, { id: 'kept-a', name: '編集中 ' }], throwStyle: 'rough', diceMode },
+    };
+    expect(recovery.saveGame(draft)).toBeUndefined();
+    expect(new SessionRecovery(() => storage).loadGame()).toEqual({ state: draft, recovered: true });
+  });
+
+  it('restores a replay reorder and rejects persisted replay rename or setting changes', () => {
+    const storage = new MemoryStorage();
+    const random = new Sequence([...complete, ...allOut, ...Array<number>(7).fill(0)]);
+    let state = activeState();
+    for (const type of ['roll', 'next', 'roll', 'ranking', 'reveal', 'penalty', 'rollPenalty', 'finish', 'replay'] as const) {
+      state = act(state, { type }, random);
+    }
+    state = act(state, { type: 'reorderReplay', participantIds: ['b', 'a'] }, random);
+    const recovery = new SessionRecovery(() => storage);
+    recovery.saveGame(state);
+    expect(new SessionRecovery(() => storage).loadGame()).toEqual({ state, recovered: true });
+    if (state.phase !== 'replayPreparation') throw new Error('replay preparation expected');
+    expectValidStateToBeRejected({ ...state, draft: { ...state.draft,
+      participants: [{ ...state.draft.participants[0]!, name: '改名' }, state.draft.participants[1]!],
+    } });
+    expectValidStateToBeRejected({ ...state, draft: { ...state.draft, diceMode: 5 } });
+  });
+
+  it.each([undefined, '7', 6, 8, 11, null])('rejects invalid Dice Mode %s without inferring it from counts', (diceMode) => {
+    const state = structuredClone(activeState()) as FlowState;
+    if (state.phase !== 'turn') throw new Error('turn expected');
+    (state.game as unknown as { diceMode: unknown }).diceMode = diceMode;
+    expectValidStateToBeRejected(state);
+  });
+
+  it('rejects corrupt setup draft identity, kind, revision and game number fields', () => {
+    const valid: FlowState = { phase: 'setup', revision: 2, gameNumber: 1, setupKind: 'initial', draft: setup };
+    expectValidStateToBeRejected({ ...valid, setupKind: 'other' } as unknown as FlowState);
+    expectValidStateToBeRejected({ ...valid, revision: -1 });
+    expectValidStateToBeRejected({ ...valid, gameNumber: 3 });
+    expectValidStateToBeRejected({ ...valid, draft: { ...valid.draft,
+      participants: [{ id: 'a', name: '' }, { id: 'a', name: '' }],
+    } });
+  });
+
+  it('rejects a v2 snapshot with missing Dice Mode instead of guessing seven dice', () => {
     const storage = new MemoryStorage();
     const state = structuredClone(activeState());
     if (state.phase !== 'turn') throw new Error('turn expected');
     const legacy = structuredClone(state) as unknown as { game: { diceMode?: number } };
     delete legacy.game.diceMode;
     storage.values.set(SESSION_GAME_KEY, JSON.stringify({ version: SESSION_SCHEMA_VERSION, state: legacy }));
-    expect(new SessionRecovery(() => storage).loadGame()).toEqual({ state, recovered: true });
+    expect(new SessionRecovery(() => storage).loadGame()).toEqual({ recovered: false, notice: 'corrupt' });
   });
 
   it.each([
     ['corrupt JSON', '{oops'],
-    ['invalid schema', JSON.stringify({ version: 1, state: { phase: 'turn' } })],
+    ['version 1', JSON.stringify({ version: 1, state: activeState() })],
+    ['invalid schema', JSON.stringify({ version: SESSION_SCHEMA_VERSION, state: { phase: 'turn' } })],
     ['unsupported version', JSON.stringify({ version: 99, state: activeState() })],
   ])('rejects %s and removes it', (_label, raw) => {
     const storage = new MemoryStorage();
@@ -120,7 +169,7 @@ describe('session recovery format and validation', () => {
     const state = structuredClone(activeState());
     if (state.phase !== 'turn') throw new Error('turn expected');
     (state.game.players[0] as { activeDice: number }).activeDice = 6;
-    storage.values.set(SESSION_GAME_KEY, JSON.stringify({ version: 1, state }));
+    storage.values.set(SESSION_GAME_KEY, JSON.stringify({ version: SESSION_SCHEMA_VERSION, state }));
     expect(new SessionRecovery(() => storage).loadGame()).toEqual({ recovered: false, notice: 'corrupt' });
   });
 
@@ -142,6 +191,40 @@ describe('session recovery format and validation', () => {
     if (entry?.status !== 'resolved') throw new Error('resolved penalty expected');
     (entry as { finalPenalty: number }).finalPenalty += 1;
     expectValidStateToBeRejected(corruptPenalty);
+  });
+
+  it.each([5, 7, 10] as const)('restores a committed %i-dice turn result with current-player identity intact', (diceMode) => {
+    const modeSetup = { ...setup, diceMode };
+    let state = act(initialFlow(), { type: 'start', setup: modeSetup }, new Sequence([]));
+    state = act(state, { type: 'roll' }, new Sequence(normal(...Array<number>(diceMode).fill(2))));
+    const storage = new MemoryStorage();
+    new SessionRecovery(() => storage).saveGame(state);
+    const restored = new SessionRecovery(() => storage).loadGame().state;
+    expect(restored).toEqual(state);
+    if (restored?.phase !== 'turn') throw new Error('turn expected');
+    expect(restored.game.diceMode).toBe(diceMode);
+    expect(restored.game.currentPlayerIndex).toBe(0);
+    expect(restored.turn.phase).toBe('result');
+  });
+
+  it.each([5, 7, 10] as const)('restores valid %i-dice sudden-death and penalty states', (diceMode) => {
+    const modeSetup = { ...setup, diceMode };
+    const completedRoll = normal(...Array<number>(diceMode).fill(1));
+    let sudden = act(initialFlow(), { type: 'start', setup: modeSetup }, new Sequence([]));
+    const tiedRandom = new Sequence([...completedRoll, ...completedRoll]);
+    for (const type of ['roll', 'next', 'roll', 'ranking', 'suddenDeath'] as const) sudden = act(sudden, { type }, tiedRandom);
+    const suddenStorage = new MemoryStorage();
+    new SessionRecovery(() => suddenStorage).saveGame(sudden);
+    expect(new SessionRecovery(() => suddenStorage).loadGame().state).toEqual(sudden);
+
+    let penalty = act(initialFlow(), { type: 'start', setup: modeSetup }, new Sequence([]));
+    const penaltyRandom = new Sequence([...completedRoll, ...Array<number>(diceMode).fill(0), ...Array<number>(diceMode).fill(0)]);
+    for (const type of ['roll', 'next', 'roll', 'ranking', 'reveal', 'penalty', 'rollPenalty'] as const) {
+      penalty = act(penalty, { type }, penaltyRandom);
+    }
+    const penaltyStorage = new MemoryStorage();
+    new SessionRecovery(() => penaltyStorage).saveGame(penalty);
+    expect(new SessionRecovery(() => penaltyStorage).loadGame().state).toEqual(penalty);
   });
 
   it('fails open when storage access or getItem fails', () => {
@@ -188,13 +271,57 @@ describe('session recovery format and validation', () => {
   });
 });
 
+describe('independent sound persistence', () => {
+  it('keeps a version 1 Sound OFF setting when the game schema is version 2', () => {
+    const storage = new MemoryStorage();
+    storage.values.set(SESSION_SOUND_KEY, JSON.stringify({ version: SOUND_SCHEMA_VERSION, enabled: false }));
+    storage.values.set(SESSION_GAME_KEY, JSON.stringify({ version: 1, state: activeState() }));
+    const recovery = new SessionRecovery(() => storage);
+    expect(recovery.loadGame()).toEqual({ recovered: false, notice: 'corrupt' });
+    expect(recovery.loadSound()).toEqual({ enabled: false });
+    expect(storage.values.get(SESSION_SOUND_KEY)).toBe(JSON.stringify({ version: 1, enabled: false }));
+  });
+
+  it.each(['{bad', JSON.stringify({ version: 1, enabled: 'false' }), JSON.stringify({ version: 2, enabled: false })])(
+    'defaults safely for invalid Sound data: %s', (raw) => {
+      const storage = new MemoryStorage();
+      storage.values.set(SESSION_SOUND_KEY, raw);
+      expect(new SessionRecovery(() => storage).loadSound()).toEqual({ enabled: true });
+      expect(storage.values.has(SESSION_SOUND_KEY)).toBe(false);
+    },
+  );
+
+  it('writes Sound using its independent schema', () => {
+    const storage = new MemoryStorage();
+    const recovery = new SessionRecovery(() => storage);
+    expect(recovery.saveSound(false)).toBeUndefined();
+    expect(JSON.parse(storage.values.get(SESSION_SOUND_KEY)!)).toEqual({ version: SOUND_SCHEMA_VERSION, enabled: false });
+  });
+});
+
 function expectValidStateToBeRejected(state: FlowState): void {
   const storage = new MemoryStorage();
-  storage.values.set(SESSION_GAME_KEY, JSON.stringify({ version: 1, state }));
+  storage.values.set(SESSION_GAME_KEY, JSON.stringify({ version: SESSION_SCHEMA_VERSION, state }));
   expect(new SessionRecovery(() => storage).loadGame()).toEqual({ recovered: false, notice: 'corrupt' });
 }
 
 describe('authoritative save checkpoints', () => {
+  it('saves the initial blank setup draft when the store is created', () => {
+    const storage = new MemoryStorage();
+    createGameStore(new Sequence([]), new SessionRecovery(() => storage));
+    expect(readSaved(storage)).toEqual(initialFlow());
+  });
+
+  it('persists setup edits without locking the editor and restores them after reload', () => {
+    const storage = new MemoryStorage();
+    const store = createGameStore(new Sequence([]), new SessionRecovery(() => storage));
+    const draft = { participants: [{ id: 'p0', name: '途中' }, { id: 'p1', name: '' }], throwStyle: 'careful' as const, diceMode: 10 as const };
+    store.dispatch(0, { type: 'updateSetup', draft });
+    expect(store.getSnapshot()).toMatchObject({ busy: false, state: { phase: 'setup', revision: 1, draft } });
+    const restored = createGameStore(new Sequence([]), new SessionRecovery(() => storage)).getSnapshot();
+    expect(restored).toMatchObject({ recovered: true, busy: false, state: { phase: 'setup', setupKind: 'initial', draft } });
+  });
+
   it('persists every major transition, including reset semantics', () => {
     const storage = new MemoryStorage();
     const recovery = new SessionRecovery(() => storage);
@@ -217,18 +344,18 @@ describe('authoritative save checkpoints', () => {
     perform({ type: 'penalty' });
     perform({ type: 'rollPenalty' });
     perform({ type: 'finish' });
-    perform({ type: 'replay' }, false);
-    expect(readSaved(storage)).toBeUndefined();
+    perform({ type: 'replay' });
+    expect(readSaved(storage)?.phase).toBe('replayPreparation');
     perform({ type: 'startReplay' });
     expect(readSaved(storage)?.phase).toBe('turn');
 
     const revision = store.getSnapshot().state.revision;
     store.dispatch(revision, { type: 'exitGame' });
     expect(store.getSnapshot().state.phase).toBe('setup');
-    expect(readSaved(storage)).toBeUndefined();
+    expect(readSaved(storage)).toEqual(store.getSnapshot().state);
   });
 
-  it('does not write new-game or full-reset drafts into the v1 recovery envelope', () => {
+  it('writes new-game carry-over and full-reset drafts into the v2 recovery envelope', () => {
     const storage = new MemoryStorage();
     const store = createGameStore(
       new Sequence([...complete, ...allOut, ...Array<number>(7).fill(0)]),
@@ -244,10 +371,16 @@ describe('authoritative save checkpoints', () => {
     }
     perform({ type: 'newGame' });
     expect(store.getSnapshot().state).toMatchObject({ phase: 'setup', setupKind: 'newGame' });
-    expect(readSaved(storage)).toBeUndefined();
+    expect(readSaved(storage)).toEqual(store.getSnapshot().state);
+    expect(createGameStore(new Sequence([]), new SessionRecovery(() => storage)).getSnapshot().state)
+      .toEqual(store.getSnapshot().state);
     perform({ type: 'fullReset' });
     expect(store.getSnapshot().state).toMatchObject({ phase: 'setup', setupKind: 'fullReset' });
-    expect(readSaved(storage)).toBeUndefined();
+    expect(readSaved(storage)).toEqual(store.getSnapshot().state);
+    expect(createGameStore(new Sequence([]), new SessionRecovery(() => storage)).getSnapshot().state).toEqual({
+      phase: 'setup', revision: store.getSnapshot().state.revision, gameNumber: 1, setupKind: 'fullReset',
+      draft: { participants: [{ id: 'p0', name: '' }, { id: 'p1', name: '' }], throwStyle: 'normal', diceMode: 7 },
+    });
   });
 
   it('persists the sudden-death screen and reset round', () => {

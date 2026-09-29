@@ -120,7 +120,7 @@ OUTなし、1/5の通常加算、元の順序、個別結果、二重確定防�
 ラウンドの現在プレイヤー状態と累積値は、ROLLが返した確定値から同じ遷移内で更新します。
 ターン結果表示中は`result`を保持し、次の明示的なROLL操作でのみ`continueTurn`と`rollTurn`を呼びます。
 
-`setup.ts`は2〜10人・一意なID・trim後1〜12 graphemeの名前を検証します。同名を許可します。
+`setup.ts`は保存可能なdraftの構造検証と、開始時のtrim後1〜12 graphemeの名前検証を分離します。draftでは空欄を許可し、どちらも2〜10人・一意な空でないID・有効なDice Mode／throwStyleを要求します。同名を許可します。
 Reactとは独立してテスト可能です。UI側の操作ロックと描画完了通知は `src/app/gameStore.ts` が担当します。
 
 v2 STEP 2では準備系遷移を分離しています。
@@ -131,4 +131,6 @@ v2 STEP 2では準備系遷移を分離しています。
 - `exitGame` は進行中ゲームを従来の初期Setupへ戻し、Final Resultの`newGame`とは区別します。
 - `fullReset` はSetup draftを2人空欄・7 DICE・normalへ戻します。
 
-SoundはFlow stateに含めず、これらの遷移では変更しません。STEP 3までSetup／再戦draftはv1 Recoveryへ保存しません。
+v2 STEP 3ではGame Recovery schemaをversion 2とし、進行中ゲームに加えてSetup／再戦準備draftを保存します。再戦準備は固定元構成も照合し、復旧データによる改名・設定変更を拒否します。v1 game snapshotは補完せずunsupportedとして拒否します。
+
+SoundはFlow stateに含めず、game schemaとは独立したversion 1形式で保存します。Game Recoveryのschema更新や準備・reset遷移でSoundを初期化しません。

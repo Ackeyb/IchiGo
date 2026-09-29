@@ -43,6 +43,21 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('session recovery UI', () => {
+  it('restores an in-progress setup draft without treating blank names as corrupt', () => {
+    const storage = new MemoryStorage();
+    const first = render(<App recovery={new SessionRecovery(() => storage)} />);
+    fireEvent.change(screen.getByLabelText('プレイヤー 1', { exact: true }), { target: { value: '編集中' } });
+    fireEvent.click(screen.getByLabelText('丁寧'));
+    first.unmount();
+
+    render(<App recovery={new SessionRecovery(() => storage)} />);
+    expect((screen.getByLabelText('プレイヤー 1', { exact: true }) as HTMLInputElement).value).toBe('編集中');
+    expect((screen.getByLabelText('プレイヤー 2', { exact: true }) as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('丁寧') as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByText('ゲームを復旧しました。')).toBeTruthy();
+    expect(screen.queryByText(/ゲームデータを復旧できませんでした/)).toBeNull();
+  });
+
   it('shows a committed animation-time roll immediately after reload without consuming RandomSource', () => {
     const storage = new MemoryStorage();
     const first = createGameStore(new Sequence(normal(1, 2, 2, 2, 2, 2, 2)), new SessionRecovery(() => storage));

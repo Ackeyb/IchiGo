@@ -17,9 +17,19 @@ export function nameError(name: string): string | undefined {
 }
 
 export function validateSetup(setup: Setup): boolean {
-  return setup.participants.length >= 2 && setup.participants.length <= 10
-    && new Set(setup.participants.map((p) => p.id)).size === setup.participants.length
-    && setup.participants.every((p) => p.id.length > 0 && !nameError(p.name))
-    && Object.hasOwn(OUT_PROBABILITIES, setup.throwStyle)
-    && isDiceMode(setup.diceMode);
+  return validateSetupDraft(setup) && setup.participants.every((participant) => !nameError(participant.name));
+}
+
+/** Structural validation for an editable, recoverable draft. Blank names are valid until START. */
+export function validateSetupDraft(value: unknown): value is Setup {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const setup = value as Record<string, unknown>;
+  if (!Array.isArray(setup.participants) || setup.participants.length < 2 || setup.participants.length > 10
+    || !Object.hasOwn(OUT_PROBABILITIES, setup.throwStyle as PropertyKey) || !isDiceMode(setup.diceMode)) return false;
+  const participants = setup.participants;
+  if (participants.some((participant) => typeof participant !== 'object' || participant === null || Array.isArray(participant)
+    || typeof (participant as Record<string, unknown>).id !== 'string'
+    || (participant as Record<string, unknown>).id === ''
+    || typeof (participant as Record<string, unknown>).name !== 'string')) return false;
+  return new Set(participants.map((participant) => (participant as { id: string }).id)).size === participants.length;
 }

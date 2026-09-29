@@ -4,7 +4,7 @@ import type { PenaltyState } from './penalty';
 import type { RandomSource } from './randomSource';
 import { shouldStartSuddenDeath, startSuddenDeath } from './suddenDeath';
 import type { SuddenDeathState } from './suddenDeath';
-import { validateSetup } from './setup';
+import { validateSetup, validateSetupDraft } from './setup';
 import { initialSetup } from './setup';
 import type { Setup } from './setup';
 import type { TurnState } from './types';
@@ -15,12 +15,13 @@ export type SetupKind = 'initial' | 'newGame' | 'fullReset';
 export type ReplayPreparation = Setup;
 export type FlowState =
   | (Base & Readonly<{ phase: 'setup'; draft: Setup; setupKind: SetupKind }>)
-  | (Base & Readonly<{ phase: 'replayPreparation'; draft: ReplayPreparation }>)
+  | (Base & Readonly<{ phase: 'replayPreparation'; draft: ReplayPreparation; replaySource: ReplayPreparation }>)
   | (Round & Readonly<{ phase: 'turn'; turn: TurnState }>)
   | (Round & Readonly<{ phase: 'ranking' | 'suddenDeath' | 'loserReveal' }>)
   | (Round & Readonly<{ phase: 'penalty' | 'finished'; penalty: PenaltyState; penaltyIndex: number }>);
 export type FlowAction =
   | Readonly<{ type: 'start'; setup: Setup }>
+  | Readonly<{ type: 'updateSetup'; draft: Setup }>
   | Readonly<{ type: 'reorderReplay'; participantIds: readonly string[] }>
   | Readonly<{ type: 'roll' | 'next' | 'ranking' | 'reveal' | 'suddenDeath' | 'startSuddenDeath'
     | 'penalty' | 'rollPenalty' | 'nextPenalty' | 'finish' | 'replay' | 'startReplay'
@@ -76,6 +77,10 @@ function reorderReplay(state: Extract<FlowState, { phase: 'replayPreparation' }>
 /** Only orchestration: scoring, ranking, eligibility and penalties remain in their engines. */
 function apply(state: FlowState, action: FlowAction, random: RandomSource): FlowState {
   if (state.phase === 'setup') {
+    if (action.type === 'updateSetup') {
+      if (!validateSetupDraft(action.draft) || sameSetup(state.draft, action.draft)) return state;
+      return { ...state, draft: action.draft };
+    }
     if (action.type === 'start') return start(state, action.setup);
     if (action.type === 'fullReset') {
       const draft = initialSetup();
@@ -91,7 +96,8 @@ function apply(state: FlowState, action: FlowAction, random: RandomSource): Flow
   }
   const { game, gameNumber, revision } = state;
   if (action.type === 'replay' && state.phase === 'finished') {
-    return { phase: 'replayPreparation', revision, gameNumber, draft: preparationFromGame(game) };
+    const replaySource = preparationFromGame(game);
+    return { phase: 'replayPreparation', revision, gameNumber, draft: replaySource, replaySource };
   }
   if (action.type === 'newGame' && state.phase === 'finished') {
     return { phase: 'setup', revision, gameNumber, draft: preparationFromGame(game), setupKind: 'newGame' };

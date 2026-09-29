@@ -1,16 +1,17 @@
 import { createPenaltyState, calculatePenalty } from '../game/penalty';
 import { resolveRoll, assertPlayerTurn } from '../game/rollResolver';
-import { validateSetup } from '../game/setup';
+import { validateSetup, validateSetupDraft } from '../game/setup';
 import { shouldStartSuddenDeath } from '../game/suddenDeath';
 import type { FlowState } from '../game/gameFlow';
 import type { PenaltyEntry } from '../game/penalty';
-import { DEFAULT_DICE_MODE, isDiceMode } from '../game/types';
+import { isDiceMode } from '../game/types';
 import type { DiceMode, DieResult, PlayerTurn, RollResolution, TurnState } from '../game/types';
 import type { SuddenDeathState } from '../game/suddenDeath';
 
 export const SESSION_GAME_KEY = 'ichi-go:game';
 export const SESSION_SOUND_KEY = 'ichi-go:sound';
-export const SESSION_SCHEMA_VERSION = 1 as const;
+export const SESSION_SCHEMA_VERSION = 2 as const;
+export const SOUND_SCHEMA_VERSION = 1 as const;
 
 export interface StorageAdapter {
   getItem(key: string): string | null;
@@ -33,13 +34,6 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const isSafeCount = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) >= 0;
 const same = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
 
-/** v1 game snapshots predate Dice Mode and are known to be fixed at seven dice. */
-function addLegacyDiceMode(value: unknown): unknown {
-  if (!isRecord(value) || value.phase === 'setup' || !isRecord(value.game) || value.game.diceMode !== undefined) {
-    return value;
-  }
-  return { ...value, game: { ...value.game, diceMode: DEFAULT_DICE_MODE } };
-}
 const isInitialPlayer = (player: PlayerTurn, diceMode: DiceMode) => player.score === 0 && player.activeDice === diceMode
   && player.strandedDice === 0 && player.removedDice === 0 && !player.completed && !player.turnFinished;
 
@@ -131,7 +125,8 @@ function validTurn(value: unknown, game: SuddenDeathState, gameNumber: number, r
 function validPenaltyEntry(value: unknown, expected: PenaltyEntry, totalCompletionCount: number, diceMode: DiceMode): value is PenaltyEntry {
   if (!isRecord(value) || value.playerId !== expected.playerId || value.diceCount !== expected.diceCount
     || (value.status !== 'pending' && value.status !== 'resolved')) return false;
-  if (value.status === 'pending') return true;
+  if (value.status === 'pending') return value.penaltyRoll === undefined && value.basePenalty === undefined
+    && value.multiplier === undefined && value.finalPenalty === undefined;
   if (!Array.isArray(value.penaltyRoll) || value.penaltyRoll.length !== expected.diceCount) return false;
   try {
     const calculated = calculatePenalty(value.penaltyRoll as never, totalCompletionCount, diceMode);
@@ -166,7 +161,22 @@ export function validateStoredFlowState(value: unknown): value is FlowState {
   if (!isRecord(value) || !isSafeCount(value.revision) || !isSafeCount(value.gameNumber)
     || value.revision >= Number.MAX_SAFE_INTEGER || value.gameNumber >= Number.MAX_SAFE_INTEGER
     || typeof value.phase !== 'string') return false;
-  if (value.phase === 'setup') return value.gameNumber <= value.revision;
+  if (value.phase === 'setup') {
+    return (value.setupKind === 'initial' || value.setupKind === 'newGame' || value.setupKind === 'fullReset')
+      && validateSetupDraft(value.draft) && value.gameNumber <= value.revision;
+  }
+  if (value.phase === 'replayPreparation') {
+    if (value.gameNumber < 1 || value.gameNumber > value.revision
+      || !validateSetupDraft(value.draft) || !validateSetupDraft(value.replaySource)) return false;
+    if (!validateSetup(value.draft) || !validateSetup(value.replaySource)
+      || value.draft.diceMode !== value.replaySource.diceMode
+      || value.draft.throwStyle !== value.replaySource.throwStyle
+      || value.draft.participants.some((participant) => participant.name !== participant.name.trim())
+      || value.replaySource.participants.some((participant) => participant.name !== participant.name.trim())) return false;
+    const sourceById = new Map(value.replaySource.participants.map((participant) => [participant.id, participant.name]));
+    return value.draft.participants.length === sourceById.size
+      && value.draft.participants.every((participant) => sourceById.get(participant.id) === participant.name);
+  }
   if (!['turn', 'ranking', 'suddenDeath', 'loserReveal', 'penalty', 'finished'].includes(value.phase)
     || value.gameNumber < 1 || value.gameNumber > value.revision || !validRound(value.game)) return false;
   const game = value.game;
@@ -213,8 +223,8 @@ export class SessionRecovery {
         return this.cacheGameLoad({ recovered: false });
       }
       if (!isRecord(envelope) || envelope.version !== SESSION_SCHEMA_VERSION) throw new Error('INVALID_RECOVERY_STATE');
-      const state = addLegacyDiceMode(envelope.state);
-      if (!validateStoredFlowState(state) || state.phase === 'setup') throw new Error('INVALID_RECOVERY_STATE');
+      const state = envelope.state;
+      if (!validateStoredFlowState(state)) throw new Error('INVALID_RECOVERY_STATE');
       return this.cacheGameLoad({ state, recovered: true });
     } catch {
       this.ignoreStoredGame = true;
@@ -224,9 +234,6 @@ export class SessionRecovery {
   }
 
   saveGame(state: FlowState): RecoveryNotice | undefined {
-    // Draft persistence is introduced with schema v2 in STEP 3. Do not save a
-    // v1 envelope that the v1 recovery validator cannot safely restore.
-    if (state.phase === 'setup' || state.phase === 'replayPreparation') return this.clearGame();
     const storage = this.getStorage();
     if (!storage) return 'unavailable';
     try {
@@ -264,7 +271,7 @@ export class SessionRecovery {
     if (raw === null) return this.cacheSoundLoad({ enabled: true });
     try {
       const value: unknown = JSON.parse(raw);
-      if (isRecord(value) && value.version === SESSION_SCHEMA_VERSION && typeof value.enabled === 'boolean') {
+      if (isRecord(value) && value.version === SOUND_SCHEMA_VERSION && typeof value.enabled === 'boolean') {
         return this.cacheSoundLoad({ enabled: value.enabled });
       }
       try { storage.removeItem(SESSION_SOUND_KEY); } catch { /* sound remains fail-open */ }
@@ -279,7 +286,7 @@ export class SessionRecovery {
     const storage = this.getStorage();
     if (!storage) return 'unavailable';
     try {
-      storage.setItem(SESSION_SOUND_KEY, JSON.stringify({ version: SESSION_SCHEMA_VERSION, enabled }));
+      storage.setItem(SESSION_SOUND_KEY, JSON.stringify({ version: SOUND_SCHEMA_VERSION, enabled }));
       this.soundLoadResult = { enabled };
       return undefined;
     } catch { return 'save-failed'; }

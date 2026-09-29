@@ -66,7 +66,7 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
     else if (action.type === 'reveal') playCue('loser-reveal');
     store.dispatch(committedState.revision, action);
   };
-  const action = (label: string, type: Exclude<FlowAction['type'], 'start' | 'reorderReplay'>) => <ActionButton disabled={busy || !!confirm}
+  const action = (label: string, type: Exclude<FlowAction['type'], 'start' | 'updateSetup' | 'reorderReplay'>) => <ActionButton disabled={busy || !!confirm}
     onClick={() => send({ type })}>{label}</ActionButton>;
   const toggleSound = () => {
     const next = !soundEnabledRef.current;
@@ -76,8 +76,9 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
     if (next) { try { sound.play('ui'); } catch { /* sound is fail-open */ } }
   };
   let content: ReactNode;
-  if (state.phase === 'setup') content = <SetupScreen key={state.revision} initial={state.draft} busy={busy}
-    focusOnMount={state.revision > 0} onStart={(setup) => send({ type: 'start', setup })} />;
+  if (state.phase === 'setup') content = <SetupScreen key={`${state.gameNumber}/${state.setupKind}`} initial={state.draft} busy={busy}
+    focusOnMount={state.gameNumber > 0 || state.setupKind !== 'initial'} onDraftChange={(draft) => send({ type: 'updateSetup', draft })}
+    onStart={(setup) => send({ type: 'start', setup })} />;
   else if (state.phase === 'replayPreparation') content = <section className="panel results">
     <h2 ref={heading} tabIndex={-1}>再戦の準備</h2>
     <p>同じメンバー・設定で、次のゲームを開始します。</p>

@@ -7,6 +7,7 @@ import type { RecoveryNotice, SessionRecovery } from '../storage/sessionRecovery
 export function createGameStore(random: RandomSource, recovery?: Pick<SessionRecovery, 'loadGame' | 'saveGame'>) {
   const loaded = recovery?.loadGame();
   const initial = loaded?.state ?? initialFlow();
+  const initialSaveNotice = recovery && !loaded?.state ? recovery.saveGame(initial) : undefined;
   let snapshot: Readonly<{
     state: typeof initial;
     visibleState: typeof initial;
@@ -20,7 +21,7 @@ export function createGameStore(random: RandomSource, recovery?: Pick<SessionRec
     busy: false,
     error: '',
     recovered: loaded?.recovered ?? false,
-    recoveryNotice: loaded?.notice,
+    recoveryNotice: loaded?.notice ?? initialSaveNotice,
   };
   const listeners = new Set<() => void>();
   const emit = () => listeners.forEach((notify) => notify());
@@ -34,11 +35,12 @@ export function createGameStore(random: RandomSource, recovery?: Pick<SessionRec
       try {
         const state = advanceFlow(before, revision, action, random);
         const waitsForDice = state !== before && (action.type === 'roll' || action.type === 'rollPenalty');
+        const isDraftEdit = action.type === 'updateSetup' || action.type === 'reorderReplay';
         snapshot = {
           ...snapshot,
           state,
           visibleState: waitsForDice ? snapshot.visibleState : state,
-          busy: state !== before,
+          busy: state !== before && !isDraftEdit,
           error: '',
           recovered: false,
         };

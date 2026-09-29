@@ -5,9 +5,10 @@ import type { ThrowStyle } from '../game/types';
 
 export const styleLabels: Record<ThrowStyle, string> = { rough: '乱暴', normal: '普通', careful: '丁寧' };
 
-export function SetupScreen({ busy, onStart, focusOnMount, initial = initialSetup() }: {
+export function SetupScreen({ busy, onStart, onDraftChange, focusOnMount, initial = initialSetup() }: {
   busy: boolean;
   onStart: (setup: Setup) => void;
+  onDraftChange?: (setup: Setup) => void;
   focusOnMount: boolean;
   initial?: Setup;
 }) {
@@ -17,11 +18,16 @@ export function SetupScreen({ busy, onStart, focusOnMount, initial = initialSetu
   const form = useRef<HTMLFormElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => { if (focusOnMount) heading.current?.focus(); }, [focusOnMount]);
+  useEffect(() => { setSetup(initial); }, [initial]);
+  function update(next: Setup) {
+    setSetup(next);
+    onDraftChange?.(next);
+  }
   function move(index: number, offset: number) {
     const participants = [...setup.participants];
     const target = index + offset;
     [participants[index], participants[target]] = [participants[target]!, participants[index]!];
-    setSetup({ ...setup, participants });
+    update({ ...setup, participants });
   }
   return <section className="setup-layout">
     <div className="intro">
@@ -52,7 +58,7 @@ export function SetupScreen({ busy, onStart, focusOnMount, initial = initialSetu
           do { id = `p${nextId.current++}`; } while (participants.some((participant) => participant.id === id));
           participants.push({ id, name: '' });
         }
-        setSetup({ ...setup, participants });
+        update({ ...setup, participants });
       }}>{Array.from({ length: 9 }, (_, i) => <option key={i} value={i + 2}>{i + 2}人</option>)}</select>
       <p className="subtle" id="name-help">名前は1〜12文字。同じ名前も使えます。上からプレイ順です。</p>
       <ol className="setup-players">
@@ -62,7 +68,7 @@ export function SetupScreen({ busy, onStart, focusOnMount, initial = initialSetu
             <div className="name-field"><label htmlFor={`name-${p.id}`}>プレイヤー {index + 1}</label>
               <input id={`name-${p.id}`} name={`player-${index}`} value={p.name} disabled={busy}
                 autoComplete="off" aria-invalid={!!error} aria-describedby={error ? `error-${p.id}` : 'name-help'}
-                onChange={(event) => setSetup({ ...setup, participants: setup.participants.map((item) => item.id === p.id ? { ...item, name: event.target.value } : item) })} />
+                onChange={(event) => update({ ...setup, participants: setup.participants.map((item) => item.id === p.id ? { ...item, name: event.target.value } : item) })} />
               {error && <p className="field-error" id={`error-${p.id}`}>{error}</p>}
             </div>
             <div className="order-buttons">
@@ -74,7 +80,7 @@ export function SetupScreen({ busy, onStart, focusOnMount, initial = initialSetu
       </ol>
       <fieldset disabled={busy}><legend>投げ方</legend>
         <div className="styles">{(['rough', 'normal', 'careful'] as const).map((style) => <label key={style}>
-          <input type="radio" name="throw-style" value={style} checked={setup.throwStyle === style} onChange={() => setSetup({ ...setup, throwStyle: style })} />
+          <input type="radio" name="throw-style" value={style} checked={setup.throwStyle === style} onChange={() => update({ ...setup, throwStyle: style })} />
           {styleLabels[style]}
         </label>)}</div>
       </fieldset>

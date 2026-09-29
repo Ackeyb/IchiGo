@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { advanceFlow, initialFlow } from '../../src/game/gameFlow';
 import type { FlowAction } from '../../src/game/gameFlow';
 import { createGameStore } from '../../src/app/gameStore';
-import { initialSetup, nameError, validateSetup } from '../../src/game/setup';
+import { initialSetup, nameError, validateSetup, validateSetupDraft } from '../../src/game/setup';
 import type { Setup } from '../../src/game/setup';
 
 const setup = { participants: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], throwStyle: 'normal' as const, diceMode: 7 as const };
@@ -51,6 +51,12 @@ describe('setup boundaries', () => {
   it('rejects duplicate IDs but permits duplicate names', () => {
     expect(validateSetup({ ...setup, participants: [{ id: 'a', name: '同名' }, { id: 'b', name: '同名' }] })).toBe(true);
     expect(validateSetup({ ...setup, participants: [setup.participants[0]!, setup.participants[0]!] })).toBe(false);
+  });
+  it('separates recoverable blank drafts from START validation without coercion', () => {
+    expect(validateSetupDraft(initialSetup())).toBe(true);
+    expect(validateSetup(initialSetup())).toBe(false);
+    expect(validateSetupDraft({ ...initialSetup(), diceMode: '7' })).toBe(false);
+    expect(validateSetupDraft({ ...initialSetup(), participants: [{ id: 'p0', name: 1 }, { id: 'p1', name: '' }] })).toBe(false);
   });
 });
 
@@ -137,6 +143,15 @@ describe('v2 preparation and reset flows', () => {
     { id: 'p2', name: '二郎' },
     { id: 'custom', name: '三咲' },
   ] as const;
+
+  it('commits structurally valid setup edits, including blank names, and rejects corrupt drafts', () => {
+    const initial = initialFlow();
+    const draft = { participants: [{ id: 'p1', name: '' }, { id: 'p0', name: '途中' }], diceMode: 10 as const, throwStyle: 'careful' as const };
+    const edited = advanceFlow(initial, initial.revision, { type: 'updateSetup', draft }, new SequenceRandom([]));
+    expect(edited).toEqual({ ...initial, revision: 1, draft });
+    const corrupt = { ...draft, participants: [{ id: 'p1', name: '' }, { id: 'p1', name: '' }] };
+    expect(advanceFlow(edited, edited.revision, { type: 'updateSetup', draft: corrupt }, new SequenceRandom([]))).toBe(edited);
+  });
 
   it('enters replay preparation with only the retained configuration', () => {
     const finished = finishedGame({ participants, diceMode: 10, throwStyle: 'rough' });
