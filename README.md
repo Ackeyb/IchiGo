@@ -8,7 +8,7 @@ v2実装の唯一の正本は [docs/SPEC.md](docs/SPEC.md)、開発規約は [AG
 
 ## 開発環境
 
-- Node.js 22.12以上（作成時の確認環境: Node.js 24.15.0 / npm 11.12.1）
+- Node.js 24 LTS（確認環境: Node.js 24.15.0 / npm 11.12.1）
 - React / TypeScript（strict）/ Vite
 - Vitest（Node環境）/ ESLint
 
