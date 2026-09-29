@@ -1,4 +1,8 @@
-# STEP 8 — 2D Playable UI
+# Playable UI — Current v1 / Planned v2
+
+Current実装はmain / 366c732のv1。以下のSTEP 8〜14は現行v1の接続契約と実装経緯です。固定7・即時再戦・schema v1等はv1の説明であり、v2の要求ではありません。v2の唯一の正本は[SPEC](SPEC.md)、段階計画は[実装進行ガイド](../実装進行ガイド.md)です。
+
+## Current: v1（STEP 8〜14）
 
 ## フロー
 
@@ -79,7 +83,7 @@ Three.jsはdynamic importし、RendererからEngineへ結果を返さない。�
 - ブラウザー確認用の生成物は`output/playwright/`に置き、コミットしない。
 
 振動・シェイク操作は未実装。
-実機Safari等でのプレイテストは後続STEP 9で行う。
+v1 Final AuditではChromiumの確認を実施済み。iOS Safari / Android実機の未検証範囲はFINAL_AUDITを参照し、v2のManual QAで確認する。
 
 ## STEP 14 — Responsive / Final UI Polish
 
@@ -89,3 +93,17 @@ Three.jsはdynamic importし、RendererからEngineへ結果を返さない。�
 - 順位行はrank・名前／状態・score／残りを分け、狭幅ではscore情報を次段へ送る。完走・現在手番・暫定最下位は文字と枠／背景を併用する。
 - Penaltyは確定値を再計算せず、既存のbase・multiplier・finalを数式として読み取れる配置にする。
 - reduced motion、2D fallback、Sound OFF、Recovery通知でも同じ情報と操作を維持する。
+
+## Planned: v2（未実装）
+
+- Flowは再戦準備を明示的に区別。Setup部品は共有可能だが、順番以外の変更はFlowでも拒否する。新ゲームは設定を引き継ぐ通常Setup、full resetは確認後2人・空欄・初期順・7・normal。Sound維持。
+- Setup draftをUI内だけに閉じ込めず、現在draftの所有元を一本化する。人数・順番は参加者配列から派生、IDは削除・並べ替えで振り直さない。既存ID読込後の追加でも衝突させない。
+- Dice Modeはauthoritative configuration。Engine・Ranking・SD・Penalty・Recoveryへ同じ設定を伝える。Playerの個数合計から推測しない。
+- Game/draft schema v2。初回Setup、新ゲームSetup、再戦準備、full reset後Setupの編集途中を保存・復元。空欄nameを許すdraft validationとStart validationを分離する。v1ゲームsaveは推測復元せず拒否できる。Sound schemaは独立し、既存ON/OFFを維持。
+- 現行のsetup時保存削除をv2に流用しない。メモリ上game/draft確定→保存試行→通知を維持。busy・visibleState・演出途中は保存しない。最新正常保存までだけ保証し、障害時は警告して継続。
+- 結果カードは5/7 DICEで1行、10 DICEで最大5列。選択Modeと現在個数を渡す。通常とPenaltyに共通適用。
+- 2D/Three.jsの1/5 pip/starを赤にするがGET判定と分離。Penaltyはstatus labelなし。BASE/MULTIPLIER/FINALを中央配置し、段階表示は維持。
+- Action Slotを通常フロー内で予約。長名・警告・10個配置でもclipせず伸長可能。全指定幅、focus、Dialog、safe area、reduced motionを検証。
+- Storeのrevision/gameNumberを巻き戻さず、旧action・非同期完了を拒否。commit→save→presentation、Renderer再利用、timeout/context loss/fallback、Sound fail-openを維持。
+
+これらは実装予定であり、この文書更新ではコード・テストを変更していない。

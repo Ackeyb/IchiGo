@@ -2,7 +2,7 @@
 
 ## 1. Purpose
 
-This repository contains the **7 Dice Game** web application.
+This repository contains the **IchiGo** web application.
 
 This file defines the development rules and working conventions for AI coding agents, including Codex.
 
@@ -18,7 +18,9 @@ Before making any implementation decision, read this file and `docs/SPEC.md`.
 
 ## 2. Source of Truth
 
-`docs/SPEC.md` is the **single source of truth for game behavior**.
+`docs/SPEC.md` is the **single source of truth for v2 game behavior**.
+
+The completed implementation baseline is v1 at main / 366c732. The v2 specification is a target, not a claim that v2 is implemented. `docs/v2_変更仕様書.md` is integrated design history, not a second authority.
 
 If any of the following conflict with `docs/SPEC.md`:
 
@@ -82,18 +84,18 @@ Visual polish must never override game correctness.
 
 Follow the implementation phases defined in `docs/SPEC.md`.
 
-The intended order is:
+The v2 order extends the completed v1; do not rebuild it from scratch.
 
 ```text
-Phase 1 — Pure Game Engine
-Phase 2 — Ranking
-Phase 3 — Sudden Death
-Phase 4 — Penalty
-Phase 5 — UI
-Phase 6 — 3D Dice
-Phase 7 — Animation / Sound
-Phase 8 — Session Recovery
-Phase 9 — Responsive / Polish
+V2 STEP 0 — Specification and documentation
+V2 STEP 1 — Dice Mode and engine invariants
+V2 STEP 2 — Flow and preparation/reset semantics
+V2 STEP 3 — Recovery v2 and drafts
+V2 STEP 4 — Setup UI
+V2 STEP 5 — 2D / Penalty UI / Action Slot
+V2 STEP 6 — Three.js visuals and ten-dice verification
+V2 STEP 7 — Responsive and manual QA
+V2 STEP 8 — Final audit
 ```
 
 Unless explicitly instructed otherwise, work only on the requested phase.
@@ -210,8 +212,10 @@ Maintain the invariant:
 ```ts
 activeDice +
 strandedDice +
-removedDice === 7;
+removedDice === initialDiceCount;
 ```
+
+Dice Mode (`5 | 7 | 10`, default 7) is explicit authoritative game configuration. Derive `initialDiceCount` from `diceMode`; do not maintain a second independently mutable value. Never infer Dice Mode from current counts or their sum, including during recovery.
 
 Remaining dice are:
 
@@ -269,6 +273,8 @@ ROUND_COMPLETE
 
 Do not allow UI components to independently mutate game rules.
 
+Keep replay preparation, new-game setup, and full reset separate. Replay preparation preserves participants/IDs/names/Dice Mode/throwStyle and permits only reordering before explicit start. New game carries settings to editable setup. Full reset requires confirmation and restores two blank rows, initial order, Dice Mode 7, normal throw style; Sound persists. Derive player count/order from the participant array and never renumber surviving IDs. Enforce preparation restrictions in Flow, not only disabled UI controls.
+
 ---
 
 ## 12. Prevent Duplicate Processing
@@ -314,9 +320,9 @@ Animation must not be the source of authoritative state.
 
 The application uses temporary session recovery.
 
-When session persistence is implemented:
+For session recovery:
 
-- restore only committed game state
+- restore the last successfully saved committed game state or current setup/preparation draft
 - do not attempt to resume halfway through an animation
 - do not repeat already committed score changes
 - do not repeat already committed OUT results
@@ -324,6 +330,8 @@ When session persistence is implemented:
 - do not automatically create a second roll after reload
 
 Treat persistence as a state transaction problem, not an animation restoration problem.
+
+Save initial setup, new-game setup, replay preparation (including edits/order changes), and full-reset setup. Separate draft validation from start validation: blank or unfinished names are not corrupt merely because START is invalid. Game recovery uses schema version 2; reject unsupported v1 game data without guessing. Storage failures remain fail-open. Sound format/version management is independent; a game schema bump must not reset valid Sound settings.
 
 ---
 
@@ -351,6 +359,7 @@ When starting sudden death:
 - reset OUT state
 - preserve cumulative completion count
 - preserve the selected throw style / OUT probability
+- preserve Dice Mode and reset activeDice to its initialDiceCount
 
 Do not carry previous-round ranking data into the new round as authoritative ranking state.
 
@@ -369,6 +378,8 @@ Penalty dice:
 - are not removed
 - are not rerolled
 
+Penalty dice count is the decisive round remainingDice, up to 10 in 10 DICE.
+
 Only the final penalty calculation uses the cumulative multiplier defined in `docs/SPEC.md`.
 
 ---
@@ -384,6 +395,8 @@ UI components should primarily:
 - play sounds
 
 UI components should not contain duplicated implementations of core game rules.
+
+Result-card layout uses Dice Mode plus displayed count (10 DICE uses at most five columns). Layout never changes engine results. Red face 1/5 is face design, not GET status. Penalty cards show faces without normal status labels. Preserve non-color indicators for normal scoring.
 
 For example, avoid implementing scoring separately inside a React component when scoring already exists in the game engine.
 
@@ -828,7 +841,7 @@ If the user requests a game-rule change:
 4. update tests
 5. verify affected behavior
 
-Do not leave specification, code, and tests contradicting each other.
+Do not leave accidental contradictions between specification, code, and tests. For an explicitly documentation-only preparation task, document Current v1 versus Planned v2 and defer implementation/tests; never cross the requested scope merely to synchronize code.
 
 ---
 
