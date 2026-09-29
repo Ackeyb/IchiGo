@@ -1,6 +1,6 @@
-# Playable UI — Current v1 / Planned v2
+# Playable UI — v1 baseline / v2 progress
 
-Current実装はmain / 366c732のv1。以下のSTEP 8〜14は現行v1の接続契約と実装経緯です。固定7・即時再戦・schema v1等はv1の説明であり、v2の要求ではありません。v2の唯一の正本は[SPEC](SPEC.md)、段階計画は[実装進行ガイド](../実装進行ガイド.md)です。
+main / 366c732のv1を基準に、v2 STEP 1〜4を実装済みです。以下のSTEP 8〜14はv1の接続契約と実装経緯であり、固定7・即時再戦・schema v1等は現行v2の説明ではありません。v2の唯一の正本は[SPEC](SPEC.md)、段階計画は[実装進行ガイド](../実装進行ガイド.md)です。
 
 ## Current: v1（STEP 8〜14）
 
@@ -94,16 +94,16 @@ v1 Final AuditではChromiumの確認を実施済み。iOS Safari / Android実�
 - Penaltyは確定値を再計算せず、既存のbase・multiplier・finalを数式として読み取れる配置にする。
 - reduced motion、2D fallback、Sound OFF、Recovery通知でも同じ情報と操作を維持する。
 
-## Planned: v2（未実装）
+## v2進捗
 
-- Flowは再戦準備を明示的に区別。Setup部品は共有可能だが、順番以外の変更はFlowでも拒否する。新ゲームは設定を引き継ぐ通常Setup、full resetは確認後2人・空欄・初期順・7・normal。Sound維持。
-- Setup draftをUI内だけに閉じ込めず、現在draftの所有元を一本化する。人数・順番は参加者配列から派生、IDは削除・並べ替えで振り直さない。既存ID読込後の追加でも衝突させない。
-- Dice Modeはauthoritative configuration。Engine・Ranking・SD・Penalty・Recoveryへ同じ設定を伝える。Playerの個数合計から推測しない。
-- Game/draft schema v2。初回Setup、新ゲームSetup、再戦準備、full reset後Setupの編集途中を保存・復元。空欄nameを許すdraft validationとStart validationを分離する。v1ゲームsaveは推測復元せず拒否できる。Sound schemaは独立し、既存ON/OFFを維持。
-- 現行のsetup時保存削除をv2に流用しない。メモリ上game/draft確定→保存試行→通知を維持。busy・visibleState・演出途中は保存しない。最新正常保存までだけ保証し、障害時は警告して継続。
+- STEP 1〜4実装済み。Dice Modeをauthoritative configurationとしてEngine・Ranking・SD・Penalty・Recoveryへ渡す。
+- 再戦準備、新ゲーム設定引継ぎ、full reset、Setup / Replay draft recovery、独立Sound schemaを実装済み。
+- 通常Setupはparticipant行を正として追加・中間削除・上下移動・名前・Dice Mode・throwStyleを編集する。既存IDを維持し、変更ごとにFlow draftを保存する。
+- Replay Preparationは名前・Dice Mode・throwStyleを読み取り専用表示し、順序変更と明示的な開始だけを許可する。
+- Full Resetは確認Dialogを経て2人・空欄・7 DICE・normalへ戻し、Soundを維持する。
 - 結果カードは5/7 DICEで1行、10 DICEで最大5列。選択Modeと現在個数を渡す。通常とPenaltyに共通適用。
 - 2D/Three.jsの1/5 pip/starを赤にするがGET判定と分離。Penaltyはstatus labelなし。BASE/MULTIPLIER/FINALを中央配置し、段階表示は維持。
 - Action Slotを通常フロー内で予約。長名・警告・10個配置でもclipせず伸長可能。全指定幅、focus、Dialog、safe area、reduced motionを検証。
 - Storeのrevision/gameNumberを巻き戻さず、旧action・非同期完了を拒否。commit→save→presentation、Renderer再利用、timeout/context loss/fallback、Sound fail-openを維持。
 
-これらは実装予定であり、この文書更新ではコード・テストを変更していない。
+結果カード・Penalty表示・Action Slot・Three.js・最終responsive polishはSTEP 5以降で実装する。

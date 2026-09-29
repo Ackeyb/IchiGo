@@ -134,3 +134,7 @@ v2 STEP 2では準備系遷移を分離しています。
 v2 STEP 3ではGame Recovery schemaをversion 2とし、進行中ゲームに加えてSetup／再戦準備draftを保存します。再戦準備は固定元構成も照合し、復旧データによる改名・設定変更を拒否します。v1 game snapshotは補完せずunsupportedとして拒否します。
 
 SoundはFlow stateに含めず、game schemaとは独立したversion 1形式で保存します。Game Recoveryのschema更新や準備・reset遷移でSoundを初期化しません。
+
+v2 STEP 4では通常Setupをparticipant行ベースのUIにしています。人数は`participants.length`から派生し、追加・中間削除・上下移動・名前・Dice Mode・throwStyleの各変更を`updateSetup`経由でdraftへ即時反映します。Full Resetは確認Dialogを経て専用actionを送ります。
+
+Replay Preparationは名前・Dice Mode・throwStyleを読み取り専用で表示し、既存IDの順序変更と明示的な`startReplay`だけを操作として公開します。

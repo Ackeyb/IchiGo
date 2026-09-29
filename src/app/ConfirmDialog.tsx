@@ -1,6 +1,13 @@
 import { useEffect, useRef } from 'react';
 
-export function ConfirmDialog({ title, opener, onConfirm, onCancel }: { title: string; opener: HTMLElement; onConfirm: () => void; onCancel: () => void }) {
+export function ConfirmDialog({ title, description = '現在のゲーム内容はリセットされます。', confirmLabel = '確認して進む', opener, onConfirm, onCancel }: {
+  title: string;
+  description?: string;
+  confirmLabel?: string;
+  opener: HTMLElement;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
   const dialog = useRef<HTMLDialogElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
   const confirm = useRef<HTMLButtonElement>(null);
@@ -19,8 +26,8 @@ export function ConfirmDialog({ title, opener, onConfirm, onCancel }: { title: s
         event.preventDefault(); cancel.current?.focus();
       }
     }}>
-    <h2 id="confirm-title">{title}</h2><p>現在のゲーム内容はリセットされます。</p>
+    <h2 id="confirm-title">{title}</h2><p>{description}</p>
     <div className="dialog-actions"><button ref={cancel} onClick={onCancel}>キャンセル</button>
-      <button ref={confirm} className="primary" onClick={onConfirm}>確認して進む</button></div>
+      <button ref={confirm} className="primary" onClick={onConfirm}>{confirmLabel}</button></div>
   </dialog>;
 }

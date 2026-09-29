@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/app/App';
 import { SetupScreen } from '../../src/app/SetupScreen';
+import { ReplayPreparationScreen } from '../../src/app/ReplayPreparationScreen';
 import { createGameStore } from '../../src/app/gameStore';
 import type { SoundCue, SoundPlayer } from '../../src/app/sound';
 import type { RandomSource } from '../../src/game/randomSource';
@@ -41,13 +42,32 @@ it('allocates setup IDs without colliding with carried participant IDs', () => {
     participants: [{ id: 'p2', name: 'A' }, { id: 'custom', name: 'B' }],
     diceMode: 7,
     throwStyle: 'normal',
-  }} onStart={(setup) => { submitted = setup; }} />);
-  fireEvent.change(screen.getByLabelText('プレイヤー人数'), { target: { value: '3' } });
+  }} onDraftChange={() => undefined} onFullReset={() => undefined} onStart={(setup) => { submitted = setup; }} />);
+  fireEvent.click(screen.getByRole('button', { name: 'プレイヤー追加' }));
   fireEvent.change(screen.getAllByRole('textbox')[2]!, { target: { value: 'C' } });
   fireEvent.click(screen.getByRole('button', { name: 'ゲーム開始' }));
   expect(submitted).toMatchObject({ participants: [
     { id: 'p2', name: 'A' }, { id: 'custom', name: 'B' }, { id: 'p3', name: 'C' },
   ] });
+});
+
+it('keeps replay preparation read-only except for stable-ID reordering and explicit start', () => {
+  const reordered: (readonly string[])[] = [];
+  let starts = 0;
+  render(<ReplayPreparationScreen busy={false} draft={{
+    participants: [{ id: 'a', name: '同名' }, { id: 'b', name: '同名' }, { id: 'c', name: '三人目' }],
+    diceMode: 10,
+    throwStyle: 'careful',
+  }} onReorder={(ids) => reordered.push(ids)} onStart={() => { starts++; }} />);
+  expect(screen.queryByRole('textbox')).toBeNull();
+  expect(screen.queryByRole('radio')).toBeNull();
+  expect(screen.queryByRole('button', { name: /追加|削除/ })).toBeNull();
+  expect(screen.getByText('10 DICE')).toBeTruthy();
+  expect(screen.getByText('丁寧')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: '3番 三人目を上へ' }));
+  expect(reordered).toEqual([['a', 'c', 'b']]);
+  fireEvent.click(screen.getByRole('button', { name: 'この順番で開始' }));
+  expect(starts).toBe(1);
 });
 
 class FakeSound implements SoundPlayer {
@@ -71,12 +91,59 @@ function click(name: string) {
   paint();
 }
 function names(values = ['あき', 'はる']) {
-  if (values.length !== 2) fireEvent.change(screen.getByLabelText('プレイヤー人数'), { target: { value: String(values.length) } });
+  while (screen.getAllByRole('textbox').length < values.length) fireEvent.click(screen.getByRole('button', { name: 'プレイヤー追加' }));
   values.forEach((value, index) => fireEvent.change(screen.getByLabelText(`プレイヤー ${index + 1}`, { exact: true }), { target: { value } }));
 }
 function expectHeading(name: string) { expect(screen.getByRole('heading', { name })).toBeTruthy(); }
 
 describe('Setup', () => {
+  it('renders two initial rows with 7 DICE and normal selected', () => {
+    mount();
+    expect(screen.getAllByRole('textbox')).toHaveLength(2);
+    expect((screen.getByLabelText('7 DICE') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('普通') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole('button', { name: 'プレイヤー 1を削除' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getAllByText('ONE ROLL AT A TIME').length).toBeGreaterThan(0);
+    expect(screen.getByRole('heading', { name: '最後のダイスまで。' })).toBeTruthy();
+  });
+
+  it('adds unique players to ten, disables further additions, and deletes a middle row without renumbering IDs', () => {
+    const { store } = mount();
+    for (let index = 0; index < 8; index++) fireEvent.click(screen.getByRole('button', { name: /プレイヤー追加/ }));
+    expect(screen.getAllByRole('textbox')).toHaveLength(10);
+    expect((screen.getByRole('button', { name: /プレイヤー追加/ }) as HTMLButtonElement).disabled).toBe(true);
+    let state = store.getSnapshot().state;
+    if (state.phase !== 'setup') throw new Error('Expected setup');
+    const before = state.draft.participants;
+    expect(new Set(before.map((participant) => participant.id)).size).toBe(10);
+    fireEvent.change(screen.getAllByRole('textbox')[4]!, { target: { value: '中間' } });
+    fireEvent.change(screen.getAllByRole('textbox')[5]!, { target: { value: '次' } });
+    fireEvent.click(screen.getByRole('button', { name: 'プレイヤー 5を削除' }));
+    state = store.getSnapshot().state;
+    if (state.phase !== 'setup') throw new Error('Expected setup');
+    expect(state.draft.participants.map((participant) => participant.id)).toEqual(before.filter((_, index) => index !== 4).map((participant) => participant.id));
+    expect(state.draft.participants[4]?.name).toBe('次');
+  });
+
+  it('reorders duplicate names by stable ID and passes the selected Dice Mode to START', () => {
+    const { store } = mount();
+    names(['同名', '同名', '三人目']);
+    const before = store.getSnapshot().state;
+    if (before.phase !== 'setup') throw new Error('Expected setup');
+    fireEvent.click(screen.getByRole('button', { name: 'プレイヤー 3を上へ' }));
+    fireEvent.click(screen.getByLabelText('10 DICE'));
+    fireEvent.click(screen.getByLabelText('乱暴'));
+    click('ゲーム開始');
+    const state = store.getSnapshot().state;
+    if (state.phase !== 'turn') throw new Error('Expected turn');
+    expect(state.game.participants.map((participant) => participant.id)).toEqual([
+      before.draft.participants[0]!.id, before.draft.participants[2]!.id, before.draft.participants[1]!.id,
+    ]);
+    expect(state.game.diceMode).toBe(10);
+    expect(state.game.throwStyle).toBe('rough');
+    expect(state.game.players.every((player) => player.activeDice === 10)).toBe(true);
+  });
+
   it('validates blank / trimmed / grapheme names, allows identical names and focuses the invalid field', () => {
     const { store } = mount();
     click('ゲーム開始');
@@ -165,7 +232,7 @@ describe('playable flows', () => {
     const finished = store.getSnapshot().state;
     click('同じメンバーでもう一度'); click('確認して進む');
     expectHeading('再戦の準備');
-    click('再戦開始');
+    click('この順番で開始');
     const replay = store.getSnapshot().state;
     if (finished.phase !== 'finished' || replay.phase !== 'turn') throw new Error('Unexpected phase');
     expect(replay.game.participants).toEqual(finished.game.participants);
@@ -206,7 +273,7 @@ describe('playable flows', () => {
   });
 
   it('reveals all tied losers and rolls their independent penalties in the fixed order', () => {
-    const { store, random } = mount([...seven(1), ...seven('out'), ...seven(2), ...Array<number>(7).fill(0), ...Array<number>(7).fill(0.99)]);
+    const { random } = mount([...seven(1), ...seven('out'), ...seven(2), ...Array<number>(7).fill(0), ...Array<number>(7).fill(0.99)]);
     click('サウンド ON'); names(['勝者', '敗者A', '敗者B']); click('ゲーム開始');
     click('ROLL'); click('次へ'); click('ROLL');
     expect(screen.getByText('OUTあり・完走不能。OUTダイスは再ROLLされません。')).toBeTruthy();
@@ -223,15 +290,31 @@ describe('playable flows', () => {
     expect(screen.getByText('14 pt')).toBeTruthy(); expect(screen.getByText('84 pt')).toBeTruthy();
     expect(random.calls).toBe(49);
     click('新しいゲーム'); click('確認して進む');
-    expect((screen.getByLabelText('プレイヤー人数') as HTMLSelectElement).value).toBe('3');
+    expect(screen.getAllByRole('textbox')).toHaveLength(3);
     expect(screen.getAllByRole('textbox').map((input) => (input as HTMLInputElement).value)).toEqual(['勝者', '敗者A', '敗者B']);
     expect((screen.getByLabelText('普通') as HTMLInputElement).checked).toBe(true);
     expect(document.body.textContent).not.toContain('%');
     expect(screen.getByRole('button', { name: 'サウンド OFF' })).toBeTruthy();
-    act(() => store.dispatch(store.getSnapshot().state.revision, { type: 'fullReset' }));
-    paint();
-    expect((screen.getByLabelText('プレイヤー人数') as HTMLSelectElement).value).toBe('2');
+    fireEvent.change(screen.getAllByRole('textbox')[0]!, { target: { value: '編集した勝者' } });
+    fireEvent.click(screen.getByRole('button', { name: 'プレイヤー追加' }));
+    fireEvent.click(screen.getByRole('button', { name: 'プレイヤー 2を削除' }));
+    fireEvent.click(screen.getByRole('button', { name: 'プレイヤー 3を上へ' }));
+    fireEvent.click(screen.getByLabelText('5 DICE'));
+    fireEvent.click(screen.getByLabelText('丁寧'));
+    expect((screen.getByLabelText('5 DICE') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('丁寧') as HTMLInputElement).checked).toBe(true);
+    const reset = screen.getByRole('button', { name: 'すべて初期状態に戻す' });
+    fireEvent.click(reset);
+    expect(screen.getByText(/Sound設定は維持されます/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'キャンセル' }));
+    expect(document.activeElement).toBe(reset);
+    expect(screen.getAllByRole('textbox')).toHaveLength(3);
+    click('すべて初期状態に戻す');
+    click('初期状態に戻す'); paint();
+    expect(screen.getAllByRole('textbox')).toHaveLength(2);
     expect(screen.getAllByRole('textbox').map((input) => (input as HTMLInputElement).value)).toEqual(['', '']);
+    expect((screen.getByLabelText('7 DICE') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('普通') as HTMLInputElement).checked).toBe(true);
     expect(screen.getByRole('button', { name: 'サウンド OFF' })).toBeTruthy();
   });
 });
