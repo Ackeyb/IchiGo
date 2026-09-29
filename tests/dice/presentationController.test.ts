@@ -86,6 +86,31 @@ describe('DicePresentationController', () => {
     expect(renderer.dispose).toHaveBeenCalledOnce();
   });
 
+  it('falls back on context loss without changing a ten-die committed request', async () => {
+    const tenDiceRequest: DicePresentationRequest = {
+      id: 'normal/10',
+      kind: 'normal',
+      dice: Array.from({ length: 10 }, (_, index) => ({
+        status: 'safe' as const,
+        value: ((index % 6) + 1) as 1 | 2 | 3 | 4 | 5 | 6,
+      })),
+    };
+    const renderer = fakeRenderer({
+      present: vi.fn(async (received) => {
+        expect(received).toBe(tenDiceRequest);
+        throw new DiceRendererError('context-lost', 'lost');
+      }),
+    });
+    const controller = new DicePresentationController(container, {
+      createRenderer: async () => renderer,
+      prefersReducedMotion: () => false,
+    });
+
+    await expect(controller.present(tenDiceRequest)).resolves.toEqual({ mode: 'fallback', reason: 'context-lost' });
+    expect(renderer.present).toHaveBeenCalledOnce();
+    expect(renderer.dispose).toHaveBeenCalledOnce();
+  });
+
   it('times out, disposes the renderer and falls back without requesting another result', async () => {
     vi.useFakeTimers();
     const renderer = fakeRenderer({ present: vi.fn(() => new Promise<void>(() => undefined)) });

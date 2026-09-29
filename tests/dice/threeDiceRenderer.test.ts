@@ -1,6 +1,9 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { BoxGeometry, Group, MeshStandardMaterial } from 'three';
 import { ThreeDiceRenderer } from '../../src/dice/three/ThreeDiceRenderer';
 import { DiceRendererError } from '../../src/dice/types';
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe('ThreeDiceRenderer lifecycle', () => {
   it('redraws the committed scene when resizing an idle canvas', () => {
@@ -47,5 +50,43 @@ describe('ThreeDiceRenderer lifecycle', () => {
       dice: [{ status: 'safe', value: 1 }],
     })).rejects.toEqual(expect.objectContaining<Partial<DiceRendererError>>({ reason: 'context-lost' }));
     expect(contextLost.defaultPrevented).toBe(true);
+  });
+
+  it('keeps ten committed dice through resize and rejects that same presentation on active context loss', async () => {
+    const renderer = new ThreeDiceRenderer({ clientWidth: 320, clientHeight: 190 } as HTMLElement);
+    const group = new Group();
+    const geometry = new BoxGeometry(1.28, 1.28, 1.28);
+    const materials = Array.from({ length: 6 }, () => new MeshStandardMaterial());
+    const outMaterials = Array.from({ length: 6 }, () => new MeshStandardMaterial());
+    const setSize = vi.fn();
+    const camera = { aspect: 0, updateProjectionMatrix: vi.fn() };
+    vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1));
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    Object.assign(renderer, {
+      initialized: true,
+      renderer: { render: vi.fn(), setSize },
+      scene: {},
+      camera,
+      group,
+      geometry,
+      materials,
+      outMaterials,
+    });
+    const dice = Array.from({ length: 10 }, (_, index) => ({
+      status: 'safe' as const,
+      value: ((index % 6) + 1) as 1 | 2 | 3 | 4 | 5 | 6,
+    }));
+
+    const completion = renderer.present({ id: 'normal/10', kind: 'normal', dice });
+    expect(group.children).toHaveLength(10);
+    (renderer as unknown as { resize(): void }).resize();
+    expect(setSize).toHaveBeenCalledWith(320, 190, false);
+    expect(camera.aspect).toBe(320 / 190);
+    expect(group.children).toHaveLength(10);
+    const contextLost = new Event('webglcontextlost', { cancelable: true });
+    (renderer as unknown as { onContextLost: (event: Event) => void }).onContextLost(contextLost);
+
+    await expect(completion).rejects.toEqual(expect.objectContaining<Partial<DiceRendererError>>({ reason: 'context-lost' }));
+    renderer.dispose();
   });
 });

@@ -109,23 +109,29 @@ describe('3D dice React integration', () => {
     expect(screen.queryByLabelText('出目 1、GET')).toBeNull();
   });
 
-  it('falls back with the committed roll and never consumes RandomSource again', async () => {
-    const random = new Sequence(normal(1, 2, 3, 4, 5, 6, 2));
+  it.each([
+    [7, [1, 2, 3, 4, 5, 6, 2]],
+    [10, [1, 2, 3, 4, 5, 6, 2, 3, 4, 6]],
+  ] as const)('falls back with the committed %i-die roll and never consumes RandomSource again', async (diceMode, faces) => {
+    const random = new Sequence(normal(...faces));
     const store = createGameStore(random);
     const failing = renderer({ present: vi.fn(async () => { throw new Error('animation failure'); }) });
     render(<App store={store} dicePresentation={{ createRenderer: async () => failing, prefersReducedMotion: () => false, resultStepMs: 0 }} />);
     fireEvent.change(screen.getByLabelText('プレイヤー 1', { exact: true }), { target: { value: 'A' } });
     fireEvent.change(screen.getByLabelText('プレイヤー 2', { exact: true }), { target: { value: 'B' } });
+    if (diceMode === 10) fireEvent.click(screen.getByRole('radio', { name: '10 DICE' }));
     fireEvent.click(screen.getByRole('button', { name: 'ゲーム開始' }));
     paint();
     fireEvent.click(screen.getByRole('button', { name: 'ROLL' }));
     await waitFor(() => expect(screen.getByText('3D表示を完了できないため2D表示')).toBeTruthy());
-    expect(random.calls).toBe(14);
-    expect(screen.getByRole('list', { name: '確定したダイスの出目' })).toBeTruthy();
+    expect(random.calls).toBe(diceMode * 2);
+    const list = screen.getByRole('list', { name: '確定したダイスの出目' });
+    expect(list.children).toHaveLength(diceMode);
+    expect(list.getAttribute('data-dice-mode')).toBe(String(diceMode));
     expect(screen.getAllByText('GET')).toHaveLength(2);
     paint();
     expect((screen.getByRole('button', { name: '続けてROLL' }) as HTMLButtonElement).disabled).toBe(false);
-    expect(random.calls).toBe(14);
+    expect(random.calls).toBe(diceMode * 2);
   });
 
   it('reveals the committed result and unlocks after renderer initialization times out', async () => {

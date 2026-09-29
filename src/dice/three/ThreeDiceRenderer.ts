@@ -21,6 +21,7 @@ import { toPresentedDice } from '../presentationDice';
 import type { PresentedDie } from '../presentationDice';
 import type { DicePresentationRequest, DiceRenderer } from '../types';
 import { DiceRendererError } from '../types';
+import { getDiceSettlePositions } from './diceLayout';
 
 type AnimatedDie = Readonly<{
   mesh: Mesh<BoxGeometry, MeshStandardMaterial[]>;
@@ -41,6 +42,14 @@ const PIPS: Readonly<Record<DieValue, readonly (readonly [number, number])[]>> =
   6: [[1, 1], [3, 1], [1, 2], [3, 2], [1, 3], [3, 3]],
 };
 
+export const STANDARD_PIP_COLOR = '#263c32';
+export const ACCENT_PIP_COLOR = '#b62924';
+
+/** Face color is independent of normal/penalty scoring semantics. */
+export function getD6PipColor(value: DieValue): string {
+  return value === 1 || value === 5 ? ACCENT_PIP_COLOR : STANDARD_PIP_COLOR;
+}
+
 function makeFaceTexture(value: DieValue): CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = 128;
@@ -49,7 +58,7 @@ function makeFaceTexture(value: DieValue): CanvasTexture {
   if (!context) throw new DiceRendererError('initialization', '2D texture context is unavailable');
   context.fillStyle = '#fffdf4';
   context.fillRect(0, 0, 128, 128);
-  context.fillStyle = '#263c32';
+  context.fillStyle = getD6PipColor(value);
   for (const [x, y] of PIPS[value]) {
     context.beginPath();
     context.arc(x * 32, y * 32, 9, 0, Math.PI * 2);
@@ -160,7 +169,8 @@ export class ThreeDiceRenderer implements DiceRenderer {
     }
     this.clear();
     const shown = toPresentedDice(request.dice, request.kind);
-    const animated = shown.map((result) => this.createAnimatedDie(result, shown.length));
+    const settlePositions = getDiceSettlePositions(shown.length);
+    const animated = shown.map((result) => this.createAnimatedDie(result, shown.length, settlePositions[result.index]!));
     const renderer = this.renderer;
     const scene = this.scene;
     const camera = this.camera;
@@ -240,18 +250,13 @@ export class ThreeDiceRenderer implements DiceRenderer {
     this.initialized = false;
   }
 
-  private createAnimatedDie(result: PresentedDie, count: number): AnimatedDie {
+  private createAnimatedDie(result: PresentedDie, count: number, settle: Readonly<{ x: number; z: number }>): AnimatedDie {
     const mesh = new Mesh(this.geometry!, result.status === 'out' ? this.outMaterials! : this.materials!);
     mesh.userData.presentationIndex = result.index;
     const column = result.index - (count - 1) / 2;
-    const firstRowCount = count > 4 ? Math.ceil(count / 2) : count;
-    const secondRow = result.index >= firstRowCount;
-    const rowCount = secondRow ? count - firstRowCount : firstRowCount;
-    const rowIndex = secondRow ? result.index - firstRowCount : result.index;
-    const localColumn = rowIndex - (rowCount - 1) / 2;
     const target = result.status === 'out'
       ? new Vector3(result.index % 2 ? 9 : -9, 2.5 + result.index * 0.18, -1)
-      : new Vector3(localColumn * 1.6, 0, count > 4 ? (secondRow ? 0.65 : -0.9) : -0.2);
+      : new Vector3(settle.x, 0, settle.z);
     const start = new Vector3(column * 0.82 + Math.sin(result.index * 1.7) * 0.45, 5.8 + (result.index % 3) * 0.55, -6.2);
     mesh.position.copy(start);
     mesh.rotation.set(result.index * 0.7, result.index * 0.4, result.index * 0.9);
