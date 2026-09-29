@@ -5,22 +5,30 @@ import type { RandomSource } from './randomSource';
 import { shouldStartSuddenDeath, startSuddenDeath } from './suddenDeath';
 import type { SuddenDeathState } from './suddenDeath';
 import { validateSetup } from './setup';
+import { initialSetup } from './setup';
 import type { Setup } from './setup';
 import type { TurnState } from './types';
 
 type Base = Readonly<{ revision: number; gameNumber: number }>;
 type Round = Base & Readonly<{ game: SuddenDeathState }>;
+export type SetupKind = 'initial' | 'newGame' | 'fullReset';
+export type ReplayPreparation = Setup;
 export type FlowState =
-  | (Base & Readonly<{ phase: 'setup' }>)
+  | (Base & Readonly<{ phase: 'setup'; draft: Setup; setupKind: SetupKind }>)
+  | (Base & Readonly<{ phase: 'replayPreparation'; draft: ReplayPreparation }>)
   | (Round & Readonly<{ phase: 'turn'; turn: TurnState }>)
   | (Round & Readonly<{ phase: 'ranking' | 'suddenDeath' | 'loserReveal' }>)
   | (Round & Readonly<{ phase: 'penalty' | 'finished'; penalty: PenaltyState; penaltyIndex: number }>);
 export type FlowAction =
   | Readonly<{ type: 'start'; setup: Setup }>
+  | Readonly<{ type: 'reorderReplay'; participantIds: readonly string[] }>
   | Readonly<{ type: 'roll' | 'next' | 'ranking' | 'reveal' | 'suddenDeath' | 'startSuddenDeath'
-    | 'penalty' | 'rollPenalty' | 'nextPenalty' | 'finish' | 'replay' | 'newGame' }>;
+    | 'penalty' | 'rollPenalty' | 'nextPenalty' | 'finish' | 'replay' | 'startReplay'
+    | 'newGame' | 'exitGame' | 'fullReset' }>;
 
-export const initialFlow = (): FlowState => ({ phase: 'setup', revision: 0, gameNumber: 0 });
+export const initialFlow = (): FlowState => ({
+  phase: 'setup', revision: 0, gameNumber: 0, draft: initialSetup(), setupKind: 'initial',
+});
 
 function turnFor(game: SuddenDeathState, gameNumber: number): TurnState {
   const id = game.participants[game.currentPlayerIndex]!.id;
@@ -39,12 +47,58 @@ function start(state: Base, setup: Setup): FlowState {
   return { phase: 'turn', revision: state.revision, gameNumber, game, turn: turnFor(game, gameNumber) };
 }
 
+function preparationFromGame(game: SuddenDeathState): ReplayPreparation {
+  return {
+    participants: game.participants.map(({ id, name }) => ({ id, name })),
+    diceMode: game.diceMode,
+    throwStyle: game.throwStyle,
+  };
+}
+
+function sameSetup(left: Setup, right: Setup): boolean {
+  return left.diceMode === right.diceMode && left.throwStyle === right.throwStyle
+    && left.participants.length === right.participants.length
+    && left.participants.every((participant, index) => {
+      const other = right.participants[index];
+      return participant.id === other?.id && participant.name === other.name;
+    });
+}
+
+function reorderReplay(state: Extract<FlowState, { phase: 'replayPreparation' }>, participantIds: readonly string[]): FlowState {
+  const byId = new Map(state.draft.participants.map((participant) => [participant.id, participant]));
+  if (participantIds.length !== byId.size || new Set(participantIds).size !== byId.size
+    || participantIds.some((id) => !byId.has(id))) return state;
+  const participants = participantIds.map((id) => byId.get(id)!);
+  if (participants.every((participant, index) => participant === state.draft.participants[index])) return state;
+  return { ...state, draft: { ...state.draft, participants } };
+}
+
 /** Only orchestration: scoring, ranking, eligibility and penalties remain in their engines. */
 function apply(state: FlowState, action: FlowAction, random: RandomSource): FlowState {
-  if (action.type === 'newGame') return { phase: 'setup', revision: state.revision, gameNumber: state.gameNumber };
-  if (state.phase === 'setup') return action.type === 'start' ? start(state, action.setup) : state;
+  if (state.phase === 'setup') {
+    if (action.type === 'start') return start(state, action.setup);
+    if (action.type === 'fullReset') {
+      const draft = initialSetup();
+      if (state.setupKind === 'fullReset' && sameSetup(state.draft, draft)) return state;
+      return { ...state, draft, setupKind: 'fullReset' };
+    }
+    return state;
+  }
+  if (state.phase === 'replayPreparation') {
+    if (action.type === 'reorderReplay') return reorderReplay(state, action.participantIds);
+    if (action.type === 'startReplay') return start(state, state.draft);
+    return state;
+  }
   const { game, gameNumber, revision } = state;
-  if (action.type === 'replay' && state.phase === 'finished') return start(state, game);
+  if (action.type === 'replay' && state.phase === 'finished') {
+    return { phase: 'replayPreparation', revision, gameNumber, draft: preparationFromGame(game) };
+  }
+  if (action.type === 'newGame' && state.phase === 'finished') {
+    return { phase: 'setup', revision, gameNumber, draft: preparationFromGame(game), setupKind: 'newGame' };
+  }
+  if (action.type === 'exitGame' && state.phase !== 'finished') {
+    return { phase: 'setup', revision, gameNumber, draft: initialSetup(), setupKind: 'initial' };
+  }
   if (state.phase === 'turn') {
     const { turn } = state;
     if (action.type === 'roll' && !turn.player.turnFinished) {

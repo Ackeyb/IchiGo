@@ -224,7 +224,9 @@ export class SessionRecovery {
   }
 
   saveGame(state: FlowState): RecoveryNotice | undefined {
-    if (state.phase === 'setup') return this.clearGame();
+    // Draft persistence is introduced with schema v2 in STEP 3. Do not save a
+    // v1 envelope that the v1 recovery validator cannot safely restore.
+    if (state.phase === 'setup' || state.phase === 'replayPreparation') return this.clearGame();
     const storage = this.getStorage();
     if (!storage) return 'unavailable';
     try {

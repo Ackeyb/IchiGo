@@ -4,6 +4,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/app/App';
+import { SetupScreen } from '../../src/app/SetupScreen';
 import { createGameStore } from '../../src/app/gameStore';
 import type { SoundCue, SoundPlayer } from '../../src/app/sound';
 import type { RandomSource } from '../../src/game/randomSource';
@@ -33,6 +34,21 @@ beforeEach(() => {
   HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); };
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+
+it('allocates setup IDs without colliding with carried participant IDs', () => {
+  let submitted: unknown;
+  render(<SetupScreen busy={false} focusOnMount={false} initial={{
+    participants: [{ id: 'p2', name: 'A' }, { id: 'custom', name: 'B' }],
+    diceMode: 7,
+    throwStyle: 'normal',
+  }} onStart={(setup) => { submitted = setup; }} />);
+  fireEvent.change(screen.getByLabelText('プレイヤー人数'), { target: { value: '3' } });
+  fireEvent.change(screen.getAllByRole('textbox')[2]!, { target: { value: 'C' } });
+  fireEvent.click(screen.getByRole('button', { name: 'ゲーム開始' }));
+  expect(submitted).toMatchObject({ participants: [
+    { id: 'p2', name: 'A' }, { id: 'custom', name: 'B' }, { id: 'p3', name: 'C' },
+  ] });
+});
 
 class FakeSound implements SoundPlayer {
   readonly cues: SoundCue[] = [];
@@ -148,6 +164,8 @@ describe('playable flows', () => {
     expect(screen.getByText('42 pt')).toBeTruthy();
     const finished = store.getSnapshot().state;
     click('同じメンバーでもう一度'); click('確認して進む');
+    expectHeading('再戦の準備');
+    click('再戦開始');
     const replay = store.getSnapshot().state;
     if (finished.phase !== 'finished' || replay.phase !== 'turn') throw new Error('Unexpected phase');
     expect(replay.game.participants).toEqual(finished.game.participants);
@@ -188,7 +206,7 @@ describe('playable flows', () => {
   });
 
   it('reveals all tied losers and rolls their independent penalties in the fixed order', () => {
-    const { random } = mount([...seven(1), ...seven('out'), ...seven(2), ...Array<number>(7).fill(0), ...Array<number>(7).fill(0.99)]);
+    const { store, random } = mount([...seven(1), ...seven('out'), ...seven(2), ...Array<number>(7).fill(0), ...Array<number>(7).fill(0.99)]);
     click('サウンド ON'); names(['勝者', '敗者A', '敗者B']); click('ゲーム開始');
     click('ROLL'); click('次へ'); click('ROLL');
     expect(screen.getByText('OUTあり・完走不能。OUTダイスは再ROLLされません。')).toBeTruthy();
@@ -205,10 +223,15 @@ describe('playable flows', () => {
     expect(screen.getByText('14 pt')).toBeTruthy(); expect(screen.getByText('84 pt')).toBeTruthy();
     expect(random.calls).toBe(49);
     click('新しいゲーム'); click('確認して進む');
-    expect((screen.getByLabelText('プレイヤー人数') as HTMLSelectElement).value).toBe('2');
-    expect(screen.getAllByRole('textbox').map((input) => (input as HTMLInputElement).value)).toEqual(['', '']);
+    expect((screen.getByLabelText('プレイヤー人数') as HTMLSelectElement).value).toBe('3');
+    expect(screen.getAllByRole('textbox').map((input) => (input as HTMLInputElement).value)).toEqual(['勝者', '敗者A', '敗者B']);
     expect((screen.getByLabelText('普通') as HTMLInputElement).checked).toBe(true);
     expect(document.body.textContent).not.toContain('%');
+    expect(screen.getByRole('button', { name: 'サウンド OFF' })).toBeTruthy();
+    act(() => store.dispatch(store.getSnapshot().state.revision, { type: 'fullReset' }));
+    paint();
+    expect((screen.getByLabelText('プレイヤー人数') as HTMLSelectElement).value).toBe('2');
+    expect(screen.getAllByRole('textbox').map((input) => (input as HTMLInputElement).value)).toEqual(['', '']);
     expect(screen.getByRole('button', { name: 'サウンド OFF' })).toBeTruthy();
   });
 });

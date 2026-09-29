@@ -7,12 +7,12 @@ Phase 1の1人分の通常ターンを扱う純粋なTypeScriptエンジンで�
 
 ## API
 
-- `createTurn({ turnId, totalCompletionCount }, throwStyle?)`: 7個・0点で開始。投げ方省略時は普通（1%）。
-- `rollTurn(state, rollNumber, random, expectedTurnId)`: 最新状態にROLL要求を適用し、新しい確定状態を返します。完走時は累積完走数も同時に1加算します。
+- `createTurn({ turnId, totalCompletionCount, diceMode }, throwStyle?)`: 選択Modeの個数・0点で開始。Mode省略時は7、投げ方省略時は普通（1%）。
+- `rollTurn(state, rollNumber, random, expectedTurnId, diceMode?)`: 最新状態にROLL要求を適用し、新しい確定状態を返します。完走時は累積完走数も同時に1加算します。
 - `continueTurn(state, rollNumber, expectedTurnId)`: 継続可能な結果を次ROLLの受付状態へ進めます。抽選しません。
-- `resolveRoll(player, dice)`: 確定出目から得点・ダイス状態・継続／終了／完走を計算します。
+- `resolveRoll(player, dice, diceMode?)`: 確定出目から得点・ダイス状態・継続／終了／完走を計算します。
 - `getRemainingDice(player)`: `activeDice + strandedDice`を返します。
-- `rollGameDice(count, throwStyle, random)`: ダイスごとにOUTを先に判定し、SAFEだけD6を抽選します。
+- `rollGameDice(count, throwStyle, random, diceMode?)`: ダイスごとにOUTを先に判定し、SAFEだけD6を抽選します。
 
 入力は変更しません。返された状態は読み取り専用として扱います。
 乱数源は`RandomSource`で注入し、値域は有限な`[0, 1)`です。
@@ -122,3 +122,13 @@ OUTなし、1/5の通常加算、元の順序、個別結果、二重確定防�
 
 `setup.ts`は2〜10人・一意なID・trim後1〜12 graphemeの名前を検証します。同名を許可します。
 Reactとは独立してテスト可能です。UI側の操作ロックと描画完了通知は `src/app/gameStore.ts` が担当します。
+
+v2 STEP 2では準備系遷移を分離しています。
+
+- `replay` はFinal Resultから`replayPreparation`へ移り、人物・ID・名前・順番・Dice Mode・throwStyleだけをdraftへ抽出します。
+- `reorderReplay` は既存IDの完全な順列だけを受け付け、`startReplay`が明示されるまでgameplay stateを作りません。
+- `newGame` はFinal Resultから設定を保持した通常Setup draftへ移ります。
+- `exitGame` は進行中ゲームを従来の初期Setupへ戻し、Final Resultの`newGame`とは区別します。
+- `fullReset` はSetup draftを2人空欄・7 DICE・normalへ戻します。
+
+SoundはFlow stateに含めず、これらの遷移では変更しません。STEP 3までSetup／再戦draftはv1 Recoveryへ保存しません。

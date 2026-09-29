@@ -5,8 +5,13 @@ import type { ThrowStyle } from '../game/types';
 
 export const styleLabels: Record<ThrowStyle, string> = { rough: '乱暴', normal: '普通', careful: '丁寧' };
 
-export function SetupScreen({ busy, onStart, focusOnMount }: { busy: boolean; onStart: (setup: Setup) => void; focusOnMount: boolean }) {
-  const [setup, setSetup] = useState(initialSetup);
+export function SetupScreen({ busy, onStart, focusOnMount, initial = initialSetup() }: {
+  busy: boolean;
+  onStart: (setup: Setup) => void;
+  focusOnMount: boolean;
+  initial?: Setup;
+}) {
+  const [setup, setSetup] = useState(() => initial);
   const [submitted, setSubmitted] = useState(false);
   const nextId = useRef(2);
   const form = useRef<HTMLFormElement>(null);
@@ -42,7 +47,11 @@ export function SetupScreen({ busy, onStart, focusOnMount }: { busy: boolean; on
       <select id="player-count" value={setup.participants.length} disabled={busy} onChange={(event) => {
         const count = Number(event.target.value);
         const participants = setup.participants.slice(0, count);
-        while (participants.length < count) participants.push({ id: `p${nextId.current++}`, name: '' });
+        while (participants.length < count) {
+          let id: string;
+          do { id = `p${nextId.current++}`; } while (participants.some((participant) => participant.id === id));
+          participants.push({ id, name: '' });
+        }
         setSetup({ ...setup, participants });
       }}>{Array.from({ length: 9 }, (_, i) => <option key={i} value={i + 2}>{i + 2}人</option>)}</select>
       <p className="subtle" id="name-help">名前は1〜12文字。同じ名前も使えます。上からプレイ順です。</p>

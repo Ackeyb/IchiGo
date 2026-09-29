@@ -42,7 +42,7 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
   const soundEnabledRef = useRef(initialSound.enabled);
   const [soundRecoveryNotice, setSoundRecoveryNotice] = useState<RecoveryNotice | undefined>(initialSound.notice);
   const { state: committedState, visibleState: state, busy, error, recovered, recoveryNotice } = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
-  const [confirm, setConfirm] = useState<{ action: 'newGame' | 'replay'; revision: number; opener: HTMLElement } | null>(null);
+  const [confirm, setConfirm] = useState<{ action: 'newGame' | 'replay' | 'exitGame'; revision: number; opener: HTMLElement } | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const playCue = useCallback((cue: SoundCue) => {
     if (!soundEnabledRef.current) return;
@@ -66,7 +66,7 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
     else if (action.type === 'reveal') playCue('loser-reveal');
     store.dispatch(committedState.revision, action);
   };
-  const action = (label: string, type: Exclude<FlowAction['type'], 'start'>) => <ActionButton disabled={busy || !!confirm}
+  const action = (label: string, type: Exclude<FlowAction['type'], 'start' | 'reorderReplay'>) => <ActionButton disabled={busy || !!confirm}
     onClick={() => send({ type })}>{label}</ActionButton>;
   const toggleSound = () => {
     const next = !soundEnabledRef.current;
@@ -76,7 +76,14 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
     if (next) { try { sound.play('ui'); } catch { /* sound is fail-open */ } }
   };
   let content: ReactNode;
-  if (state.phase === 'setup') content = <SetupScreen busy={busy} focusOnMount={state.revision > 0} onStart={(setup) => send({ type: 'start', setup })} />;
+  if (state.phase === 'setup') content = <SetupScreen key={state.revision} initial={state.draft} busy={busy}
+    focusOnMount={state.revision > 0} onStart={(setup) => send({ type: 'start', setup })} />;
+  else if (state.phase === 'replayPreparation') content = <section className="panel results">
+    <h2 ref={heading} tabIndex={-1}>再戦の準備</h2>
+    <p>同じメンバー・設定で、次のゲームを開始します。</p>
+    <ol>{state.draft.participants.map((participant) => <li key={participant.id}>{participant.name}</li>)}</ol>
+    {action('再戦開始', 'startReplay')}
+  </section>;
   else {
     const { game } = state;
     const name = (id: string) => game.participants.find((p) => p.id === id)!.name;
@@ -171,16 +178,17 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
     {recovered && <p className="recovery-status" role="status">ゲームを復旧しました。</p>}
     {(recoveryNotice ?? soundRecoveryNotice) && <p className="recovery-warning" role="status">
       {recoveryNoticeText((recoveryNotice ?? soundRecoveryNotice)!)}</p>}
-    {state.phase !== 'setup' && <div className="game-summary" aria-label="ゲーム情報">
+    {state.phase !== 'setup' && state.phase !== 'replayPreparation' && <div className="game-summary" aria-label="ゲーム情報">
       <span>{state.game.suddenDeathCount ? `サドンデス ${state.game.suddenDeathCount}` : '通常ラウンド'}</span>
       <span>投げ方：{styleLabels[state.game.throwStyle]}</span><span>累積完走：{state.game.totalCompletionCount}</span>
       <strong>ペナルティ倍率 ×{getPenaltyMultiplier(state.game.totalCompletionCount)}</strong>
     </div>}
     {error && <p role="alert" className="field-error">{error}</p>}
     {content}
-    {state.phase !== 'setup' && state.phase !== 'finished' && <button className="exit-button" disabled={busy || !!confirm} onClick={(event) => setConfirm({ action: 'newGame', revision: state.revision, opener: event.currentTarget })}>ゲームを終了する</button>}
+    {state.phase !== 'setup' && state.phase !== 'replayPreparation' && state.phase !== 'finished' && <button className="exit-button" disabled={busy || !!confirm} onClick={(event) => setConfirm({ action: 'exitGame', revision: state.revision, opener: event.currentTarget })}>ゲームを終了する</button>}
     <footer>7つのダイス、1と5をつなぐゲーム。</footer>
-    {confirm && <ConfirmDialog opener={confirm.opener} title={confirm.action === 'replay' ? '同じメンバーで再開しますか？' : '新しいゲームに戻りますか？'}
+    {confirm && <ConfirmDialog opener={confirm.opener} title={confirm.action === 'replay' ? '再戦の準備へ進みますか？'
+      : confirm.action === 'newGame' ? '新しいゲームに戻りますか？' : 'ゲームを終了しますか？'}
       onCancel={() => setConfirm(null)} onConfirm={() => { store.dispatch(confirm.revision, { type: confirm.action }); setConfirm(null); }} />}
   </main>;
 }

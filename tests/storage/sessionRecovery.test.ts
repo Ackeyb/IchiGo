@@ -200,11 +200,11 @@ describe('authoritative save checkpoints', () => {
     const recovery = new SessionRecovery(() => storage);
     const random = new Sequence([...complete, ...allOut, ...Array<number>(7).fill(0)]);
     const store = createGameStore(random, recovery);
-    const perform = (action: FlowAction) => {
+    const perform = (action: FlowAction, persisted = true) => {
       const revision = store.getSnapshot().state.revision;
       store.dispatch(revision, action);
       const committed = store.getSnapshot().state;
-      expect(readSaved(storage)).toEqual(committed);
+      if (persisted) expect(readSaved(storage)).toEqual(committed);
       store.presented(committed.revision);
     };
 
@@ -217,12 +217,36 @@ describe('authoritative save checkpoints', () => {
     perform({ type: 'penalty' });
     perform({ type: 'rollPenalty' });
     perform({ type: 'finish' });
-    perform({ type: 'replay' });
+    perform({ type: 'replay' }, false);
+    expect(readSaved(storage)).toBeUndefined();
+    perform({ type: 'startReplay' });
     expect(readSaved(storage)?.phase).toBe('turn');
 
     const revision = store.getSnapshot().state.revision;
-    store.dispatch(revision, { type: 'newGame' });
+    store.dispatch(revision, { type: 'exitGame' });
     expect(store.getSnapshot().state.phase).toBe('setup');
+    expect(readSaved(storage)).toBeUndefined();
+  });
+
+  it('does not write new-game or full-reset drafts into the v1 recovery envelope', () => {
+    const storage = new MemoryStorage();
+    const store = createGameStore(
+      new Sequence([...complete, ...allOut, ...Array<number>(7).fill(0)]),
+      new SessionRecovery(() => storage),
+    );
+    const perform = (action: FlowAction) => {
+      store.dispatch(store.getSnapshot().state.revision, action);
+      store.presented(store.getSnapshot().state.revision);
+    };
+    perform({ type: 'start', setup });
+    for (const type of ['roll', 'next', 'roll', 'ranking', 'reveal', 'penalty', 'rollPenalty', 'finish'] as const) {
+      perform({ type });
+    }
+    perform({ type: 'newGame' });
+    expect(store.getSnapshot().state).toMatchObject({ phase: 'setup', setupKind: 'newGame' });
+    expect(readSaved(storage)).toBeUndefined();
+    perform({ type: 'fullReset' });
+    expect(store.getSnapshot().state).toMatchObject({ phase: 'setup', setupKind: 'fullReset' });
     expect(readSaved(storage)).toBeUndefined();
   });
 
