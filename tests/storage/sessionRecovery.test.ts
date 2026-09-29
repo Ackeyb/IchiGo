@@ -29,7 +29,7 @@ class Sequence implements RandomSource {
   next() { return this.values[this.calls++] ?? 0.9; }
 }
 
-const setup = { participants: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], throwStyle: 'normal' as const };
+const setup = { participants: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], throwStyle: 'normal' as const, diceMode: 7 as const };
 const normal = (...faces: number[]) => faces.flatMap((face) => [0.9, (face - 0.5) / 6]);
 const complete = normal(1, 1, 1, 1, 1, 1, 1);
 const allOut = Array<number>(7).fill(0);
@@ -90,6 +90,16 @@ describe('session recovery format and validation', () => {
     const state = activeState();
     expect(recovery.saveGame(state)).toBeUndefined();
     expect(JSON.parse(storage.values.get(SESSION_GAME_KEY)!)).toEqual({ version: SESSION_SCHEMA_VERSION, state });
+    expect(new SessionRecovery(() => storage).loadGame()).toEqual({ state, recovered: true });
+  });
+
+  it('minimally adapts a fixed-seven v1 snapshot without changing the schema version', () => {
+    const storage = new MemoryStorage();
+    const state = structuredClone(activeState());
+    if (state.phase !== 'turn') throw new Error('turn expected');
+    const legacy = structuredClone(state) as unknown as { game: { diceMode?: number } };
+    delete legacy.game.diceMode;
+    storage.values.set(SESSION_GAME_KEY, JSON.stringify({ version: SESSION_SCHEMA_VERSION, state: legacy }));
     expect(new SessionRecovery(() => storage).loadGame()).toEqual({ state, recovered: true });
   });
 
@@ -237,7 +247,7 @@ describe('authoritative save checkpoints', () => {
 
   it('persists advancement to the next tied loser during penalties', () => {
     const storage = new MemoryStorage();
-    const threePlayerSetup = { participants: [...setup.participants, { id: 'c', name: 'C' }], throwStyle: 'normal' as const };
+    const threePlayerSetup = { participants: [...setup.participants, { id: 'c', name: 'C' }], throwStyle: 'normal' as const, diceMode: 7 as const };
     const random = new Sequence([...complete, ...allOut, ...allOut, ...Array<number>(14).fill(0)]);
     const store = createGameStore(random, new SessionRecovery(() => storage));
     const perform = (action: FlowAction) => {

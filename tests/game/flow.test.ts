@@ -4,7 +4,7 @@ import type { FlowAction } from '../../src/game/gameFlow';
 import { createGameStore } from '../../src/app/gameStore';
 import { initialSetup, nameError, validateSetup } from '../../src/game/setup';
 
-const setup = { participants: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], throwStyle: 'normal' as const };
+const setup = { participants: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], throwStyle: 'normal' as const, diceMode: 7 as const };
 
 describe('setup boundaries', () => {
   it('accepts combining sequences and rejects a thirteenth grapheme', () => {

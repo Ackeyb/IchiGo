@@ -22,7 +22,7 @@ class Sequence implements RandomSource {
 }
 
 const normal = (...faces: number[]) => faces.flatMap((face) => [0.9, (face - 0.5) / 6]);
-const setup = { participants: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], throwStyle: 'normal' as const };
+const setup = { participants: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], throwStyle: 'normal' as const, diceMode: 7 as const };
 let frames = new Map<number, FrameRequestCallback>();
 let frameId = 0;
 function paint() {

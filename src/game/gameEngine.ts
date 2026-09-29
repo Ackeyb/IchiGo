@@ -1,6 +1,7 @@
-import { DEFAULT_THROW_STYLE, INITIAL_DICE, OUT_PROBABILITIES, rollGameDice } from './rollGenerator';
+import { DEFAULT_THROW_STYLE, OUT_PROBABILITIES, rollGameDice } from './rollGenerator';
 import { assertPlayerTurn, resolveRoll } from './rollResolver';
 import type { RandomSource } from './randomSource';
+import { DEFAULT_DICE_MODE, isDiceMode } from './types';
 import type { ThrowStyle, TurnContext, TurnState } from './types';
 
 function assertContext(context: TurnContext): void {
@@ -16,6 +17,8 @@ export function createTurn(context: TurnContext, throwStyle: ThrowStyle = DEFAUL
   if (!Object.hasOwn(OUT_PROBABILITIES, throwStyle)) {
     throw new RangeError('Unknown throw style.');
   }
+  const diceMode = context.diceMode ?? DEFAULT_DICE_MODE;
+  if (!isDiceMode(diceMode)) throw new RangeError('Unknown dice mode.');
   return {
     turnId: context.turnId,
     totalCompletionCount: context.totalCompletionCount,
@@ -24,7 +27,7 @@ export function createTurn(context: TurnContext, throwStyle: ThrowStyle = DEFAUL
     nextRollNumber: 1,
     player: {
       score: 0,
-      activeDice: INITIAL_DICE,
+      activeDice: diceMode,
       strandedDice: 0,
       removedDice: 0,
       completed: false,
@@ -34,15 +37,21 @@ export function createTurn(context: TurnContext, throwStyle: ThrowStyle = DEFAUL
 }
 
 /** Apply to the caller's latest state. Rejected commands consume no randomness. */
-export function rollTurn(state: TurnState, rollNumber: number, random: RandomSource, expectedTurnId: string): TurnState {
+export function rollTurn(
+  state: TurnState,
+  rollNumber: number,
+  random: RandomSource,
+  expectedTurnId: string,
+  diceMode = DEFAULT_DICE_MODE,
+): TurnState {
   if (expectedTurnId !== state.turnId || state.phase !== 'ready' || rollNumber !== state.nextRollNumber
     || state.player.turnFinished) {
     return state;
   }
   assertContext(state);
-  assertPlayerTurn(state.player);
-  const dice = rollGameDice(state.player.activeDice, state.throwStyle, random);
-  const result = resolveRoll(state.player, dice);
+  assertPlayerTurn(state.player, diceMode);
+  const dice = rollGameDice(state.player.activeDice, state.throwStyle, random, diceMode);
+  const result = resolveRoll(state.player, dice, diceMode);
   return {
     turnId: state.turnId,
     // SPEC §22, §91: commit once with the completing roll, before presentation.

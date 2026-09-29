@@ -1,6 +1,7 @@
 import { createTurn } from './gameEngine';
 import { assertPlayerTurn, getRemainingDice } from './rollResolver';
-import type { PlayerTurn, ThrowStyle } from './types';
+import { DEFAULT_DICE_MODE, isDiceMode } from './types';
+import type { DiceMode, PlayerTurn, ThrowStyle } from './types';
 
 export type Participant = Readonly<{ id: string; name: string }>;
 export type RoundPlayer = PlayerTurn & Readonly<{ id: string }>;
@@ -11,14 +12,15 @@ export type SuddenDeathState = Readonly<{
   players: readonly RoundPlayer[];
   currentPlayerIndex: number;
   throwStyle: ThrowStyle;
+  diceMode: DiceMode;
   totalCompletionCount: number;
   suddenDeathCount: number;
 }>;
 
 /** SPEC §29–30, §65. Never evaluate an unfinished round as a tie. */
-export function shouldStartSuddenDeath(players: readonly PlayerTurn[]): boolean {
+export function shouldStartSuddenDeath(players: readonly PlayerTurn[], diceMode: DiceMode = DEFAULT_DICE_MODE): boolean {
   if (players.length < 2 || players.length > 10) return false;
-  players.forEach(assertPlayerTurn);
+  players.forEach((player) => assertPlayerTurn(player, diceMode));
   if (players.some((player) => !player.turnFinished)) return false;
   if (players.every((player) => player.completed)) return true;
   if (players.some((player) => player.completed)) return false;
@@ -36,7 +38,8 @@ function assertRound(state: SuddenDeathState): void {
     || state.players.some((player) => !ids.has(player.id))) {
     throw new Error('The round must contain every original participant exactly once.');
   }
-  if (!Number.isSafeInteger(state.totalCompletionCount) || state.totalCompletionCount < 0
+  if (!isDiceMode(state.diceMode)
+    || !Number.isSafeInteger(state.totalCompletionCount) || state.totalCompletionCount < 0
     || !Number.isSafeInteger(state.suddenDeathCount) || state.suddenDeathCount < 0
     || !Number.isInteger(state.currentPlayerIndex) || state.currentPlayerIndex < 0
     || state.currentPlayerIndex >= state.players.length) {
@@ -55,7 +58,7 @@ export function startSuddenDeath(
 ): SuddenDeathState {
   assertRound(state);
   if (expectedSuddenDeathCount !== state.suddenDeathCount
-    || !shouldStartSuddenDeath(state.players)) return state;
+    || !shouldStartSuddenDeath(state.players, state.diceMode)) return state;
   if (!Number.isSafeInteger(state.suddenDeathCount + 1)) {
     throw new RangeError('Sudden death counter exceeds exact numeric representation.');
   }
@@ -65,10 +68,11 @@ export function startSuddenDeath(
     participants: state.participants.map(({ id, name }) => ({ id, name })),
     players: state.participants.map(({ id }) => ({
       id,
-      ...createTurn({ turnId: id, totalCompletionCount: state.totalCompletionCount }, state.throwStyle).player,
+      ...createTurn({ turnId: id, totalCompletionCount: state.totalCompletionCount, diceMode: state.diceMode }, state.throwStyle).player,
     })),
     currentPlayerIndex: 0,
     throwStyle: state.throwStyle,
+    diceMode: state.diceMode,
     totalCompletionCount: state.totalCompletionCount,
     suddenDeathCount: state.suddenDeathCount + 1,
   };

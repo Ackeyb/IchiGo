@@ -64,6 +64,7 @@ describe('cross-phase audit', () => {
     let round: SuddenDeathState = {
       participants, players: participants.map(({ id }) => ({ ...initial().player, id })),
       currentPlayerIndex: 0, throwStyle: 'normal', totalCompletionCount: 0, suddenDeathCount: 0,
+      diceMode: 7,
     };
     const original = structuredClone(round);
     for (let roundIndex = 0; roundIndex < 3; roundIndex++) {
@@ -138,7 +139,7 @@ describe('cross-phase audit', () => {
 
   it('requires explicit nonempty operation IDs at initialization', () => {
     expect(() => createTurn({ turnId: '', totalCompletionCount: 0 })).toThrow(RangeError);
-    expect(() => createPenaltyState({ participants: [], players: [], totalCompletionCount: 0 }, '')).toThrow(RangeError);
+    expect(() => createPenaltyState({ participants: [], players: [], totalCompletionCount: 0, diceMode: 7 }, '')).toThrow(RangeError);
   });
 
   it('preserves invariants throughout every reachable roll-resolution state', () => {

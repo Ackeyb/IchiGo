@@ -27,7 +27,7 @@ function player(id: string, score: number, remaining: number, stranded = 0): Rou
 function round(loser: RoundPlayer, totalCompletionCount = 1): DecisiveRound {
   return {
     participants: [{ id: 'winner', name: '勝者' }, { id: loser.id, name: '敗者' }],
-    players: [player('winner', 350, 0), loser], totalCompletionCount,
+    players: [player('winner', 350, 0), loser], totalCompletionCount, diceMode: 7,
   };
 }
 
@@ -82,6 +82,7 @@ describe('SPEC §77 cases 31–33: penalty dice and calculation', () => {
 
 describe('SPEC §77 case 34: independent ordered loser processing', () => {
   const input: DecisiveRound = {
+    diceMode: 7,
     participants: [{ id: 'z', name: '同名' }, { id: 'winner', name: '勝者' }, { id: 'a', name: '同名' }],
     players: [player('a', 200, 3, 1), player('winner', 300, 3), player('z', 200, 3, 3)],
     totalCompletionCount: 9,

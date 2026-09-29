@@ -4,7 +4,8 @@ import { validateSetup } from '../game/setup';
 import { shouldStartSuddenDeath } from '../game/suddenDeath';
 import type { FlowState } from '../game/gameFlow';
 import type { PenaltyEntry } from '../game/penalty';
-import type { DieResult, PlayerTurn, RollResolution, TurnState } from '../game/types';
+import { DEFAULT_DICE_MODE, isDiceMode } from '../game/types';
+import type { DiceMode, DieResult, PlayerTurn, RollResolution, TurnState } from '../game/types';
 import type { SuddenDeathState } from '../game/suddenDeath';
 
 export const SESSION_GAME_KEY = 'ichi-go:game';
@@ -31,7 +32,15 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 const isSafeCount = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) >= 0;
 const same = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
-const isInitialPlayer = (player: PlayerTurn) => player.score === 0 && player.activeDice === 7
+
+/** v1 game snapshots predate Dice Mode and are known to be fixed at seven dice. */
+function addLegacyDiceMode(value: unknown): unknown {
+  if (!isRecord(value) || value.phase === 'setup' || !isRecord(value.game) || value.game.diceMode !== undefined) {
+    return value;
+  }
+  return { ...value, game: { ...value.game, diceMode: DEFAULT_DICE_MODE } };
+}
+const isInitialPlayer = (player: PlayerTurn, diceMode: DiceMode) => player.score === 0 && player.activeDice === diceMode
   && player.strandedDice === 0 && player.removedDice === 0 && !player.completed && !player.turnFinished;
 
 function validDie(value: unknown): value is DieResult {
@@ -40,10 +49,10 @@ function validDie(value: unknown): value is DieResult {
     : value.status === 'safe' && Number.isInteger(value.value) && Number(value.value) >= 1 && Number(value.value) <= 6;
 }
 
-function validPlayer(value: unknown): value is PlayerTurn {
+function validPlayer(value: unknown, diceMode: DiceMode): value is PlayerTurn {
   if (!isRecord(value)) return false;
   try {
-    assertPlayerTurn(value as PlayerTurn);
+    assertPlayerTurn(value as PlayerTurn, diceMode);
     return typeof value.completed === 'boolean' && typeof value.turnFinished === 'boolean';
   } catch {
     return false;
@@ -53,16 +62,17 @@ function validPlayer(value: unknown): value is PlayerTurn {
 function validRound(value: unknown): value is SuddenDeathState {
   if (!isRecord(value) || !Array.isArray(value.participants) || !Array.isArray(value.players)
     || !isSafeCount(value.totalCompletionCount) || !isSafeCount(value.suddenDeathCount)
-    || !Number.isInteger(value.currentPlayerIndex)) return false;
+    || !Number.isInteger(value.currentPlayerIndex) || !isDiceMode(value.diceMode)) return false;
+  const diceMode = value.diceMode;
   const participants = value.participants;
   const players = value.players;
   if (participants.some((participant) => !isRecord(participant) || typeof participant.id !== 'string' || typeof participant.name !== 'string')
-    || !validateSetup({ participants: participants as never, throwStyle: value.throwStyle as never })
+    || !validateSetup({ participants: participants as never, throwStyle: value.throwStyle as never, diceMode })
     || participants.some((participant) => (participant as { name: string }).name !== (participant as { name: string }).name.trim())
     || players.length !== participants.length || Number(value.currentPlayerIndex) < 0
     || Number(value.currentPlayerIndex) >= players.length) return false;
   const ids = participants.map((participant) => isRecord(participant) ? participant.id : undefined);
-  if (players.some((player, index) => !isRecord(player) || player.id !== ids[index] || !validPlayer(player))) return false;
+  if (players.some((player, index) => !isRecord(player) || player.id !== ids[index] || !validPlayer(player, diceMode))) return false;
   if (value.throwStyle === 'careful' && players.some((player) => player.strandedDice !== 0)) return false;
   const maximumCompletions = participants.length * (Number(value.suddenDeathCount) + 1);
   const currentCompletions = players.filter((player) => (player as unknown as PlayerTurn).completed).length;
@@ -73,7 +83,7 @@ function validRound(value: unknown): value is SuddenDeathState {
     && Number(value.totalCompletionCount) <= maximumCompletions;
 }
 
-function previousPlayer(result: RollResolution): PlayerTurn | undefined {
+function previousPlayer(result: RollResolution, diceMode: DiceMode): PlayerTurn | undefined {
   const previous: PlayerTurn = {
     score: result.player.score - result.gainedScore,
     activeDice: result.player.activeDice + result.outCount + result.scoringCount,
@@ -82,7 +92,7 @@ function previousPlayer(result: RollResolution): PlayerTurn | undefined {
     completed: false,
     turnFinished: false,
   };
-  return validPlayer(previous) && previous.activeDice > 0 ? previous : undefined;
+  return validPlayer(previous, diceMode) && previous.activeDice > 0 ? previous : undefined;
 }
 
 function validTurn(value: unknown, game: SuddenDeathState, gameNumber: number, revision: number): value is TurnState {
@@ -99,32 +109,32 @@ function validTurn(value: unknown, game: SuddenDeathState, gameNumber: number, r
     || typeof value.turnId !== 'string' || value.turnId !== `${gameNumber}/${game.suddenDeathCount}/${game.participants[game.currentPlayerIndex]!.id}`
     || value.throwStyle !== game.throwStyle || value.totalCompletionCount !== game.totalCompletionCount
     || !Number.isSafeInteger(value.nextRollNumber) || Number(value.nextRollNumber) < 1 || Number(value.nextRollNumber) > revision + 1
-    || !validPlayer(value.player) || !same(value.player, currentPlayer)) return false;
+    || !validPlayer(value.player, game.diceMode) || !same(value.player, currentPlayer)) return false;
   // Flow commits continuation together with its next roll, never as a ready checkpoint.
-  if (value.phase === 'ready') return value.nextRollNumber === 1 && isInitialPlayer(value.player);
+  if (value.phase === 'ready') return value.nextRollNumber === 1 && isInitialPlayer(value.player, game.diceMode);
   if (!Number.isSafeInteger(value.rollNumber) || Number(value.rollNumber) < 1
     || Number(value.rollNumber) > revision || value.nextRollNumber !== Number(value.rollNumber) + 1 || !isRecord(value.result)
     || !Array.isArray(value.result.dice) || !value.result.dice.every(validDie)) return false;
   const result = value.result as unknown as RollResolution;
   if (!same(result.player, currentPlayer)) return false;
-  const previous = previousPlayer(result);
+  const previous = previousPlayer(result, game.diceMode);
   if (!previous) return false;
-  if (value.rollNumber === 1 ? !isInitialPlayer(previous)
+  if (value.rollNumber === 1 ? !isInitialPlayer(previous, game.diceMode)
     : previous.removedDice < Number(value.rollNumber) - 1) return false;
   try {
-    return same(resolveRoll(previous, result.dice), result);
+    return same(resolveRoll(previous, result.dice, game.diceMode), result);
   } catch {
     return false;
   }
 }
 
-function validPenaltyEntry(value: unknown, expected: PenaltyEntry, totalCompletionCount: number): value is PenaltyEntry {
+function validPenaltyEntry(value: unknown, expected: PenaltyEntry, totalCompletionCount: number, diceMode: DiceMode): value is PenaltyEntry {
   if (!isRecord(value) || value.playerId !== expected.playerId || value.diceCount !== expected.diceCount
     || (value.status !== 'pending' && value.status !== 'resolved')) return false;
   if (value.status === 'pending') return true;
   if (!Array.isArray(value.penaltyRoll) || value.penaltyRoll.length !== expected.diceCount) return false;
   try {
-    const calculated = calculatePenalty(value.penaltyRoll as never, totalCompletionCount);
+    const calculated = calculatePenalty(value.penaltyRoll as never, totalCompletionCount, diceMode);
     return same(calculated, {
       penaltyRoll: value.penaltyRoll,
       basePenalty: value.basePenalty,
@@ -144,7 +154,7 @@ function validPenalty(value: unknown, game: SuddenDeathState, gameNumber: number
   try { expected = createPenaltyState(game, `${gameNumber}/penalty`); } catch { return false; }
   const index = Number(penaltyIndex);
   if (value.penalties.length !== expected.penalties.length || index < 0 || index >= value.penalties.length) return false;
-  if (value.penalties.some((entry, position) => !validPenaltyEntry(entry, expected.penalties[position]!, game.totalCompletionCount))) return false;
+  if (value.penalties.some((entry, position) => !validPenaltyEntry(entry, expected.penalties[position]!, game.totalCompletionCount, game.diceMode))) return false;
   const entries = value.penalties as unknown as readonly PenaltyEntry[];
   if (phase === 'finished') return index === entries.length - 1 && entries.every((entry) => entry.status === 'resolved');
   return entries.every((entry, position) => position < index ? entry.status === 'resolved'
@@ -161,10 +171,10 @@ export function validateStoredFlowState(value: unknown): value is FlowState {
     || value.gameNumber < 1 || value.gameNumber > value.revision || !validRound(value.game)) return false;
   const game = value.game;
   const current = game.currentPlayerIndex;
-  if (game.players.some((player, index) => index < current ? !player.turnFinished : index > current ? !isInitialPlayer(player) : false)) return false;
+  if (game.players.some((player, index) => index < current ? !player.turnFinished : index > current ? !isInitialPlayer(player, game.diceMode) : false)) return false;
   if (value.phase === 'turn') return validTurn(value.turn, game, value.gameNumber, value.revision);
   if (!game.players.every((player) => player.turnFinished)) return false;
-  const tied = shouldStartSuddenDeath(game.players);
+  const tied = shouldStartSuddenDeath(game.players, game.diceMode);
   if (value.phase === 'suddenDeath') return tied;
   if (value.phase === 'ranking') return true;
   if (value.phase === 'loserReveal') return !tied;
@@ -202,9 +212,10 @@ export class SessionRecovery {
       if (isRecord(envelope) && envelope.version === SESSION_SCHEMA_VERSION && envelope.cleared === true) {
         return this.cacheGameLoad({ recovered: false });
       }
-      if (!isRecord(envelope) || envelope.version !== SESSION_SCHEMA_VERSION || !validateStoredFlowState(envelope.state)
-        || envelope.state.phase === 'setup') throw new Error('INVALID_RECOVERY_STATE');
-      return this.cacheGameLoad({ state: envelope.state, recovered: true });
+      if (!isRecord(envelope) || envelope.version !== SESSION_SCHEMA_VERSION) throw new Error('INVALID_RECOVERY_STATE');
+      const state = addLegacyDiceMode(envelope.state);
+      if (!validateStoredFlowState(state) || state.phase === 'setup') throw new Error('INVALID_RECOVERY_STATE');
+      return this.cacheGameLoad({ state, recovered: true });
     } catch {
       this.ignoreStoredGame = true;
       this.discardInvalid(storage);

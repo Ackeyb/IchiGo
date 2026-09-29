@@ -1,5 +1,6 @@
 import { assertPlayerTurn, getRemainingDice } from './rollResolver';
-import type { PlayerTurn } from './types';
+import { DEFAULT_DICE_MODE } from './types';
+import type { DiceMode, PlayerTurn } from './types';
 
 export type RankingPlayer = PlayerTurn & Readonly<{ id: string }>;
 export type RankingEntry = Readonly<{ playerId: string; rank: number }>;
@@ -20,10 +21,10 @@ export function comparePlayers(a: PlayerTurn, b: PlayerTurn): number {
   return b.score - a.score || getRemainingDice(a) - getRemainingDice(b);
 }
 
-function rankFinishedPlayers(players: readonly RankingPlayer[]): readonly RankingEntry[] {
+function rankFinishedPlayers(players: readonly RankingPlayer[], diceMode: DiceMode): readonly RankingEntry[] {
   const ids = new Set<string>();
   for (const player of players) {
-    assertPlayerTurn(player);
+    assertPlayerTurn(player, diceMode);
     if (ids.has(player.id)) throw new Error('Ranking requires unique player IDs.');
     ids.add(player.id);
   }
@@ -43,16 +44,16 @@ function lowestIds(rankings: readonly RankingEntry[]): readonly string[] {
 }
 
 /** Ranking only: round progression / sudden-death decisions belong to the caller. */
-export function calculateFinalRanking(players: readonly RankingPlayer[]): FinalRanking {
+export function calculateFinalRanking(players: readonly RankingPlayer[], diceMode: DiceMode = DEFAULT_DICE_MODE): FinalRanking {
   if (players.some((player) => !player.turnFinished)) {
     throw new Error('Final ranking requires all turns to be finished.');
   }
-  const rankings = rankFinishedPlayers(players);
+  const rankings = rankFinishedPlayers(players, diceMode);
   return { rankings, loserIds: lowestIds(rankings) };
 }
 
 /** SPEC §39: exclude both unplayed and currently playing players. */
-export function calculateProvisionalRanking(players: readonly RankingPlayer[]): ProvisionalRanking {
-  const rankings = rankFinishedPlayers(players.filter((player) => player.turnFinished));
+export function calculateProvisionalRanking(players: readonly RankingPlayer[], diceMode: DiceMode = DEFAULT_DICE_MODE): ProvisionalRanking {
+  const rankings = rankFinishedPlayers(players.filter((player) => player.turnFinished), diceMode);
   return { rankings, bottomIds: lowestIds(rankings) };
 }

@@ -4,6 +4,12 @@ export type DieResult =
   | Readonly<{ status: 'out'; value: null }>;
 
 export type ThrowStyle = 'rough' | 'normal' | 'careful';
+export type DiceMode = 5 | 7 | 10;
+export const DEFAULT_DICE_MODE: DiceMode = 7;
+
+export function isDiceMode(value: unknown): value is DiceMode {
+  return value === 5 || value === 7 || value === 10;
+}
 
 export type PlayerTurn = Readonly<{
   score: number;
@@ -27,9 +33,12 @@ export type TurnContext = Readonly<{
   /** Unique across games, rounds and players; supplied by the caller. */
   turnId: string;
   totalCompletionCount: number;
+  diceMode?: DiceMode;
 }>;
 
-type TurnBase = TurnContext & Readonly<{
+type TurnBase = Readonly<{
+  turnId: string;
+  totalCompletionCount: number;
   throwStyle: ThrowStyle;
   player: PlayerTurn;
   /** Starts at 1; identifies the next accepted roll within this turn. */

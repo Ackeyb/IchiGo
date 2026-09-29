@@ -24,7 +24,7 @@ export const initialFlow = (): FlowState => ({ phase: 'setup', revision: 0, game
 
 function turnFor(game: SuddenDeathState, gameNumber: number): TurnState {
   const id = game.participants[game.currentPlayerIndex]!.id;
-  return createTurn({ turnId: `${gameNumber}/${game.suddenDeathCount}/${id}`, totalCompletionCount: game.totalCompletionCount }, game.throwStyle);
+  return createTurn({ turnId: `${gameNumber}/${game.suddenDeathCount}/${id}`, totalCompletionCount: game.totalCompletionCount, diceMode: game.diceMode }, game.throwStyle);
 }
 
 function start(state: Base, setup: Setup): FlowState {
@@ -32,8 +32,9 @@ function start(state: Base, setup: Setup): FlowState {
   const gameNumber = state.gameNumber + 1;
   const participants = setup.participants.map(({ id, name }) => ({ id, name: name.trim() }));
   const game: SuddenDeathState = {
-    participants, throwStyle: setup.throwStyle, currentPlayerIndex: 0, totalCompletionCount: 0, suddenDeathCount: 0,
-    players: participants.map(({ id }) => ({ id, ...createTurn({ turnId: `${gameNumber}/0/${id}`, totalCompletionCount: 0 }, setup.throwStyle).player })),
+    participants, throwStyle: setup.throwStyle, diceMode: setup.diceMode,
+    currentPlayerIndex: 0, totalCompletionCount: 0, suddenDeathCount: 0,
+    players: participants.map(({ id }) => ({ id, ...createTurn({ turnId: `${gameNumber}/0/${id}`, totalCompletionCount: 0, diceMode: setup.diceMode }, setup.throwStyle).player })),
   };
   return { phase: 'turn', revision: state.revision, gameNumber, game, turn: turnFor(game, gameNumber) };
 }
@@ -48,7 +49,7 @@ function apply(state: FlowState, action: FlowAction, random: RandomSource): Flow
     const { turn } = state;
     if (action.type === 'roll' && !turn.player.turnFinished) {
       const ready = turn.phase === 'result' ? continueTurn(turn, turn.rollNumber, turn.turnId) : turn;
-      const next = rollTurn(ready, ready.nextRollNumber, random, turn.turnId);
+      const next = rollTurn(ready, ready.nextRollNumber, random, turn.turnId, game.diceMode);
       if (next === ready) return state;
       const id = game.participants[game.currentPlayerIndex]!.id;
       return { ...state, turn: next, game: { ...game,
@@ -66,7 +67,7 @@ function apply(state: FlowState, action: FlowAction, random: RandomSource): Flow
     }
   }
   if (state.phase === 'ranking') {
-    const tied = shouldStartSuddenDeath(game.players);
+    const tied = shouldStartSuddenDeath(game.players, game.diceMode);
     if (action.type === 'suddenDeath' && tied) return { ...state, phase: 'suddenDeath' };
     if (action.type === 'reveal' && !tied) return { ...state, phase: 'loserReveal' };
   }
@@ -82,7 +83,7 @@ function apply(state: FlowState, action: FlowAction, random: RandomSource): Flow
   if (state.phase === 'penalty') {
     const entry = state.penalty.penalties[state.penaltyIndex]!;
     if (action.type === 'rollPenalty' && entry.status === 'pending') {
-      return { ...state, penalty: rollPenalty(state.penalty, entry.playerId, random, state.penalty.penaltyId) };
+      return { ...state, penalty: rollPenalty(state.penalty, entry.playerId, random, state.penalty.penaltyId, game.diceMode) };
     }
     if (entry.status !== 'resolved') return state;
     if (action.type === 'nextPenalty' && state.penaltyIndex < state.penalty.penalties.length - 1) {

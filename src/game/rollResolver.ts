@@ -1,15 +1,16 @@
-import { INITIAL_DICE } from './rollGenerator';
-import type { DieResult, PlayerTurn, RollResolution } from './types';
+import { DEFAULT_DICE_MODE, isDiceMode } from './types';
+import type { DiceMode, DieResult, PlayerTurn, RollResolution } from './types';
 
 export function getRemainingDice(player: PlayerTurn): number {
   return player.activeDice + player.strandedDice;
 }
 
-export function assertPlayerTurn(player: PlayerTurn): void {
+export function assertPlayerTurn(player: PlayerTurn, diceMode: DiceMode = DEFAULT_DICE_MODE): void {
+  if (!isDiceMode(diceMode)) throw new RangeError('Unknown dice mode.');
   const counts = [player.activeDice, player.strandedDice, player.removedDice];
-  if (counts.some((count) => !Number.isInteger(count) || count < 0 || count > INITIAL_DICE)
-    || counts.reduce((sum, count) => sum + count, 0) !== INITIAL_DICE) {
-    throw new RangeError('Dice counts must be nonnegative integers totaling 7.');
+  if (counts.some((count) => !Number.isInteger(count) || count < 0 || count > diceMode)
+    || counts.reduce((sum, count) => sum + count, 0) !== diceMode) {
+    throw new RangeError(`Dice counts must be nonnegative integers totaling ${diceMode}.`);
   }
   // Every removed die contributes exactly 50 or 100 points (SPEC §10–11).
   if (!Number.isInteger(player.score) || player.score % 50 !== 0
@@ -23,8 +24,8 @@ export function assertPlayerTurn(player: PlayerTurn): void {
   }
 }
 
-export function resolveRoll(player: PlayerTurn, dice: readonly DieResult[]): RollResolution {
-  assertPlayerTurn(player);
+export function resolveRoll(player: PlayerTurn, dice: readonly DieResult[], diceMode: DiceMode = DEFAULT_DICE_MODE): RollResolution {
+  assertPlayerTurn(player, diceMode);
   if (player.turnFinished || player.activeDice === 0) {
     throw new Error('The turn cannot be rolled.');
   }

@@ -21,6 +21,7 @@ function round(players: readonly RoundPlayer[]): SuddenDeathState {
     players,
     currentPlayerIndex: players.length - 1,
     throwStyle: 'normal',
+    diceMode: 7,
     totalCompletionCount: players.filter((p) => p.completed).length,
     suddenDeathCount: 0,
   };

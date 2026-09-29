@@ -3,7 +3,9 @@ import { getRemainingDice } from '../game/rollResolver';
 import type { SuddenDeathState } from '../game/suddenDeath';
 
 export function RankingBoard({ game, final = false, currentHasRolled = false }: { game: SuddenDeathState; final?: boolean; currentHasRolled?: boolean }) {
-  const result = final ? calculateFinalRanking(game.players) : calculateProvisionalRanking(game.players);
+  const result = final
+    ? calculateFinalRanking(game.players, game.diceMode)
+    : calculateProvisionalRanking(game.players, game.diceMode);
   const bottom = 'bottomIds' in result ? result.bottomIds : [];
   const ids = [...result.rankings.map((entry) => entry.playerId), ...game.players.filter((p) => !p.turnFinished).map((p) => p.id)];
   return <section className="panel ranking" aria-label={final ? '最終順位' : '暫定順位'}>

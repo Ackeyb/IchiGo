@@ -120,7 +120,7 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
           : action('結果を見る', 'ranking')}
       </section><RankingBoard game={game} currentHasRolled={state.turn.nextRollNumber > 1} /></div>;
     } else if (state.phase === 'ranking') {
-      const tied = shouldStartSuddenDeath(game.players);
+      const tied = shouldStartSuddenDeath(game.players, game.diceMode);
       content = <section className="results phase-reveal"><h2 ref={heading} tabIndex={-1}>FINAL RANKING</h2><RankingBoard game={game} final />
         <p>{tied ? '全員同順位。サドンデスへ進みます。' : 'このラウンドで決着しました。'}</p>
         {tied ? action('サドンデスへ', 'suddenDeath') : action('敗者発表', 'reveal')}</section>;
@@ -131,7 +131,7 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
           <span>倍率 ×{getPenaltyMultiplier(game.totalCompletionCount)}を維持</span></div>
         <p>次のラウンドの先頭：{game.participants[0]!.name}</p>{action('開始', 'startSuddenDeath')}</section>;
     } else if (state.phase === 'loserReveal') {
-      const losers = calculateFinalRanking(game.players).loserIds;
+      const losers = calculateFinalRanking(game.players, game.diceMode).loserIds;
       content = <section className="panel results loser-reveal"><h2 ref={heading} tabIndex={-1}>LOSER REVEAL</h2><p>今回の敗者</p>
         <ul className="losers">{game.participants.filter((p) => losers.includes(p.id)).map((p, index) => {
           const player = game.players.find((item) => item.id === p.id)!;
