@@ -10,7 +10,7 @@
 
 本書はIchiGo v2の唯一のSource of Truthである。旧仕様、変更設計文書、実装、テストと競合する場合は本書を優先する。
 
-現行実装はmain / 366c732でFinal Auditを完了したv1。今回の文書統合はv2実装完了を意味しない。既存の正しいEngine・Presentation・障害時継続設計を保持して段階的に拡張する。
+現行実装は、main / 366c732でFinal Auditを完了したv1を基準に拡張したv2。V2 STEP 1〜7の実装・QAとSTEP 8のFinal Auditを完了し、Blocking issue 0件・369テスト成功を確認済み。既存の正しいEngine・Presentation・障害時継続設計を保持している。
 
 [変更仕様書](v2_変更仕様書.md)は統合済みの設計履歴であり、第二の正本ではない。[FINAL_AUDIT.md](FINAL_AUDIT.md)はv1の監査記録として保持する。
 
