@@ -387,9 +387,12 @@ describe('interaction and accessibility', () => {
     mount(seven('out')); names();
     screen.getByRole('button', { name: 'ゲーム開始' }).focus();
     await user.keyboard('{Enter}'); paint();
-    expect(document.activeElement).toBe(screen.getByRole('heading', { name: '現在プレイヤー：あき' }));
+    const heading = screen.getByRole('heading', { name: '現在プレイヤー：あき' });
+    expect(document.activeElement).toBe(heading);
+    const headingFocus = vi.spyOn(heading, 'focus');
     await user.tab(); expect(document.activeElement).toBe(screen.getByRole('button', { name: 'ROLL' }));
     await user.keyboard(' '); paint();
+    expect(headingFocus).toHaveBeenCalledWith({ preventScroll: true });
     expect(screen.getByText('TURN END · ターン終了')).toBeTruthy();
     const exit = screen.getByRole('button', { name: 'ゲームを終了する' });
     await user.click(exit);

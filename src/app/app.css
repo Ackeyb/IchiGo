@@ -260,3 +260,76 @@ dialog h2 { font-size: 22px; }
   .dice-presentation { min-height: 170px; }
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }
+
+@media (max-width: 760px) and (max-height: 932px) {
+  .play > .eyebrow,
+  .results:has(.dice-presentation) > .eyebrow { margin-bottom: 3px; line-height: 1.25; }
+  .play > .current-player,
+  .results:has(.dice-presentation) > h2 { margin-bottom: 2px; font-size: 21px; line-height: 1.2; }
+  .play > .current-player span { margin-bottom: 0; line-height: 1.2; }
+
+  .play .dice-field { padding: 5px 7px; }
+  .play .dice-field > p,
+  .results:has(.dice-presentation) > p { margin-bottom: 2px; font-size: 11px; line-height: 1.3; }
+  .play .dice-field-intro { min-height: 1.3em; }
+  .play .dice-presentation,
+  .results:has(.dice-presentation) .dice-presentation { min-height: 251px; }
+  .play .three-dice-stage,
+  .results:has(.dice-presentation) .three-dice-stage { height: 96px; }
+  .play .dice,
+  .results:has(.dice-presentation) .dice { gap: 3px; margin: 4px 0 7px; }
+  .play .die,
+  .results:has(.dice-presentation) .die,
+  .play .dice-presentation.use-three .dice-result-details .die,
+  .results:has(.dice-presentation) .dice-presentation.use-three .dice-result-details .die { min-height: 44px; }
+  .play .dice-presentation.use-three .dice-result-details .die.scored.removing { min-height: 40px; }
+  .play .die.scored.removing .die-face { width: 20px; }
+  .play .die.scored.removing .die-status { margin-top: 1px; font-size: 8px; line-height: 1; }
+  .play .die.scored.removing .die-points { margin-top: 0; font-size: 9px; line-height: 1; }
+  .play .die-face,
+  .results:has(.dice-presentation) .die-face { width: 22px; }
+  .play .die-pip,
+  .results:has(.dice-presentation) .die-pip { width: 4px; }
+  .play .die-status,
+  .results:has(.dice-presentation) .die-status { margin-top: 2px; font-size: 8px; line-height: 1.15; }
+  .play .die-points,
+  .results:has(.dice-presentation) .die-points { margin-top: 1px; font-size: 9px; line-height: 1.15; }
+  .play .die.out .die-out-label,
+  .results:has(.dice-presentation) .die.out .die-out-label { font-size: 14px; }
+  .play .result-sequence { min-height: 44px; gap: 1px; margin-bottom: 3px; line-height: 1.15; }
+  .play .result-sequence .score-pop { font-size: 18px; line-height: 1.1; }
+  .play .complete-pop { gap: 0; line-height: 1.1; }
+  .play .complete-pop b { font-size: 18px; line-height: 1.1; }
+  .play .complete-pop span { font-size: 10px; line-height: 1.1; }
+
+  .play .ready-label { margin-bottom: 2px; font-size: 11px; line-height: 1.3; }
+  .play .ready-dice,
+  .results:has(.dice-presentation) > .ready-dice { min-height: 21px; gap: 3px; margin: 2px 0; }
+  .play .ready-dice span,
+  .results:has(.dice-presentation) > .ready-dice span { width: 21px; height: 21px; line-height: 19px; }
+  .results:has(.dice-presentation) > .ready-dice { min-height: 53px; align-content: start; }
+
+  .play > .metrics { gap: 3px; margin: 4px 0; }
+  .play > .metrics dt { font-size: 9px; line-height: 1.2; }
+  .play > .metrics dd { margin-top: 0; font-size: 21px; line-height: 1.15; }
+  .play > .metrics small { font-size: 9px; }
+  .play .turn-message { min-height: 64px; padding: 2px 0; }
+  .play .turn-message p { margin: 2px 0; font-size: 11px; line-height: 1.25; }
+  .play .turn-action-slot { min-height: 74px; gap: 2px; }
+  .play .turn-action-context { min-height: 1.2em; font-size: 11px; line-height: 1.2; }
+
+  .results:has(.dice-presentation) { margin: 8px auto; padding: 14px 12px; }
+  .results:has(.dice-presentation) > p { margin-top: 4px; }
+  .results:has(.dice-presentation) .penalty-equation { min-height: 44px; gap: 4px; margin: 4px 0; }
+  .results:has(.dice-presentation) .penalty-equation span,
+  .results:has(.dice-presentation) .penalty-equation strong { min-width: 54px; padding: 4px 6px; font-size: 17px; line-height: 1.25; }
+  .results:has(.dice-presentation) .penalty-equation small { font-size: 8px; }
+  .results:has(.dice-presentation) > .metrics { gap: 3px; margin: 6px 0; }
+  .results:has(.dice-presentation) > .metrics dt { min-height: 0; font-size: 9px; line-height: 1.2; }
+  .results:has(.dice-presentation) > .metrics dd { margin-top: 0; font-size: 21px; line-height: 1.15; }
+  .results:has(.dice-presentation) > .metrics small { font-size: 9px; }
+}
+
+@media (min-width: 421px) and (max-width: 760px) and (max-height: 932px) {
+  .results:has(.dice-presentation) > .ready-dice { min-height: 43px; }
+}

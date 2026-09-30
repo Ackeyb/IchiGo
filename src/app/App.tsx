@@ -45,6 +45,7 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
   const { state: committedState, visibleState: state, busy, error, recovered, recoveryNotice } = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const [confirm, setConfirm] = useState<{ action: 'newGame' | 'replay' | 'exitGame' | 'fullReset'; revision: number; opener: HTMLElement } | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
+  const focusedPhase = useRef(state.phase);
   const playCue = useCallback((cue: SoundCue) => {
     if (!soundEnabledRef.current) return;
     try { sound.play(cue); } catch { /* sound is fail-open */ }
@@ -60,7 +61,12 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
     const first = requestAnimationFrame(() => { second = requestAnimationFrame(() => store.presented(committedState.revision)); });
     return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
   }, [busy, committedState, store]);
-  useEffect(() => { heading.current?.focus(); }, [state.revision]);
+  useEffect(() => {
+    const preventRollScroll = focusedPhase.current === state.phase
+      && (state.phase === 'turn' || state.phase === 'penalty');
+    heading.current?.focus({ preventScroll: preventRollScroll });
+    focusedPhase.current = state.phase;
+  }, [state.phase, state.revision]);
   const send = (action: FlowAction) => {
     if (action.type === 'roll' || action.type === 'rollPenalty') playCue('roll');
     else if (action.type === 'suddenDeath') playCue('sudden-death');
