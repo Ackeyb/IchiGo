@@ -41,7 +41,7 @@ function start(state: Base, setup: Setup): FlowState {
   const gameNumber = state.gameNumber + 1;
   const participants = setup.participants.map(({ id, name }) => ({ id, name: name.trim() }));
   const game: SuddenDeathState = {
-    participants, throwStyle: setup.throwStyle, diceMode: setup.diceMode,
+    participants, throwStyle: setup.throwStyle, diceMode: setup.diceMode, rollLimit: setup.rollLimit,
     currentPlayerIndex: 0, totalCompletionCount: 0, suddenDeathCount: 0,
     players: participants.map(({ id }) => ({ id, ...createTurn({ turnId: `${gameNumber}/0/${id}`, totalCompletionCount: 0, diceMode: setup.diceMode }, setup.throwStyle).player })),
   };
@@ -53,11 +53,12 @@ function preparationFromGame(game: SuddenDeathState): ReplayPreparation {
     participants: game.participants.map(({ id, name }) => ({ id, name })),
     diceMode: game.diceMode,
     throwStyle: game.throwStyle,
+    rollLimit: game.rollLimit,
   };
 }
 
 function sameSetup(left: Setup, right: Setup): boolean {
-  return left.diceMode === right.diceMode && left.throwStyle === right.throwStyle
+  return left.diceMode === right.diceMode && left.throwStyle === right.throwStyle && left.rollLimit === right.rollLimit
     && left.participants.length === right.participants.length
     && left.participants.every((participant, index) => {
       const other = right.participants[index];
@@ -109,7 +110,7 @@ function apply(state: FlowState, action: FlowAction, random: RandomSource): Flow
     const { turn } = state;
     if (action.type === 'roll' && !turn.player.turnFinished) {
       const ready = turn.phase === 'result' ? continueTurn(turn, turn.rollNumber, turn.turnId) : turn;
-      const next = rollTurn(ready, ready.nextRollNumber, random, turn.turnId, game.diceMode);
+      const next = rollTurn(ready, ready.nextRollNumber, random, turn.turnId, game.diceMode, game.rollLimit);
       if (next === ready) return state;
       const id = game.participants[game.currentPlayerIndex]!.id;
       return { ...state, turn: next, game: { ...game,

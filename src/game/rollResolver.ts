@@ -1,5 +1,5 @@
-import { DEFAULT_DICE_MODE, isDiceMode } from './types';
-import type { DiceMode, DieResult, PlayerTurn, RollResolution } from './types';
+import { DEFAULT_DICE_MODE, isDiceMode, isRollLimit } from './types';
+import type { DiceMode, DieResult, PlayerTurn, RollLimit, RollOutcome, RollResolution } from './types';
 
 export function getRemainingDice(player: PlayerTurn): number {
   return player.activeDice + player.strandedDice;
@@ -24,7 +24,18 @@ export function assertPlayerTurn(player: PlayerTurn, diceMode: DiceMode = DEFAUL
   }
 }
 
-export function resolveRoll(player: PlayerTurn, dice: readonly DieResult[], diceMode: DiceMode = DEFAULT_DICE_MODE): RollResolution {
+export function assertRollRequest(rollNumber: number, rollLimit: RollLimit): void {
+  if (!isRollLimit(rollLimit) || !Number.isSafeInteger(rollNumber) || rollNumber < 1
+    || (rollLimit !== null && rollNumber > rollLimit)) {
+    throw new RangeError('Invalid roll number or roll limit.');
+  }
+}
+
+export function resolveRoll(
+  player: PlayerTurn, dice: readonly DieResult[], diceMode: DiceMode = DEFAULT_DICE_MODE,
+  rollNumber = 1, rollLimit: RollLimit = null,
+): RollResolution {
+  assertRollRequest(rollNumber, rollLimit);
   assertPlayerTurn(player, diceMode);
   if (player.turnFinished || player.activeDice === 0) {
     throw new Error('The turn cannot be rolled.');
@@ -52,17 +63,20 @@ export function resolveRoll(player: PlayerTurn, dice: readonly DieResult[], dice
 
   const activeDice = player.activeDice - outCount - scoringCount;
   const strandedDice = player.strandedDice + outCount;
-  // SPEC §63: complete, no active dice, scoring, then no-score termination.
-  const outcome = activeDice === 0 && strandedDice === 0 ? 'complete'
-    : activeDice === 0 ? 'turnEnd'
-      : scoringCount > 0 ? 'continue' : 'turnEnd';
+  // v3 §4.8: COMPLETE, no-score, roll limit, no active dice, continuation.
+  const ending: RollOutcome = activeDice === 0 && strandedDice === 0
+    ? { outcome: 'complete' }
+    : scoringCount === 0 ? { outcome: 'turnEnd', reason: 'noScore' }
+      : rollLimit !== null && rollNumber === rollLimit ? { outcome: 'turnEnd', reason: 'rollLimit' }
+        : activeDice === 0 ? { outcome: 'turnEnd', reason: 'noActiveDice' }
+          : { outcome: 'continue' };
   const nextPlayer: PlayerTurn = {
     score: player.score + gainedScore,
     activeDice,
     strandedDice,
     removedDice: player.removedDice + scoringCount,
-    completed: outcome === 'complete',
-    turnFinished: outcome !== 'continue',
+    completed: ending.outcome === 'complete',
+    turnFinished: ending.outcome !== 'continue',
   };
   return {
     player: nextPlayer,
@@ -70,6 +84,6 @@ export function resolveRoll(player: PlayerTurn, dice: readonly DieResult[], dice
     gainedScore,
     scoringCount,
     outCount,
-    outcome,
+    ...ending,
   };
 }

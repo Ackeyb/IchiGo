@@ -39,6 +39,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 it('allocates setup IDs without colliding with carried participant IDs', () => {
   let submitted: unknown;
   render(<SetupScreen busy={false} focusOnMount={false} initial={{
+    rollLimit: null,
     participants: [{ id: 'p2', name: 'A' }, { id: 'custom', name: 'B' }],
     diceMode: 7,
     throwStyle: 'normal',
@@ -55,6 +56,7 @@ it('keeps replay preparation read-only except for stable-ID reordering and expli
   const reordered: (readonly string[])[] = [];
   let starts = 0;
   render(<ReplayPreparationScreen busy={false} draft={{
+    rollLimit: null,
     participants: [{ id: 'a', name: '同名' }, { id: 'b', name: '同名' }, { id: 'c', name: '三人目' }],
     diceMode: 10,
     throwStyle: 'careful',

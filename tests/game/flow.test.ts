@@ -5,7 +5,7 @@ import { createGameStore } from '../../src/app/gameStore';
 import { initialSetup, nameError, validateSetup, validateSetupDraft } from '../../src/game/setup';
 import type { Setup } from '../../src/game/setup';
 
-const setup = { participants: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], throwStyle: 'normal' as const, diceMode: 7 as const };
+const setup = { rollLimit: null, participants: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], throwStyle: 'normal' as const, diceMode: 7 as const };
 
 class SequenceRandom {
   calls = 0;
@@ -146,7 +146,7 @@ describe('v2 preparation and reset flows', () => {
 
   it('commits structurally valid setup edits, including blank names, and rejects corrupt drafts', () => {
     const initial = initialFlow();
-    const draft = { participants: [{ id: 'p1', name: '' }, { id: 'p0', name: '途中' }], diceMode: 10 as const, throwStyle: 'careful' as const };
+    const draft = { rollLimit: null, participants: [{ id: 'p1', name: '' }, { id: 'p0', name: '途中' }], diceMode: 10 as const, throwStyle: 'careful' as const };
     const edited = advanceFlow(initial, initial.revision, { type: 'updateSetup', draft }, new SequenceRandom([]));
     expect(edited).toEqual({ ...initial, revision: 1, draft });
     const corrupt = { ...draft, participants: [{ id: 'p1', name: '' }, { id: 'p1', name: '' }] };
@@ -154,24 +154,25 @@ describe('v2 preparation and reset flows', () => {
   });
 
   it('enters replay preparation with only the retained configuration', () => {
-    const finished = finishedGame({ participants, diceMode: 10, throwStyle: 'rough' });
+    const finished = finishedGame({ rollLimit: null, participants, diceMode: 10, throwStyle: 'rough' });
     const replay = advanceFlow(finished, finished.revision, { type: 'replay' }, new SequenceRandom([]));
     expect(replay).toMatchObject({
       phase: 'replayPreparation', gameNumber: finished.gameNumber,
-      draft: { participants, diceMode: 10, throwStyle: 'rough' },
+      draft: { rollLimit: null, participants, diceMode: 10, throwStyle: 'rough' },
     });
     expect(replay).not.toHaveProperty('game');
     expect(replay).not.toHaveProperty('penalty');
   });
 
   it('reorders replay participants by ID while preserving every ID/name pair and locked setting', () => {
-    const finished = finishedGame({ participants, diceMode: 5, throwStyle: 'careful' });
+    const finished = finishedGame({ rollLimit: null, participants, diceMode: 5, throwStyle: 'careful' });
     const replay = advanceFlow(finished, finished.revision, { type: 'replay' }, new SequenceRandom([]));
     const reordered = advanceFlow(replay, replay.revision, {
       type: 'reorderReplay', participantIds: ['custom', 'p7', 'p2'],
     }, new SequenceRandom([]));
     if (reordered.phase !== 'replayPreparation') throw new Error('Expected replay preparation.');
     expect(reordered.draft).toEqual({
+      rollLimit: null,
       participants: [participants[2], participants[0], participants[1]],
       diceMode: 5,
       throwStyle: 'careful',
@@ -183,9 +184,10 @@ describe('v2 preparation and reset flows', () => {
   });
 
   it('rejects replay rename/add/delete/settings changes and invalid permutations at the Flow boundary', () => {
-    const finished = finishedGame({ participants, diceMode: 10, throwStyle: 'rough' });
+    const finished = finishedGame({ rollLimit: null, participants, diceMode: 10, throwStyle: 'rough' });
     const replay = advanceFlow(finished, finished.revision, { type: 'replay' }, new SequenceRandom([]));
     const forbiddenSetup: Setup = {
+      rollLimit: null,
       participants: [{ id: 'p7', name: '改名' }, ...participants.slice(1)],
       diceMode: 5,
       throwStyle: 'careful',
@@ -199,12 +201,12 @@ describe('v2 preparation and reset flows', () => {
   });
 
   it.each([5, 7, 10] as const)('starts replay as a clean %i DICE game and rejects duplicate/stale starts', (diceMode) => {
-    const finished = finishedGame({ participants, diceMode, throwStyle: 'normal' });
+    const finished = finishedGame({ rollLimit: null, participants, diceMode, throwStyle: 'normal' });
     const replay = advanceFlow(finished, finished.revision, { type: 'replay' }, new SequenceRandom([]));
     const started = advanceFlow(replay, replay.revision, { type: 'startReplay' }, new SequenceRandom([]));
     if (started.phase !== 'turn') throw new Error('Expected replay turn.');
     expect(started.gameNumber).toBe(finished.gameNumber + 1);
-    expect(started.game).toMatchObject({ diceMode, throwStyle: 'normal', totalCompletionCount: 0, suddenDeathCount: 0 });
+    expect(started.game).toMatchObject({ rollLimit: null, diceMode, throwStyle: 'normal', totalCompletionCount: 0, suddenDeathCount: 0 });
     expect(started.game.players.every((player) => player.score === 0 && player.activeDice === diceMode
       && player.strandedDice === 0 && player.removedDice === 0 && !player.completed && !player.turnFinished)).toBe(true);
     expect(advanceFlow(started, replay.revision, { type: 'startReplay' }, new SequenceRandom([]))).toBe(started);
@@ -212,11 +214,11 @@ describe('v2 preparation and reset flows', () => {
   });
 
   it('moves Final Result to an editable setup draft without carrying gameplay state', () => {
-    const finished = finishedGame({ participants, diceMode: 10, throwStyle: 'rough' });
+    const finished = finishedGame({ rollLimit: null, participants, diceMode: 10, throwStyle: 'rough' });
     const next = advanceFlow(finished, finished.revision, { type: 'newGame' }, new SequenceRandom([]));
     expect(next).toEqual({
       phase: 'setup', revision: finished.revision + 1, gameNumber: finished.gameNumber,
-      setupKind: 'newGame', draft: { participants: [...participants], diceMode: 10, throwStyle: 'rough' },
+      setupKind: 'newGame', draft: { rollLimit: null, participants: [...participants], diceMode: 10, throwStyle: 'rough' },
     });
     expect(next).not.toHaveProperty('game');
     expect(next).not.toHaveProperty('turn');
@@ -230,7 +232,7 @@ describe('v2 preparation and reset flows', () => {
   });
 
   it('full reset creates the dedicated initial draft and is idempotent', () => {
-    const finished = finishedGame({ participants, diceMode: 10, throwStyle: 'rough' });
+    const finished = finishedGame({ rollLimit: null, participants, diceMode: 10, throwStyle: 'rough' });
     const next = advanceFlow(finished, finished.revision, { type: 'newGame' }, new SequenceRandom([]));
     const reset = advanceFlow(next, next.revision, { type: 'fullReset' }, new SequenceRandom([]));
     expect(reset).toEqual({
@@ -241,7 +243,7 @@ describe('v2 preparation and reset flows', () => {
   });
 
   it('keeps active-game exit separate and returns to the initial setup', () => {
-    const active = advanceFlow(initialFlow(), 0, { type: 'start', setup: { participants, diceMode: 10, throwStyle: 'rough' } }, new SequenceRandom([]));
+    const active = advanceFlow(initialFlow(), 0, { type: 'start', setup: { rollLimit: null, participants, diceMode: 10, throwStyle: 'rough' } }, new SequenceRandom([]));
     const exited = advanceFlow(active, active.revision, { type: 'exitGame' }, new SequenceRandom([]));
     expect(exited).toEqual({
       phase: 'setup', revision: active.revision + 1, gameNumber: active.gameNumber,
@@ -251,7 +253,7 @@ describe('v2 preparation and reset flows', () => {
   });
 
   it('uses replay order as the original order throughout sudden death', () => {
-    const finished = finishedGame({ participants, diceMode: 5, throwStyle: 'careful' });
+    const finished = finishedGame({ rollLimit: null, participants, diceMode: 5, throwStyle: 'careful' });
     let state = advanceFlow(finished, finished.revision, { type: 'replay' }, new SequenceRandom([]));
     state = advanceFlow(state, state.revision, { type: 'reorderReplay', participantIds: ['custom', 'p2', 'p7'] }, new SequenceRandom([]));
     state = advanceFlow(state, state.revision, { type: 'startReplay' }, new SequenceRandom([]));

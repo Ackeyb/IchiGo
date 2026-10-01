@@ -8,9 +8,9 @@ Phase 1の1人分の通常ターンを扱う純粋なTypeScriptエンジンで�
 ## API
 
 - `createTurn({ turnId, totalCompletionCount, diceMode }, throwStyle?)`: 選択Modeの個数・0点で開始。Mode省略時は7、投げ方省略時は普通（1%）。
-- `rollTurn(state, rollNumber, random, expectedTurnId, diceMode?)`: 最新状態にROLL要求を適用し、新しい確定状態を返します。完走時は累積完走数も同時に1加算します。
+- `rollTurn(state, rollNumber, random, expectedTurnId, diceMode?, rollLimit?)`: 最新状態にROLL要求を適用し、新しい確定状態を返します。完走時は累積完走数も同時に1加算します。
 - `continueTurn(state, rollNumber, expectedTurnId)`: 継続可能な結果を次ROLLの受付状態へ進めます。抽選しません。
-- `resolveRoll(player, dice, diceMode?)`: 確定出目から得点・ダイス状態・継続／終了／完走を計算します。
+- `resolveRoll(player, dice, diceMode?, rollNumber?, rollLimit?)`: 確定出目から得点・ダイス状態・継続／終了／完走を計算します。
 - `getRemainingDice(player)`: `activeDice + strandedDice`を返します。
 - `rollGameDice(count, throwStyle, random, diceMode?)`: ダイスごとにOUTを先に判定し、SAFEだけD6を抽選します。
 
@@ -138,3 +138,13 @@ SoundはFlow stateに含めず、game schemaとは独立したversion 1形式で
 v2 STEP 4では通常Setupをparticipant行ベースのUIにしています。人数は`participants.length`から派生し、追加・中間削除・上下移動・名前・Dice Mode・throwStyleの各変更を`updateSetup`経由でdraftへ即時反映します。Full Resetは確認Dialogを経て専用actionを送ります。
 
 Replay Preparationは名前・Dice Mode・throwStyleを読み取り専用で表示し、既存IDの順序変更と明示的な`startReplay`だけを操作として公開します。
+
+## v3 STEP 2 — ROLL上限とRecovery
+
+追加仕様は `docs/v3_変更仕様書.md` §4〜6です。`RollLimit = null | 1 | 2 | 3 | 4 | 5` とし、nullは無制限・初期値です。設定の正本は編集時の`Setup.rollLimit`と開始後の`game.rollLimit`だけです。Player／Turnへコピーせず、使用回数は既存の`rollNumber`／`nextRollNumber`から導出します。
+
+Flowは現在のROLL番号とゲームの上限をEngine／resolverへ明示的に渡します。上限超過の番号は抽選前に拒否し、結果確定後はCOMPLETE → no-score → ROLL上限 → activeDiceなし → 継続の順で判定します。`turnEnd`結果だけに`reason: noScore | rollLimit | noActiveDice`を保持します。上限に達してもそのROLLの得点・OUT・除外は確定します。Rankingは変更しません。
+
+Sudden Death、Replay preparation、New GameはrollLimitを引き継ぎ、Full Resetはnullへ戻します。Game Recoveryはschema 3でrollLimitを必須検証し、schema 2を補完・移行せず拒否します。保存結果は同じROLL番号・上限で再解決し、最終ROLL終了後の`nextRollNumber = rollLimit + 1`も正当な状態です。Soundは独立したschema 1を維持します。
+
+このSTEPでは設定／表示UI・CSS・Three.js・Penalty OUTは変更しません。`tests/game/rollLimit.test.ts`と`tests/storage/rollLimitRecovery.test.ts`で上限、優先順位、引継ぎ、乱数非消費、保存境界を検証します。

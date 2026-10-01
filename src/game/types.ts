@@ -6,6 +6,12 @@ export type DieResult =
 export type ThrowStyle = 'rough' | 'normal' | 'careful';
 export type DiceMode = 5 | 7 | 10 | 14;
 export const DEFAULT_DICE_MODE: DiceMode = 7;
+export type RollLimit = null | 1 | 2 | 3 | 4 | 5;
+export const DEFAULT_ROLL_LIMIT: RollLimit = null;
+
+export function isRollLimit(value: unknown): value is RollLimit {
+  return value === null || value === 1 || value === 2 || value === 3 || value === 4 || value === 5;
+}
 
 export function isDiceMode(value: unknown): value is DiceMode {
   return value === 5 || value === 7 || value === 10 || value === 14;
@@ -20,14 +26,17 @@ export type PlayerTurn = Readonly<{
   turnFinished: boolean;
 }>;
 
+export type RollOutcome =
+  | Readonly<{ outcome: 'continue' | 'complete'; reason?: never }>
+  | Readonly<{ outcome: 'turnEnd'; reason: 'noScore' | 'rollLimit' | 'noActiveDice' }>;
+
 export type RollResolution = Readonly<{
   dice: readonly DieResult[];
   gainedScore: number;
   scoringCount: number;
   outCount: number;
-  outcome: 'continue' | 'turnEnd' | 'complete';
   player: PlayerTurn;
-}>;
+}> & RollOutcome;
 
 export type TurnContext = Readonly<{
   /** Unique across games, rounds and players; supplied by the caller. */

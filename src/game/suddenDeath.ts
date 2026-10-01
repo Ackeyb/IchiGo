@@ -1,7 +1,7 @@
 import { createTurn } from './gameEngine';
 import { assertPlayerTurn, getRemainingDice } from './rollResolver';
-import { DEFAULT_DICE_MODE, isDiceMode } from './types';
-import type { DiceMode, PlayerTurn, ThrowStyle } from './types';
+import { DEFAULT_DICE_MODE, isDiceMode, isRollLimit } from './types';
+import type { DiceMode, PlayerTurn, RollLimit, ThrowStyle } from './types';
 
 export type Participant = Readonly<{ id: string; name: string }>;
 export type RoundPlayer = PlayerTurn & Readonly<{ id: string }>;
@@ -13,6 +13,7 @@ export type SuddenDeathState = Readonly<{
   currentPlayerIndex: number;
   throwStyle: ThrowStyle;
   diceMode: DiceMode;
+  rollLimit: RollLimit;
   totalCompletionCount: number;
   suddenDeathCount: number;
 }>;
@@ -38,7 +39,7 @@ function assertRound(state: SuddenDeathState): void {
     || state.players.some((player) => !ids.has(player.id))) {
     throw new Error('The round must contain every original participant exactly once.');
   }
-  if (!isDiceMode(state.diceMode)
+  if (!isDiceMode(state.diceMode) || !isRollLimit(state.rollLimit)
     || !Number.isSafeInteger(state.totalCompletionCount) || state.totalCompletionCount < 0
     || !Number.isSafeInteger(state.suddenDeathCount) || state.suddenDeathCount < 0
     || !Number.isInteger(state.currentPlayerIndex) || state.currentPlayerIndex < 0
@@ -73,6 +74,7 @@ export function startSuddenDeath(
     currentPlayerIndex: 0,
     throwStyle: state.throwStyle,
     diceMode: state.diceMode,
+    rollLimit: state.rollLimit,
     totalCompletionCount: state.totalCompletionCount,
     suddenDeathCount: state.suddenDeathCount + 1,
   };

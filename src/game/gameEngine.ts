@@ -1,8 +1,8 @@
 import { DEFAULT_THROW_STYLE, OUT_PROBABILITIES, rollGameDice } from './rollGenerator';
-import { assertPlayerTurn, resolveRoll } from './rollResolver';
+import { assertPlayerTurn, assertRollRequest, resolveRoll } from './rollResolver';
 import type { RandomSource } from './randomSource';
 import { DEFAULT_DICE_MODE, isDiceMode } from './types';
-import type { ThrowStyle, TurnContext, TurnState } from './types';
+import type { RollLimit, ThrowStyle, TurnContext, TurnState } from './types';
 
 function assertContext(context: TurnContext): void {
   if (!context.turnId || !Number.isSafeInteger(context.totalCompletionCount)
@@ -43,15 +43,17 @@ export function rollTurn(
   random: RandomSource,
   expectedTurnId: string,
   diceMode = DEFAULT_DICE_MODE,
+  rollLimit: RollLimit = null,
 ): TurnState {
   if (expectedTurnId !== state.turnId || state.phase !== 'ready' || rollNumber !== state.nextRollNumber
     || state.player.turnFinished) {
     return state;
   }
   assertContext(state);
+  assertRollRequest(rollNumber, rollLimit);
   assertPlayerTurn(state.player, diceMode);
   const dice = rollGameDice(state.player.activeDice, state.throwStyle, random, diceMode);
-  const result = resolveRoll(state.player, dice, diceMode);
+  const result = resolveRoll(state.player, dice, diceMode, rollNumber, rollLimit);
   return {
     turnId: state.turnId,
     // SPEC §22, §91: commit once with the completing roll, before presentation.

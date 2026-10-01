@@ -17,6 +17,7 @@ function player(id: string, score: number, remaining: number, stranded = 0): Rou
 
 function round(players: readonly RoundPlayer[]): SuddenDeathState {
   return {
+    rollLimit: null,
     participants: players.map(({ id }) => ({ id, name: `名前${id}` })),
     players,
     currentPlayerIndex: players.length - 1,

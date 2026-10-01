@@ -4,13 +4,13 @@ import { validateSetup, validateSetupDraft } from '../game/setup';
 import { shouldStartSuddenDeath } from '../game/suddenDeath';
 import type { FlowState } from '../game/gameFlow';
 import type { PenaltyEntry } from '../game/penalty';
-import { isDiceMode } from '../game/types';
+import { isDiceMode, isRollLimit } from '../game/types';
 import type { DiceMode, DieResult, PlayerTurn, RollResolution, TurnState } from '../game/types';
 import type { SuddenDeathState } from '../game/suddenDeath';
 
 export const SESSION_GAME_KEY = 'ichi-go:game';
 export const SESSION_SOUND_KEY = 'ichi-go:sound';
-export const SESSION_SCHEMA_VERSION = 2 as const;
+export const SESSION_SCHEMA_VERSION = 3 as const;
 export const SOUND_SCHEMA_VERSION = 1 as const;
 
 export interface StorageAdapter {
@@ -56,12 +56,12 @@ function validPlayer(value: unknown, diceMode: DiceMode): value is PlayerTurn {
 function validRound(value: unknown): value is SuddenDeathState {
   if (!isRecord(value) || !Array.isArray(value.participants) || !Array.isArray(value.players)
     || !isSafeCount(value.totalCompletionCount) || !isSafeCount(value.suddenDeathCount)
-    || !Number.isInteger(value.currentPlayerIndex) || !isDiceMode(value.diceMode)) return false;
+    || !Number.isInteger(value.currentPlayerIndex) || !isDiceMode(value.diceMode) || !isRollLimit(value.rollLimit)) return false;
   const diceMode = value.diceMode;
   const participants = value.participants;
   const players = value.players;
   if (participants.some((participant) => !isRecord(participant) || typeof participant.id !== 'string' || typeof participant.name !== 'string')
-    || !validateSetup({ participants: participants as never, throwStyle: value.throwStyle as never, diceMode })
+    || !validateSetup({ participants: participants as never, throwStyle: value.throwStyle as never, diceMode, rollLimit: value.rollLimit })
     || participants.some((participant) => (participant as { name: string }).name !== (participant as { name: string }).name.trim())
     || players.length !== participants.length || Number(value.currentPlayerIndex) < 0
     || Number(value.currentPlayerIndex) >= players.length) return false;
@@ -116,7 +116,7 @@ function validTurn(value: unknown, game: SuddenDeathState, gameNumber: number, r
   if (value.rollNumber === 1 ? !isInitialPlayer(previous, game.diceMode)
     : previous.removedDice < Number(value.rollNumber) - 1) return false;
   try {
-    return same(resolveRoll(previous, result.dice, game.diceMode), result);
+    return same(resolveRoll(previous, result.dice, game.diceMode, Number(value.rollNumber), game.rollLimit), result);
   } catch {
     return false;
   }
@@ -171,6 +171,7 @@ export function validateStoredFlowState(value: unknown): value is FlowState {
     if (!validateSetup(value.draft) || !validateSetup(value.replaySource)
       || value.draft.diceMode !== value.replaySource.diceMode
       || value.draft.throwStyle !== value.replaySource.throwStyle
+      || value.draft.rollLimit !== value.replaySource.rollLimit
       || value.draft.participants.some((participant) => participant.name !== participant.name.trim())
       || value.replaySource.participants.some((participant) => participant.name !== participant.name.trim())) return false;
     const sourceById = new Map(value.replaySource.participants.map((participant) => [participant.id, participant.name]));

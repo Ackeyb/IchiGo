@@ -62,6 +62,7 @@ describe('cross-phase audit', () => {
   it.each([2, 10])('carries actual completions across repeated sudden death to penalties with %i players', (count) => {
     const participants = Array.from({ length: count }, (_, i) => ({ id: `p${i}`, name: '同名' }));
     let round: SuddenDeathState = {
+      rollLimit: null,
       participants, players: participants.map(({ id }) => ({ ...initial().player, id })),
       currentPlayerIndex: 0, throwStyle: 'normal', totalCompletionCount: 0, suddenDeathCount: 0,
       diceMode: 7,
