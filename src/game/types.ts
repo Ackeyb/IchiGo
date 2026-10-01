@@ -4,11 +4,11 @@ export type DieResult =
   | Readonly<{ status: 'out'; value: null }>;
 
 export type ThrowStyle = 'rough' | 'normal' | 'careful';
-export type DiceMode = 5 | 7 | 10;
+export type DiceMode = 5 | 7 | 10 | 14;
 export const DEFAULT_DICE_MODE: DiceMode = 7;
 
 export function isDiceMode(value: unknown): value is DiceMode {
-  return value === 5 || value === 7 || value === 10;
+  return value === 5 || value === 7 || value === 10 || value === 14;
 }
 
 export type PlayerTurn = Readonly<{
