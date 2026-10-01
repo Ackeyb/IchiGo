@@ -90,6 +90,7 @@ export class ThreeDiceRenderer implements DiceRenderer {
   private initialized = false;
   private disposed = false;
   private contextLost = false;
+  private diceCount = 0;
   private readonly onContextLost = (event: Event) => {
     event.preventDefault();
     this.contextLost = true;
@@ -170,6 +171,8 @@ export class ThreeDiceRenderer implements DiceRenderer {
     this.clear();
     const shown = toPresentedDice(request.dice, request.kind);
     const settlePositions = getDiceSettlePositions(shown.length);
+    this.diceCount = shown.length;
+    this.frameCamera();
     const animated = shown.map((result) => this.createAnimatedDie(result, shown.length, settlePositions[result.index]!));
     const renderer = this.renderer;
     const scene = this.scene;
@@ -257,7 +260,10 @@ export class ThreeDiceRenderer implements DiceRenderer {
     const target = result.status === 'out'
       ? new Vector3(result.index % 2 ? 9 : -9, 2.5 + result.index * 0.18, -1)
       : new Vector3(settle.x, 0, settle.z);
-    const start = new Vector3(column * 0.82 + Math.sin(result.index * 1.7) * 0.45, 5.8 + (result.index % 3) * 0.55, -6.2);
+    // Keep larger sets separated and in camera view from the first animation frame.
+    const start = count > 10
+      ? new Vector3(settle.x, 1.1 + (result.index % 2) * 0.18, settle.z - 0.35)
+      : new Vector3(column * 0.82 + Math.sin(result.index * 1.7) * 0.45, 5.8 + (result.index % 3) * 0.55, -6.2);
     mesh.position.copy(start);
     mesh.rotation.set(result.index * 0.7, result.index * 0.4, result.index * 0.9);
     this.group!.add(mesh);
@@ -300,9 +306,18 @@ export class ThreeDiceRenderer implements DiceRenderer {
     const height = Math.max(1, this.container.clientHeight || 250);
     this.renderer.setSize(width, height, false);
     this.camera.aspect = width / height;
+    this.frameCamera();
     this.camera.updateProjectionMatrix();
     // setSize clears the drawing buffer; idle scenes have no RAF to repaint it.
     if (this.scene) this.renderer.render(this.scene, this.camera);
+  }
+
+  private frameCamera(): void {
+    if (!this.camera) return;
+    // Only larger sets need extra horizontal room in narrow desktop/tablet stages.
+    const distance = this.diceCount > 10 ? Math.max(1, 2 / this.camera.aspect) : 1;
+    this.camera.position.set(0, 7.5 * distance, 10 * distance);
+    this.camera.lookAt(0, 0, 0);
   }
 }
 

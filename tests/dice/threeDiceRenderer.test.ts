@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BoxGeometry, Group, MeshStandardMaterial } from 'three';
+import { BoxGeometry, Group, MeshStandardMaterial, PerspectiveCamera } from 'three';
 import { ThreeDiceRenderer } from '../../src/dice/three/ThreeDiceRenderer';
 import { DiceRendererError } from '../../src/dice/types';
 
@@ -16,7 +16,7 @@ describe('ThreeDiceRenderer lifecycle', () => {
     vi.stubGlobal('performance', { now: () => 0 });
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frames.push(callback); return frames.length; });
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
-    Object.assign(renderer, { initialized: true, renderer: { render: vi.fn() }, scene: {}, camera: {}, group, geometry, materials, outMaterials });
+    Object.assign(renderer, { initialized: true, renderer: { render: vi.fn() }, scene: {}, camera: new PerspectiveCamera(), group, geometry, materials, outMaterials });
     const completion = renderer.present({ id: `penalty/${count}`, kind: 'penalty', dice: [
       { status: 'out', value: null }, ...Array.from({ length: count - 1 }, () => ({ status: 'safe' as const, value: 5 as const })),
     ] });
@@ -37,7 +37,7 @@ describe('ThreeDiceRenderer lifecycle', () => {
     const renderer = new ThreeDiceRenderer({ clientWidth: 320, clientHeight: 190 } as HTMLElement);
     const render = vi.fn();
     const scene = {};
-    const camera = { aspect: 0, updateProjectionMatrix: vi.fn() };
+    const camera = { aspect: 0, updateProjectionMatrix: vi.fn(), position: { set: vi.fn() }, lookAt: vi.fn() };
     Object.assign(renderer, { renderer: { setSize: vi.fn(), render }, scene, camera });
     (renderer as unknown as { resize(): void }).resize();
     expect(camera.aspect).toBe(320 / 190);
@@ -86,7 +86,7 @@ describe('ThreeDiceRenderer lifecycle', () => {
     const materials = Array.from({ length: 6 }, () => new MeshStandardMaterial());
     const outMaterials = Array.from({ length: 6 }, () => new MeshStandardMaterial());
     const setSize = vi.fn();
-    const camera = { aspect: 0, updateProjectionMatrix: vi.fn() };
+    const camera = { aspect: 0, updateProjectionMatrix: vi.fn(), position: { set: vi.fn() }, lookAt: vi.fn() };
     vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1));
     vi.stubGlobal('cancelAnimationFrame', vi.fn());
     Object.assign(renderer, {

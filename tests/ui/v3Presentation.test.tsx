@@ -87,6 +87,28 @@ describe('v3 Play presentation', () => {
 });
 
 describe('v3 ordered Penalty expression', () => {
+  it.each(['normal', 'penalty'] as const)('falls back with all 14 committed %s dice unchanged', async (kind) => {
+    const dice: DieResult[] = Array.from({ length: 14 }, (_, i) => i % 3 === 0
+      ? { status: 'out', value: null } : { status: 'safe', value: (i % 6 + 1) as 1 | 2 | 3 | 4 | 5 | 6 });
+    const saved = structuredClone(dice);
+    const present = vi.fn(async (request: { dice: readonly DieResult[] }) => {
+      expect(request.dice).toBe(dice);
+      throw new Error('GPU presentation failure');
+    });
+    const onPresented = vi.fn();
+    const factory = async () => ({ initialize: async () => undefined, present, clear: () => undefined, dispose: () => undefined });
+    render(<DicePresentation dice={dice} diceMode={14} kind={kind} revision={14} busy
+      onReveal={() => undefined} onPresented={onPresented}
+      config={{ createRenderer: factory, prefersReducedMotion: () => false, resultStepMs: 0 }} />);
+    await waitFor(() => expect(screen.getByRole('list', { name: '確定したダイスの出目' })).toBeTruthy());
+    const list = screen.getByRole('list', { name: '確定したダイスの出目' });
+    expect(list.getAttribute('data-rows')).toBe('7,7');
+    expect([...list.children].map((li) => li.getAttribute('aria-label'))).toEqual(dice.map((die) => die.status === 'out' ? 'OUT'
+      : `出目 ${die.value}${kind === 'normal' ? die.value === 1 || die.value === 5 ? '、GET' : '、SAFE' : ''}`));
+    expect(dice).toEqual(saved);
+    expect(present).toHaveBeenCalledOnce();
+    paint(); expect(onPresented).toHaveBeenCalledWith(14);
+  });
   it.each([
     [[2, 5], 7, '2 + 5 = 7'],
     [[0, 2, 5, 0], 19, 'OUT(6) + 2 + 5 + OUT(6) = 19'],
