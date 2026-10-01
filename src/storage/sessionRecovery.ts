@@ -104,8 +104,14 @@ function validTurn(value: unknown, game: SuddenDeathState, gameNumber: number, r
     || value.throwStyle !== game.throwStyle || value.totalCompletionCount !== game.totalCompletionCount
     || !Number.isSafeInteger(value.nextRollNumber) || Number(value.nextRollNumber) < 1 || Number(value.nextRollNumber) > revision + 1
     || !validPlayer(value.player, game.diceMode) || !same(value.player, currentPlayer)) return false;
-  // Flow commits continuation together with its next roll, never as a ready checkpoint.
-  if (value.phase === 'ready') return value.nextRollNumber === 1 && isInitialPlayer(value.player, game.diceMode);
+  if (value.phase === 'ready') {
+    if (value.result !== undefined || value.rollNumber !== undefined || value.player.turnFinished
+      || value.player.activeDice === 0
+      || (game.rollLimit !== null && Number(value.nextRollNumber) > game.rollLimit)) return false;
+    // Each previous continuing roll removed at least one scoring die.
+    return value.nextRollNumber === 1 ? isInitialPlayer(value.player, game.diceMode)
+      : value.player.removedDice >= Number(value.nextRollNumber) - 1;
+  }
   if (!Number.isSafeInteger(value.rollNumber) || Number(value.rollNumber) < 1
     || Number(value.rollNumber) > revision || value.nextRollNumber !== Number(value.rollNumber) + 1 || !isRecord(value.result)
     || !Array.isArray(value.result.dice) || !value.result.dice.every(validDie)) return false;
