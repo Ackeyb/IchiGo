@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { initialSetup, nameError, validateSetup } from '../game/setup';
 import type { Setup } from '../game/setup';
-import type { DiceMode, ThrowStyle } from '../game/types';
+import type { DiceMode, RollLimit, ThrowStyle } from '../game/types';
 
 export const styleLabels: Record<ThrowStyle, string> = { rough: '乱暴', normal: '普通', careful: '丁寧' };
-const diceModes: readonly DiceMode[] = [5, 7, 10];
+const diceModes: readonly DiceMode[] = [5, 7, 10, 14];
+const rollLimits: readonly RollLimit[] = [null, 1, 2, 3, 4, 5];
 
 export function SetupScreen({ busy, onStart, onDraftChange, onFullReset, focusOnMount, initial = initialSetup() }: {
   busy: boolean;
@@ -103,9 +104,17 @@ export function SetupScreen({ busy, onStart, onDraftChange, onFullReset, focusOn
             onChange={() => update({ ...setup, throwStyle: style })} />{styleLabels[style]}
         </label>)}</div>
       </fieldset>
+      <fieldset disabled={busy}><legend>ROLL上限</legend>
+        <div className="styles roll-limits">{rollLimits.map((limit) => <label key={limit ?? 'infinity'}>
+          <input type="radio" name="roll-limit" value={limit ?? 'infinity'}
+            aria-label={limit === null ? 'ROLL上限 無制限' : `ROLL上限 ${limit}回`}
+            checked={setup.rollLimit === limit} onChange={() => update({ ...setup, rollLimit: limit })} />
+          <span aria-hidden="true">{limit ?? '∞'}</span>
+        </label>)}</div>
+      </fieldset>
       <button className="primary" type="submit" disabled={busy} onClick={(event) => { if (event.detail > 1) event.preventDefault(); }}
         onKeyDown={(event) => { if (event.repeat) event.preventDefault(); }}>ゲーム開始</button>
-      <p className="subtle">開始後はメンバー・順番・Dice Mode・投げ方を変更できません。</p>
+      <p className="subtle">開始後はメンバー・順番・Dice Mode・投げ方・ROLL上限を変更できません。</p>
       <button type="button" className="full-reset-button" disabled={busy} onClick={(event) => onFullReset(event.currentTarget)}>
         すべて初期状態に戻す
       </button>

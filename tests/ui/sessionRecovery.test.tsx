@@ -53,15 +53,17 @@ describe('session recovery UI', () => {
     fireEvent.click(screen.getByRole('button', { name: 'プレイヤー追加' }));
     fireEvent.change(screen.getByLabelText('プレイヤー 3', { exact: true }), { target: { value: '追加' } });
     fireEvent.click(screen.getByRole('button', { name: 'プレイヤー 3を上へ' }));
-    fireEvent.click(screen.getByLabelText('10 DICE'));
-    fireEvent.click(screen.getByLabelText('丁寧'));
+    fireEvent.click(screen.getByLabelText('14 DICE'));
+    fireEvent.click(screen.getByLabelText('乱暴'));
+    fireEvent.click(screen.getByLabelText('ROLL上限 3回'));
     first.unmount();
 
     render(<App recovery={new SessionRecovery(() => storage)} />);
     expect((screen.getByLabelText('プレイヤー 1', { exact: true }) as HTMLInputElement).value).toBe('編集中');
     expect(screen.getAllByRole('textbox').map((input) => (input as HTMLInputElement).value)).toEqual(['編集中', '追加', '']);
-    expect((screen.getByLabelText('10 DICE') as HTMLInputElement).checked).toBe(true);
-    expect((screen.getByLabelText('丁寧') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('14 DICE') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('乱暴') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('ROLL上限 3回') as HTMLInputElement).checked).toBe(true);
     expect(screen.getByText('ゲームを復旧しました。')).toBeTruthy();
     expect(screen.queryByText(/ゲームデータを復旧できませんでした/)).toBeNull();
   });
@@ -69,7 +71,7 @@ describe('session recovery UI', () => {
   it('restores a replay reorder without exposing forbidden edits and starts explicitly', () => {
     const storage = new MemoryStorage();
     const random = new Sequence([...normal(1, 1, 1, 1, 1, 1, 1), ...Array<number>(7).fill(0), ...Array<number>(7).fill(0)]);
-    let state = perform(initialFlow(), { type: 'start', setup }, random);
+    let state = perform(initialFlow(), { type: 'start', setup: { ...setup, rollLimit: 5 } }, random);
     for (const type of ['roll', 'next', 'roll', 'ranking', 'reveal', 'penalty', 'rollPenalty', 'finish', 'replay'] as const) {
       state = perform(state, { type }, random);
     }
@@ -78,11 +80,13 @@ describe('session recovery UI', () => {
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByRole('radio')).toBeNull();
     expect(screen.getByText('7 DICE')).toBeTruthy();
+    expect(screen.getByText('ROLL 5回')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '2番 Bを上へ' }));
     first.unmount();
 
     render(<App recovery={new SessionRecovery(() => storage)} />);
     expect(screen.getAllByRole('listitem').map((item) => item.textContent?.replace(/[↑↓]/g, ''))).toEqual(['1B', '2A']);
+    expect(screen.getByText('ROLL 5回')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'この順番で開始' })); paint();
     expect(screen.getByRole('heading', { name: '現在プレイヤー：B' })).toBeTruthy();
   });

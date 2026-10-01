@@ -23,6 +23,7 @@ export function ReplayPreparationScreen({ draft, busy, onReorder, onStart }: {
     <dl className="replay-settings" aria-label="再戦の設定">
       <div><dt>Dice Mode</dt><dd>{draft.diceMode} DICE</dd></div>
       <div><dt>投げ方</dt><dd>{styleLabels[draft.throwStyle]}</dd></div>
+      <div><dt>ROLL上限</dt><dd>{draft.rollLimit === null ? 'ROLL ∞' : `ROLL ${draft.rollLimit}回`}</dd></div>
     </dl>
     <h3>プレイ順</h3>
     <ol className="replay-players">

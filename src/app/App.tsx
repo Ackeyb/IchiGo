@@ -204,7 +204,7 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
       : confirm.action === 'newGame' ? '新しいゲームに戻りますか？'
         : confirm.action === 'fullReset' ? 'すべて初期状態に戻しますか？' : 'ゲームを終了しますか？'}
       {...(confirm.action === 'fullReset' ? {
-        description: 'プレイヤー名・順番・Dice Mode・投げ方が初期状態に戻ります。Sound設定は維持されます。',
+        description: 'プレイヤー名・順番・Dice Mode・投げ方・ROLL上限が初期状態に戻ります。Sound設定は維持されます。',
         confirmLabel: '初期状態に戻す',
       } : {})}
       onCancel={() => setConfirm(null)} onConfirm={() => { store.dispatch(confirm.revision, { type: confirm.action }); setConfirm(null); }} />}

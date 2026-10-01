@@ -7,6 +7,7 @@ import { App } from '../../src/app/App';
 import { SetupScreen } from '../../src/app/SetupScreen';
 import { ReplayPreparationScreen } from '../../src/app/ReplayPreparationScreen';
 import { createGameStore } from '../../src/app/gameStore';
+import { initialSetup } from '../../src/game/setup';
 import type { SoundCue, SoundPlayer } from '../../src/app/sound';
 import type { RandomSource } from '../../src/game/randomSource';
 
@@ -107,6 +108,44 @@ describe('Setup', () => {
     expect((screen.getByRole('button', { name: 'プレイヤー 1を削除' }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getAllByText('ONE ROLL AT A TIME').length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: '最後のダイスまで。' })).toBeTruthy();
+    expect((screen.getByLabelText('ROLL上限 無制限') as HTMLInputElement).checked).toBe(true);
+  });
+
+  it('offers all Dice Modes and ROLL limits and starts 14 DICE with the selected finite limit', () => {
+    const { store } = mount(normal(...Array<number>(14).fill(1)));
+    const diceGroup = screen.getByRole('group', { name: 'Dice Mode' });
+    expect(within(diceGroup).getAllByRole('radio').map((input) => (input as HTMLInputElement).value)).toEqual(['5', '7', '10', '14']);
+    const limitGroup = screen.getByRole('group', { name: 'ROLL上限' });
+    expect(within(limitGroup).getAllByRole('radio')).toHaveLength(6);
+    expect(Array.from(limitGroup.querySelectorAll('label span')).map((label) => label.textContent)).toEqual(['∞', '1', '2', '3', '4', '5']);
+    expect(within(limitGroup).queryByText(/無制限/)).toBeNull();
+    fireEvent.click(screen.getByLabelText('14 DICE'));
+    fireEvent.click(screen.getByLabelText('ROLL上限 3回'));
+    expect((screen.getByLabelText('ROLL上限 3回') as HTMLInputElement).checked).toBe(true);
+    names();
+    click('ゲーム開始');
+    const started = store.getSnapshot().state;
+    if (started.phase !== 'turn') throw new Error('Expected a started game.');
+    expect(started.game).toMatchObject({ diceMode: 14, throwStyle: 'normal', rollLimit: 3 });
+    expect(screen.getByText('ROLL 1/3')).toBeTruthy();
+    expect(screen.getByLabelText('ROLL可能なダイス 14個').getAttribute('data-dice-mode')).toBe('14');
+    click('ROLL');
+    const result = store.getSnapshot().state;
+    expect(result.phase === 'turn' && result.turn.player).toMatchObject({ completed: true, removedDice: 14 });
+    expect(screen.getByRole('list', { name: '確定したダイスの出目' }).getAttribute('data-rows')).toBe('7,7');
+  });
+
+  it.each([
+    ['∞', 'ROLL上限 無制限', null], ['1', 'ROLL上限 1回', 1], ['2', 'ROLL上限 2回', 2],
+    ['3', 'ROLL上限 3回', 3], ['4', 'ROLL上限 4回', 4], ['5', 'ROLL上限 5回', 5],
+  ] as const)('maps the visible ROLL limit %s to Setup state', (_visible, accessibleName, expected) => {
+    const changes: Array<{ rollLimit: number | null }> = [];
+    const initial = { ...initialSetup(), rollLimit: expected === null ? 5 as const : null };
+    render(<SetupScreen busy={false} focusOnMount={false} initial={initial} onDraftChange={(draft) => changes.push(draft)}
+      onFullReset={() => undefined} onStart={() => undefined} />);
+    fireEvent.click(screen.getByLabelText(accessibleName));
+    expect(changes.at(-1)?.rollLimit).toBe(expected);
+    expect((screen.getByLabelText(accessibleName) as HTMLInputElement).checked).toBe(true);
   });
 
   it('adds unique players to ten, disables further additions, and deletes a middle row without renumbering IDs', () => {
@@ -144,6 +183,23 @@ describe('Setup', () => {
     expect(state.game.diceMode).toBe(10);
     expect(state.game.throwStyle).toBe('rough');
     expect(state.game.players.every((player) => player.activeDice === 10)).toBe(true);
+  });
+
+  it('shows Replay ROLL limits read-only for both finite and unlimited settings', () => {
+    const draft = {
+      rollLimit: 5 as const,
+      participants: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }],
+      diceMode: 14 as const,
+      throwStyle: 'careful' as const,
+    };
+    const onReorder = vi.fn();
+    const view = render(<ReplayPreparationScreen draft={draft} busy={false} onReorder={onReorder} onStart={() => undefined} />);
+    expect(screen.getByText('ROLL 5回')).toBeTruthy();
+    expect(screen.queryByRole('radio')).toBeNull();
+    expect(screen.queryByRole('combobox')).toBeNull();
+    view.rerender(<ReplayPreparationScreen draft={{ ...draft, rollLimit: null }} busy={false} onReorder={onReorder} onStart={() => undefined} />);
+    expect(screen.getByText('ROLL ∞')).toBeTruthy();
+    expect(screen.queryByText(/ROLL (null|0回)/)).toBeNull();
   });
 
   it('validates blank / trimmed / grapheme names, allows identical names and focuses the invalid field', () => {
@@ -196,7 +252,7 @@ describe('playable flows', () => {
   it('plays a two-player game through continuation, complete, ranking, loser, penalty and replay', () => {
     const { store, random } = mount([...normal(1, 2, 2, 2, 2, 2, 2), ...normal(2, 2, 2, 2, 2, 2), ...seven(1), ...normal(1, 2, 3, 4, 5, 6)]);
     click('サウンド ON');
-    names(); fireEvent.click(screen.getByLabelText('乱暴')); click('ゲーム開始');
+    names(); fireEvent.click(screen.getByLabelText('乱暴')); fireEvent.click(screen.getByLabelText('ROLL上限 3回')); click('ゲーム開始');
     expectHeading('現在プレイヤー：あき');
     expect(random.calls).toBe(0);
     click('ROLL');
@@ -234,11 +290,14 @@ describe('playable flows', () => {
     const finished = store.getSnapshot().state;
     click('同じメンバーでもう一度'); click('確認して進む');
     expectHeading('再戦の準備');
+    expect(screen.getByText('ROLL 3回')).toBeTruthy();
+    expect(screen.queryByRole('radio')).toBeNull();
     click('この順番で開始');
     const replay = store.getSnapshot().state;
     if (finished.phase !== 'finished' || replay.phase !== 'turn') throw new Error('Unexpected phase');
     expect(replay.game.participants).toEqual(finished.game.participants);
     expect(replay.game.throwStyle).toBe('rough');
+    expect(replay.game.rollLimit).toBe(3);
     expect(replay.game.totalCompletionCount).toBe(0);
     expect(replay.game.suddenDeathCount).toBe(0);
     expect(replay.game.players.every((p) => p.score === 0 && p.activeDice === 7 && !p.turnFinished)).toBe(true);
@@ -276,7 +335,7 @@ describe('playable flows', () => {
 
   it('reveals all tied losers and rolls their independent penalties in the fixed order', () => {
     const { random } = mount([...seven(1), ...seven('out'), ...seven(2), ...seven(1), ...seven(6)]);
-    click('サウンド ON'); names(['勝者', '敗者A', '敗者B']); click('ゲーム開始');
+    click('サウンド ON'); names(['勝者', '敗者A', '敗者B']); fireEvent.click(screen.getByLabelText('ROLL上限 4回')); click('ゲーム開始');
     click('ROLL'); click('次へ'); click('ROLL');
     expect(screen.getByText('OUTあり・完走不能。OUTダイスは再ROLLされません。')).toBeTruthy();
     click('次へ'); click('ROLL');
@@ -294,6 +353,7 @@ describe('playable flows', () => {
     click('新しいゲーム'); click('確認して進む');
     expect(screen.getAllByRole('textbox')).toHaveLength(3);
     expect(screen.getAllByRole('textbox').map((input) => (input as HTMLInputElement).value)).toEqual(['勝者', '敗者A', '敗者B']);
+    expect((screen.getByLabelText('ROLL上限 4回') as HTMLInputElement).checked).toBe(true);
     expect((screen.getByLabelText('普通') as HTMLInputElement).checked).toBe(true);
     expect(document.body.textContent).not.toContain('%');
     expect(screen.getByRole('button', { name: 'サウンド OFF' })).toBeTruthy();
@@ -303,11 +363,14 @@ describe('playable flows', () => {
     fireEvent.click(screen.getByRole('button', { name: 'プレイヤー 3を上へ' }));
     fireEvent.click(screen.getByLabelText('5 DICE'));
     fireEvent.click(screen.getByLabelText('丁寧'));
+    fireEvent.click(screen.getByLabelText('ROLL上限 2回'));
     expect((screen.getByLabelText('5 DICE') as HTMLInputElement).checked).toBe(true);
     expect((screen.getByLabelText('丁寧') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('ROLL上限 2回') as HTMLInputElement).checked).toBe(true);
     const reset = screen.getByRole('button', { name: 'すべて初期状態に戻す' });
     fireEvent.click(reset);
     expect(screen.getByText(/Sound設定は維持されます/)).toBeTruthy();
+    expect(screen.getByText(/ROLL上限が初期状態に戻ります/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'キャンセル' }));
     expect(document.activeElement).toBe(reset);
     expect(screen.getAllByRole('textbox')).toHaveLength(3);
@@ -317,6 +380,7 @@ describe('playable flows', () => {
     expect(screen.getAllByRole('textbox').map((input) => (input as HTMLInputElement).value)).toEqual(['', '']);
     expect((screen.getByLabelText('7 DICE') as HTMLInputElement).checked).toBe(true);
     expect((screen.getByLabelText('普通') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('ROLL上限 無制限') as HTMLInputElement).checked).toBe(true);
     expect(screen.getByRole('button', { name: 'サウンド OFF' })).toBeTruthy();
   });
 });
