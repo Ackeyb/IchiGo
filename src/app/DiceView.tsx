@@ -38,7 +38,7 @@ export function DiceView({ dice, diceMode, kind, removing = false }: {
       const scored = kind === 'normal' && die.status === 'safe' && (die.value === 1 || die.value === 5);
       const status = die.status === 'out' ? 'OUT' : scored ? 'GET' : kind === 'normal' ? 'SAFE' : undefined;
       const ariaLabel = die.status === 'out' ? 'OUT' : `出目 ${die.value}${status ? `、${status}` : ''}`;
-      const secondRowStyle = index === 5 && layout.secondRowStart
+      const secondRowStyle = index === layout.rows[0] && layout.secondRowStart
         ? { gridColumn: `${layout.secondRowStart} / span ${layout.cardSpan}` } : undefined;
       return <li key={index} aria-label={ariaLabel} style={secondRowStyle}
         className={`die ${die.status === 'out' ? 'out' : scored ? `scored${removing ? ' removing' : ''}` : ''}`}>
@@ -50,8 +50,8 @@ export function DiceView({ dice, diceMode, kind, removing = false }: {
   </ol>;
 }
 
-export function ReadyDice({ count }: { count: number }) {
-  return <div className="ready-dice" aria-label={`ROLL可能なダイス ${count}個`}>
+export function ReadyDice({ count, diceMode }: { count: number; diceMode?: DiceMode }) {
+  return <div className="ready-dice" data-dice-mode={diceMode} aria-label={`ROLL可能なダイス ${count}個`}>
     {Array.from({ length: count }, (_, index) => <span key={index} aria-hidden="true">?</span>)}
   </div>;
 }

@@ -18,6 +18,14 @@ describe('dice result layout', () => {
     [10, 6, [5, 1], 5],
     [10, 5, [5], 5],
     [10, 4, [4], 4],
+    [14, 14, [7, 7], 7],
+    [14, 13, [7, 6], 7],
+    [14, 12, [7, 5], 7],
+    [14, 11, [7, 4], 7],
+    [14, 10, [7, 3], 7],
+    [14, 9, [7, 2], 7],
+    [14, 8, [7, 1], 7],
+    [14, 7, [7], 7],
   ] as const)('%s DICE with %s results uses rows %j', (mode, count, rows, columns) => {
     expect(getDiceGridLayout(mode, count)).toMatchObject({ rows, columns });
   });
@@ -25,6 +33,16 @@ describe('dice result layout', () => {
   it('distinguishes seven results in 7 DICE and 10 DICE', () => {
     expect(getDiceGridLayout(7, 7).rows).toEqual([7]);
     expect(getDiceGridLayout(10, 7).rows).toEqual([5, 2]);
+  });
+  it.each(['normal', 'penalty'] as const)('centers the second row from the helper for %s', (kind) => {
+    for (let count = 8; count <= 14; count++) {
+      const view = render(<DiceView dice={Array<DieResult>(count).fill({ status: 'safe', value: 2 })} diceMode={14} kind={kind} />);
+      const list = screen.getByRole('list');
+      expect(list.getAttribute('data-rows')).toBe(`7,${count - 7}`);
+      expect((list.children[7] as HTMLElement).style.gridColumn).toBe(`${15 - count} / span 2`);
+      expect((list.children[5] as HTMLElement).style.gridColumn).toBe('');
+      view.unmount();
+    }
   });
 });
 

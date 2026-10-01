@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import type { DiceMode, DieResult } from '../game/types';
 import { DicePresentationController } from '../dice/presentationController';
 import { prefersReducedMotion as defaultReducedMotion } from '../dice/presentationController';
@@ -162,6 +162,7 @@ export function DicePresentation({
 
   const currentOutcome = completedId === requestId ? outcome : undefined;
   const revealed = !!dice && (!busy || completedId === requestId);
+  const resultStage = busy ? stage : 4;
   const useThree = currentOutcome?.mode !== 'fallback';
   return <div className={`dice-presentation ${dice ? '' : 'is-idle'} ${useThree ? 'use-three' : 'use-fallback'}`}>
     <div ref={container} className="three-dice-stage" aria-hidden="true" />
@@ -177,9 +178,12 @@ export function DicePresentation({
           <span>累積完走 {presentation.totalCompletionCount} · ペナルティ倍率 ×{presentation.multiplier}</span></div>}
       </div>}
       {presentation?.kind === 'penalty' && <div className="penalty-equation" aria-live="polite">
-        {stage >= 2 && <span className="penalty-equation-value"><small>BASE</small>{presentation.basePenalty}</span>}
-        {stage >= 3 && <><b>×</b><span className="penalty-equation-value"><small>MULTIPLIER</small>{presentation.multiplier}</span></>}
-        {stage >= 4 && <><b>=</b><strong className="penalty-equation-value"><small>FINAL</small>{presentation.finalPenalty} pt</strong></>}
+        {resultStage >= 2 && <p className="penalty-dice-expression">{dice.map((die, index) => <Fragment key={index}>
+          {index > 0 ? ' + ' : ''}<span>{die.status === 'out' ? 'OUT(6)' : die.value}</span>
+        </Fragment>)}{' = '}{presentation.basePenalty}</p>}
+        {resultStage >= 2 && <span className="penalty-equation-value"><small>BASE</small>{presentation.basePenalty}</span>}
+        {resultStage >= 3 && <><b>×</b><span className="penalty-equation-value"><small>MULTIPLIER</small>{presentation.multiplier}</span></>}
+        {resultStage >= 4 && <><b>=</b><strong className="penalty-equation-value"><small>FINAL</small>{presentation.finalPenalty} pt</strong></>}
       </div>}
     </div>}
   </div>;

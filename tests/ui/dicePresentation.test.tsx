@@ -353,7 +353,9 @@ describe('3D dice React integration', () => {
     expect(screen.getByLabelText('出目 1').querySelector('.die-face-accent')).toBeTruthy();
     expect(screen.getByLabelText('出目 5').querySelector('.die-face-accent')).toBeTruthy();
     expect(screen.queryByText('BASE')).toBeNull();
+    expect(document.querySelector('.penalty-dice-expression')).toBeNull();
     await waitFor(() => expect(screen.getByText('BASE')).toBeTruthy());
+    expect(document.querySelector('.penalty-dice-expression')?.textContent).toBe('1 + 5 = 6');
     expect(screen.queryByText('MULTIPLIER')).toBeNull();
     await waitFor(() => expect(screen.getByText('MULTIPLIER')).toBeTruthy());
     expect(screen.queryByText('FINAL')).toBeNull();

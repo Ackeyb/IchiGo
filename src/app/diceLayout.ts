@@ -14,14 +14,15 @@ export function getDiceGridLayout(diceMode: DiceMode, displayedCount: number): D
     throw new RangeError('displayed dice count must be within the selected Dice Mode');
   }
 
-  if (diceMode === 10 && displayedCount > 5) {
-    const secondRowCount = displayedCount - 5;
+  const rowCapacity = diceMode === 10 ? 5 : diceMode === 14 ? 7 : diceMode;
+  if (displayedCount > rowCapacity) {
+    const secondRowCount = displayedCount - rowCapacity;
     return {
-      columns: 5,
-      rows: [5, secondRowCount],
-      trackColumns: 10,
+      columns: rowCapacity,
+      rows: [rowCapacity, secondRowCount],
+      trackColumns: rowCapacity * 2,
       cardSpan: 2,
-      secondRowStart: 6 - secondRowCount,
+      secondRowStart: rowCapacity + 1 - secondRowCount,
     };
   }
 

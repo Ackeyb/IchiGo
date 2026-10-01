@@ -59,6 +59,8 @@ input[type="radio"] { accent-color: #315e43; margin-right: 7px; }
 .game-summary strong { background: #dfe9c4; padding: 6px 13px; border-radius: 7px; margin-left: auto; white-space: nowrap; }
 .game-layout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(290px, 1fr); gap: 24px; align-items: start; }
 .play { min-width: 0; }
+.player-roll-line { display: flex; justify-content: space-between; gap: 8px; white-space: nowrap; }
+.roll-counter { font-variant-numeric: tabular-nums; }
 .dice-field { min-width: 0; background: #244536; border-radius: 14px; padding: 18px 14px; color: #f0f6ec; text-align: center; overflow: hidden; }
 .dice-field > p { font-size: 12px; color: #d6e2d3; }
 .dice-field-intro { min-height: 1.6em; }
@@ -119,6 +121,8 @@ input[type="radio"] { accent-color: #315e43; margin-right: 7px; }
 .penalty-equation-value { place-items: center; text-align: center; }
 .penalty-equation strong { background: #e4e9bd; }
 .penalty-equation small { font-size: 9px; letter-spacing: .8px; }
+.penalty-equation .penalty-dice-expression { flex-basis: 100%; min-width: 0; margin: 0; font-size: 14px; line-height: 1.5; text-align: center; }
+.penalty-equation .penalty-dice-expression span { display: inline-block; min-width: 0; padding: 0; background: transparent; color: inherit; font-size: inherit; white-space: nowrap; }
 .phase-reveal, .sudden-death-reveal { animation: phase-in .35s ease-out both; }
 .state-notes { display: flex; flex-wrap: wrap; gap: 7px; margin: 18px 0; }
 .state-notes span { background: #edf0e4; border-radius: 7px; padding: 6px 9px; font-size: 12px; }
@@ -276,6 +280,8 @@ dialog h2 { font-size: 22px; }
   .results:has(.dice-presentation) .dice-presentation { min-height: 251px; }
   .play .three-dice-stage,
   .results:has(.dice-presentation) .three-dice-stage { height: 96px; }
+  .play .dice-presentation { min-height: 239px; }
+  .play .three-dice-stage { height: 80px; }
   .play .dice,
   .results:has(.dice-presentation) .dice { gap: 3px; margin: 4px 0 7px; }
   .play .die,
@@ -308,12 +314,14 @@ dialog h2 { font-size: 22px; }
   .play .ready-dice span,
   .results:has(.dice-presentation) > .ready-dice span { width: 21px; height: 21px; line-height: 19px; }
   .results:has(.dice-presentation) > .ready-dice { min-height: 53px; align-content: start; }
+  .play .ready-dice[data-dice-mode="14"] { gap: 1px; }
+  .play .ready-dice[data-dice-mode="14"] span { width: 16px; }
 
   .play > .metrics { gap: 3px; margin: 4px 0; }
   .play > .metrics dt { font-size: 9px; line-height: 1.2; }
   .play > .metrics dd { margin-top: 0; font-size: 21px; line-height: 1.15; }
   .play > .metrics small { font-size: 9px; }
-  .play .turn-message { min-height: 64px; padding: 2px 0; }
+  .play .turn-message { min-height: 80px; padding: 2px 0; }
   .play .turn-message p { margin: 2px 0; font-size: 11px; line-height: 1.25; }
   .play .turn-action-slot { min-height: 74px; gap: 2px; }
   .play .turn-action-context { min-height: 1.2em; font-size: 11px; line-height: 1.2; }
@@ -324,6 +332,9 @@ dialog h2 { font-size: 22px; }
   .results:has(.dice-presentation) .penalty-equation span,
   .results:has(.dice-presentation) .penalty-equation strong { min-width: 54px; padding: 4px 6px; font-size: 17px; line-height: 1.25; }
   .results:has(.dice-presentation) .penalty-equation small { font-size: 8px; }
+  .results:has(.dice-presentation) .penalty-dice-expression { font-size: 14px; line-height: 1.4; }
+  .results:has(.dice-presentation) .penalty-dice-expression span { min-width: 0; padding: 0; font-size: inherit; }
+  .results:has(.dice-presentation) .dice-presentation { min-height: 340px; }
   .results:has(.dice-presentation) > .metrics { gap: 3px; margin: 6px 0; }
   .results:has(.dice-presentation) > .metrics dt { min-height: 0; font-size: 9px; line-height: 1.2; }
   .results:has(.dice-presentation) > .metrics dd { margin-top: 0; font-size: 21px; line-height: 1.15; }

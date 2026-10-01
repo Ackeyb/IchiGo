@@ -107,15 +107,19 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
         multiplier: getPenaltyMultiplier(committedState.game.totalCompletionCount),
       } : undefined;
       const current = game.participants[game.currentPlayerIndex]!;
+      // Keep the committed roll number until the presenter unlocks the next action.
+      const nextRollLabel = busy && committedState.phase === 'turn' && committedState.turn.phase === 'result'
+        ? committedState.turn.rollNumber : state.turn.nextRollNumber;
       content = <div className="game-layout"><section className="play panel">
-        <p className="eyebrow">PLAYER {game.currentPlayerIndex + 1} / {game.participants.length}</p>
+        <p className="eyebrow player-roll-line"><span>PLAYER {game.currentPlayerIndex + 1} / {game.participants.length}</span>
+          {game.rollLimit !== null && (busy || !player.turnFinished) && <span className="roll-counter">ROLL {nextRollLabel}/{game.rollLimit}</span>}</p>
         <h2 className="current-player" ref={heading} tabIndex={-1}><span>現在プレイヤー：</span>{current.name}</h2>
         <div className="dice-field">
           <p className="dice-field-intro" aria-hidden={result ? true : undefined}>{result ? '\u00a0' : 'ダイスを振って、ゲームを始めよう。'}</p>
           <DicePresentation dice={committedResult?.dice} diceMode={game.diceMode} kind="normal" revision={committedState.revision}
             busy={busy} presentation={rollPresentation} onCue={playCue}
             onReveal={store.reveal} onPresented={store.presented} config={dicePresentation} />
-          <p className="ready-label">現在ROLL可能：{player.activeDice}個</p><ReadyDice count={player.activeDice} />
+          <p className="ready-label">現在ROLL可能：{player.activeDice}個</p><ReadyDice count={player.activeDice} diceMode={game.diceMode} />
         </div>
         <dl className="metrics" aria-label="現在のプレイヤー状態">
           <div><dt>SCORE</dt><dd>{player.score}<small>点</small></dd></div>
@@ -124,7 +128,8 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
         </dl>
         <div className="turn-message" role="status">
           {player.completed ? <strong>COMPLETE!! 完走</strong> : player.turnFinished ? <strong>TURN END · ターン終了</strong> : result ? <strong>得点！ 次のROLLへ</strong> : <strong>ROLL READY</strong>}
-          {result && <p>今回の獲得：{result.gainedScore}点</p>}
+          {result && <p>今回の獲得：{result.gainedScore}点
+            {result.outcome === 'turnEnd' && result.reason === 'rollLimit' && <> · <span>ROLL上限に到達しました</span></>}</p>}
           {player.strandedDice > 0 && <p>OUTあり・完走不能。OUTダイスは再ROLLされません。</p>}
         </div>
         <div className="turn-action-slot">
