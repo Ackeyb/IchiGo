@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { calculatePenalty, createPenaltyState, rollPenalty, rollPenaltyDice } from '../../src/game/penalty';
 import type { DecisiveRound } from '../../src/game/penalty';
 import type { RandomSource } from '../../src/game/randomSource';
-import type { DieValue } from '../../src/game/types';
+import type { DieResult, DieValue } from '../../src/game/types';
 import type { RoundPlayer } from '../../src/game/suddenDeath';
 import { assertPlayerTurn } from '../../src/game/rollResolver';
 
@@ -15,7 +15,10 @@ class SequenceRandom implements RandomSource {
     return value;
   }
 }
-const sourceFor = (...values: DieValue[]) => new SequenceRandom(values.map((value) => (value - 0.5) / 6));
+const safe = (value: DieValue): DieResult => ({ status: 'safe', value });
+const safeDice = (...values: DieValue[]) => values.map(safe);
+// Every SAFE penalty die consumes an OUT check followed by its face draw.
+const sourceFor = (...values: DieValue[]) => new SequenceRandom(values.flatMap((value) => [0.9, (value - 0.5) / 6]));
 function player(id: string, score: number, remaining: number, stranded = 0): RoundPlayer {
   const result = {
     id, score, activeDice: remaining - stranded, strandedDice: stranded,
@@ -32,51 +35,51 @@ function round(loser: RoundPlayer, totalCompletionCount = 1): DecisiveRound {
 }
 
 describe('SPEC §77 cases 31–33: penalty dice and calculation', () => {
-  it.each([1, 7])('uses remainingDice=%i and draws exactly once per die', (count) => {
+  it.each([1, 7])('uses remainingDice=%i and draws OUT then face per SAFE die', (count) => {
     const loser = player('loser', (7 - count) * 100, count);
     const initial = createPenaltyState(round(loser), 'test-penalty');
-    const random = new SequenceRandom(Array<number>(count).fill(0));
+    const random = sourceFor(...Array<DieValue>(count).fill(1));
     const next = rollPenalty(initial, 'loser', random, 'test-penalty');
     expect(next.penalties[0]).toEqual({
       playerId: 'loser', diceCount: count, status: 'resolved',
-      penaltyRoll: Array<number>(count).fill(1), basePenalty: count, multiplier: 2, finalPenalty: count * 2,
+      penaltyRoll: Array<DieResult>(count).fill(safe(1)), basePenalty: count, multiplier: 2, finalPenalty: count * 2,
     });
-    expect(random.calls).toBe(count);
+    expect(random.calls).toBe(count * 2);
   });
   it('31: includes stranded dice in the decisive-round remaining count', () => {
     const initial = createPenaltyState(round(player('loser', 150, 5, 2)), 'test-penalty');
     const random = sourceFor(6, 4, 5, 2, 6);
     const next = rollPenalty(initial, 'loser', random, 'test-penalty');
-    expect(next.penalties[0]).toMatchObject({ diceCount: 5, penaltyRoll: [6, 4, 5, 2, 6], basePenalty: 23, finalPenalty: 46 });
-    expect(random.calls).toBe(5);
+    expect(next.penalties[0]).toMatchObject({ diceCount: 5, penaltyRoll: safeDice(6, 4, 5, 2, 6), basePenalty: 23, finalPenalty: 46 });
+    expect(random.calls).toBe(5 * 2);
   });
-  it('31/32: even an all-OUT loser rolls seven ordinary dice', () => {
+  it('31/32: even an all-OUT loser rolls seven fresh SAFE dice with no carried OUT state', () => {
     const initial = createPenaltyState(round(player('loser', 0, 7, 7)), 'test-penalty');
-    const random = new SequenceRandom(Array<number>(7).fill(0));
-    expect(rollPenalty(initial, 'loser', random, 'test-penalty').penalties[0]).toMatchObject({ penaltyRoll: [1, 1, 1, 1, 1, 1, 1], basePenalty: 7 });
-    expect(random.calls).toBe(7);
+    const random = sourceFor(1, 1, 1, 1, 1, 1, 1);
+    expect(rollPenalty(initial, 'loser', random, 'test-penalty').penalties[0]).toMatchObject({ penaltyRoll: safeDice(1, 1, 1, 1, 1, 1, 1), basePenalty: 7 });
+    expect(random.calls).toBe(7 * 2);
   });
   it('33: 1 and 5 are summed with no scoring/removal/reroll effects (§36)', () => {
     const initial = createPenaltyState(round(player('loser', 150, 4)), 'test-penalty');
     const random = sourceFor(1, 5, 5, 6);
     expect(rollPenalty(initial, 'loser', random, 'test-penalty').penalties[0]).toMatchObject({
-      status: 'resolved', diceCount: 4, penaltyRoll: [1, 5, 5, 6], basePenalty: 17, multiplier: 2, finalPenalty: 34,
+      status: 'resolved', diceCount: 4, penaltyRoll: safeDice(1, 5, 5, 6), basePenalty: 17, multiplier: 2, finalPenalty: 34,
     });
-    expect(random.calls).toBe(4);
+    expect(random.calls).toBe(4 * 2);
   });
   it.each([[0, 1], [1, 2], [9, 10]])('committed completion count %i gives multiplier %i', (count, multiplier) => {
-    expect(calculatePenalty([1, 5, 5, 6], count!)).toEqual({
-      penaltyRoll: [1, 5, 5, 6], basePenalty: 17, multiplier, finalPenalty: 17 * multiplier!,
+    expect(calculatePenalty(safeDice(1, 5, 5, 6), count!)).toEqual({
+      penaltyRoll: safeDice(1, 5, 5, 6), basePenalty: 17, multiplier, finalPenalty: 17 * multiplier!,
     });
   });
   it.each([1, 2, 3, 4, 5, 6, 7])('basePenalty ranges from %i to six times that dice count', (count) => {
-    expect(calculatePenalty(Array<DieValue>(count).fill(1), 0).basePenalty).toBe(count);
-    expect(calculatePenalty(Array<DieValue>(count).fill(6), 0).basePenalty).toBe(count * 6);
+    expect(calculatePenalty(Array<DieResult>(count).fill(safe(1)), 0).basePenalty).toBe(count);
+    expect(calculatePenalty(Array<DieResult>(count).fill(safe(6)), 0).basePenalty).toBe(count * 6);
   });
-  it('32: zero RNG values produce ones, never OUT, and the top boundary produces six', () => {
-    const random = new SequenceRandom([0, 1 / 6, 2 / 6, 3 / 6, 4 / 6, 1 - Number.EPSILON]);
-    expect(rollPenaltyDice(6, random)).toEqual([1, 2, 3, 4, 5, 6]);
-    expect(random.calls).toBe(6);
+  it('32: careful OUT checks still consume draws and face boundaries produce one through six', () => {
+    const random = new SequenceRandom([0, 1 / 6, 2 / 6, 3 / 6, 4 / 6, 1 - Number.EPSILON].flatMap((face) => [0, face]));
+    expect(rollPenaltyDice(6, random, 7, 'careful')).toEqual(safeDice(1, 2, 3, 4, 5, 6));
+    expect(random.calls).toBe(6 * 2);
   });
 });
 
@@ -97,13 +100,13 @@ describe('SPEC §77 case 34: independent ordered loser processing', () => {
     const initial = createPenaltyState(input, 'test-penalty');
     const random = sourceFor(1, 2, 3, 4, 5, 6);
     const first = rollPenalty(initial, 'z', random, 'test-penalty');
-    expect(random.calls).toBe(3);
+    expect(random.calls).toBe(3 * 2);
     expect(first.penalties[1]?.status).toBe('pending');
     const last = rollPenalty(first, 'a', random, 'test-penalty');
-    expect(random.calls).toBe(6);
+    expect(random.calls).toBe(6 * 2);
     expect(last.penalties).toEqual([
-      { playerId: 'z', diceCount: 3, status: 'resolved', penaltyRoll: [1, 2, 3], basePenalty: 6, multiplier: 10, finalPenalty: 60 },
-      { playerId: 'a', diceCount: 3, status: 'resolved', penaltyRoll: [4, 5, 6], basePenalty: 15, multiplier: 10, finalPenalty: 150 },
+      { playerId: 'z', diceCount: 3, status: 'resolved', penaltyRoll: safeDice(1, 2, 3), basePenalty: 6, multiplier: 10, finalPenalty: 60 },
+      { playerId: 'a', diceCount: 3, status: 'resolved', penaltyRoll: safeDice(4, 5, 6), basePenalty: 15, multiplier: 10, finalPenalty: 150 },
     ]);
     expect(last.totalCompletionCount).toBe(9);
   });
@@ -146,18 +149,18 @@ describe('penalty input boundaries', () => {
   it.each([0, 8, -1, 1.5, NaN])('rejects invalid dice count %s before drawing', (count) => {
     const random = new SequenceRandom([]);
     expect(() => rollPenaltyDice(count, random)).toThrow(RangeError);
-    expect(random.calls).toBe(0);
+    expect(random.calls).toBe(0 * 2);
   });
   it.each([-1, 1, NaN, Infinity])('rejects invalid RandomSource value %s', (value) => {
     expect(() => rollPenaltyDice(1, new SequenceRandom([value]))).toThrow(RangeError);
   });
   it.each([-1, 0.5, NaN, Infinity])('rejects invalid completion count %s', (count) => {
-    expect(() => calculatePenalty([1], count)).toThrow(RangeError);
+    expect(() => calculatePenalty(safeDice(1), count)).toThrow(RangeError);
     expect(() => createPenaltyState(round(player('loser', 0, 7), count), 'test-penalty')).toThrow(RangeError);
   });
-  it('rejects invalid faces and counts rather than accepting OUT or empty penalties', () => {
+  it('rejects invalid faces and counts rather than accepting numeric legacy results or empty penalties', () => {
     for (const dice of [[], [0], [7], [1.5], [NaN], [null], Array(8).fill(1)]) {
-      expect(() => calculatePenalty(dice as readonly DieValue[], 0)).toThrow(RangeError);
+      expect(() => calculatePenalty(dice as unknown as readonly DieResult[], 0)).toThrow(RangeError);
     }
   });
   it('does not partially commit when the random source fails mid-roll', () => {
@@ -167,10 +170,10 @@ describe('penalty input boundaries', () => {
     expect(initial).toEqual(before);
   });
   it('copies result dice instead of retaining a caller-mutable array', () => {
-    const dice: DieValue[] = [1, 5];
+    const dice: DieResult[] = safeDice(1, 5);
     const result = calculatePenalty(dice, 0);
-    dice[0] = 6;
-    expect(result.penaltyRoll).toEqual([1, 5]);
+    dice[0] = safe(6);
+    expect(result.penaltyRoll).toEqual(safeDice(1, 5));
     expect(result.basePenalty).toBe(6);
   });
   it('rejects incomplete rounds and both kinds of sudden-death round', () => {

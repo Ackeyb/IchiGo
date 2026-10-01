@@ -1,14 +1,14 @@
-import { nextRandom } from './randomSource';
+import { DEFAULT_THROW_STYLE, rollGameDice } from './rollGenerator';
 import type { RandomSource } from './randomSource';
 import { calculateFinalRanking } from './ranking';
 import { getRemainingDice } from './rollResolver';
 import { shouldStartSuddenDeath } from './suddenDeath';
 import type { SuddenDeathState } from './suddenDeath';
 import { DEFAULT_DICE_MODE, isDiceMode } from './types';
-import type { DiceMode, DieValue } from './types';
+import type { DiceMode, DieResult, DieValue, ThrowStyle } from './types';
 
 export type PenaltyResult = Readonly<{
-  penaltyRoll: readonly DieValue[];
+  penaltyRoll: readonly DieResult[];
   basePenalty: number;
   multiplier: number;
   finalPenalty: number;
@@ -39,28 +39,36 @@ export function getPenaltyMultiplier(totalCompletionCount: number): number {
   return totalCompletionCount + 1;
 }
 
-/** SPEC §35: exactly one D6 draw per die, with no OUT or normal scoring rules. */
-export function rollPenaltyDice(count: number, random: RandomSource, diceMode: DiceMode = DEFAULT_DICE_MODE): readonly DieValue[] {
+/** v3 §3.2: OUT first, then a D6 draw only for SAFE; no normal scoring resolution. */
+export function rollPenaltyDice(
+  count: number, random: RandomSource, diceMode: DiceMode = DEFAULT_DICE_MODE,
+  throwStyle: ThrowStyle = DEFAULT_THROW_STYLE,
+): readonly DieResult[] {
   assertDiceCount(count, diceMode);
-  return Array.from({ length: count }, () => (Math.floor(nextRandom(random) * 6) + 1) as DieValue);
+  return rollGameDice(count, throwStyle, random, diceMode);
 }
 
-/** SPEC §36, §66: all faces, including 1 and 5, contribute only their face value. */
-export function calculatePenalty(dice: readonly DieValue[], totalCompletionCount: number, diceMode: DiceMode = DEFAULT_DICE_MODE): PenaltyResult {
+/** v3 §3.3: conversion is for calculation only; authoritative OUT keeps value null. */
+export function getPenaltyDieValue(die: DieResult): DieValue {
+  if (typeof die === 'object' && die !== null) {
+    if (die.status === 'out' && die.value === null) return 6;
+    if (die.status === 'safe' && Number.isInteger(die.value) && die.value >= 1 && die.value <= 6) return die.value;
+  }
+  throw new RangeError('Invalid penalty die result.');
+}
+
+/** v3 §3.3–3.6: SAFE faces and OUT(6) are summed in committed order before multiplying. */
+export function calculatePenalty(dice: readonly DieResult[], totalCompletionCount: number, diceMode: DiceMode = DEFAULT_DICE_MODE): PenaltyResult {
   assertDiceCount(dice.length, diceMode);
   const multiplier = getPenaltyMultiplier(totalCompletionCount);
   // Iteration visits sparse entries too; Array.some would silently skip them.
-  for (const value of dice) {
-    if (!Number.isInteger(value) || value < 1 || value > 6) {
-      throw new RangeError('Penalty results must be D6 values.');
-    }
-  }
-  const basePenalty = dice.reduce<number>((sum, value) => sum + value, 0);
+  let basePenalty = 0;
+  for (const die of dice) basePenalty += getPenaltyDieValue(die);
   const finalPenalty = basePenalty * multiplier;
   if (!Number.isSafeInteger(finalPenalty)) {
     throw new RangeError('Penalty exceeds exact numeric representation.');
   }
-  return { penaltyRoll: [...dice], basePenalty, multiplier, finalPenalty };
+  return { penaltyRoll: dice.map((die) => ({ ...die })), basePenalty, multiplier, finalPenalty };
 }
 
 /** Snapshot the decisive round's loser counts in the original fixed play order. */
@@ -95,6 +103,7 @@ export function rollPenalty(
   random: RandomSource,
   expectedPenaltyId: string,
   diceMode: DiceMode = DEFAULT_DICE_MODE,
+  throwStyle: ThrowStyle = DEFAULT_THROW_STYLE,
 ): PenaltyState {
   if (expectedPenaltyId !== state.penaltyId) return state;
   const index = state.penalties.findIndex((entry) => entry.status === 'pending');
@@ -102,7 +111,7 @@ export function rollPenalty(
   if (!pending || pending.playerId !== playerId) return state;
   getPenaltyMultiplier(state.totalCompletionCount);
   const result = calculatePenalty(
-    rollPenaltyDice(pending.diceCount, random, diceMode),
+    rollPenaltyDice(pending.diceCount, random, diceMode, throwStyle),
     state.totalCompletionCount,
     diceMode,
   );

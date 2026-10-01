@@ -162,7 +162,7 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
       } : undefined;
       content = <section className="panel results"><p className="eyebrow">PENALTY {state.penaltyIndex + 1} / {state.penalty.penalties.length}</p>
         <h2 ref={heading} tabIndex={-1}>ペナルティ：{name(entry.playerId)}</h2><p>ペナルティダイス：{entry.diceCount}個</p>
-        <DicePresentation dice={committedEntry.status === 'resolved' ? committedEntry.penaltyRoll.map((value) => ({ status: 'safe', value })) : undefined}
+        <DicePresentation dice={committedEntry.status === 'resolved' ? committedEntry.penaltyRoll : undefined}
           diceMode={game.diceMode} kind="penalty" revision={committedState.revision} busy={busy} presentation={penaltyPresentation} onCue={playCue}
           onReveal={store.reveal} onPresented={store.presented} config={dicePresentation} />
         {entry.status === 'pending' ? <><ReadyDice count={entry.diceCount} />{action('ペナルティROLL', 'rollPenalty')}</>

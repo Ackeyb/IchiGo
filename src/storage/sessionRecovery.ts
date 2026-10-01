@@ -5,7 +5,7 @@ import { shouldStartSuddenDeath } from '../game/suddenDeath';
 import type { FlowState } from '../game/gameFlow';
 import type { PenaltyEntry } from '../game/penalty';
 import { isDiceMode, isRollLimit } from '../game/types';
-import type { DiceMode, DieResult, PlayerTurn, RollResolution, TurnState } from '../game/types';
+import type { DiceMode, DieResult, PlayerTurn, RollResolution, ThrowStyle, TurnState } from '../game/types';
 import type { SuddenDeathState } from '../game/suddenDeath';
 
 export const SESSION_GAME_KEY = 'ichi-go:game';
@@ -122,12 +122,14 @@ function validTurn(value: unknown, game: SuddenDeathState, gameNumber: number, r
   }
 }
 
-function validPenaltyEntry(value: unknown, expected: PenaltyEntry, totalCompletionCount: number, diceMode: DiceMode): value is PenaltyEntry {
+function validPenaltyEntry(value: unknown, expected: PenaltyEntry, totalCompletionCount: number, diceMode: DiceMode, throwStyle: ThrowStyle): value is PenaltyEntry {
   if (!isRecord(value) || value.playerId !== expected.playerId || value.diceCount !== expected.diceCount
     || (value.status !== 'pending' && value.status !== 'resolved')) return false;
   if (value.status === 'pending') return value.penaltyRoll === undefined && value.basePenalty === undefined
     && value.multiplier === undefined && value.finalPenalty === undefined;
-  if (!Array.isArray(value.penaltyRoll) || value.penaltyRoll.length !== expected.diceCount) return false;
+  if (!Array.isArray(value.penaltyRoll) || value.penaltyRoll.length !== expected.diceCount
+    || !value.penaltyRoll.every(validDie)
+    || (throwStyle === 'careful' && value.penaltyRoll.some((die) => die.status === 'out'))) return false;
   try {
     const calculated = calculatePenalty(value.penaltyRoll as never, totalCompletionCount, diceMode);
     return same(calculated, {
@@ -149,7 +151,7 @@ function validPenalty(value: unknown, game: SuddenDeathState, gameNumber: number
   try { expected = createPenaltyState(game, `${gameNumber}/penalty`); } catch { return false; }
   const index = Number(penaltyIndex);
   if (value.penalties.length !== expected.penalties.length || index < 0 || index >= value.penalties.length) return false;
-  if (value.penalties.some((entry, position) => !validPenaltyEntry(entry, expected.penalties[position]!, game.totalCompletionCount, game.diceMode))) return false;
+  if (value.penalties.some((entry, position) => !validPenaltyEntry(entry, expected.penalties[position]!, game.totalCompletionCount, game.diceMode, game.throwStyle))) return false;
   const entries = value.penalties as unknown as readonly PenaltyEntry[];
   if (phase === 'finished') return index === entries.length - 1 && entries.every((entry) => entry.status === 'resolved');
   return entries.every((entry, position) => position < index ? entry.status === 'resolved'

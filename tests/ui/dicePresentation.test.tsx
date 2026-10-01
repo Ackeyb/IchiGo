@@ -7,6 +7,7 @@ import { DicePresentation } from '../../src/app/DicePresentation';
 import { createGameStore } from '../../src/app/gameStore';
 import type { DiceRenderer } from '../../src/dice/types';
 import type { RandomSource } from '../../src/game/randomSource';
+import { initialSetup } from '../../src/game/setup';
 
 class Sequence implements RandomSource {
   calls = 0;
@@ -52,6 +53,42 @@ function deferred() {
 }
 
 describe('3D dice React integration', () => {
+  it('passes Penalty OUT in committed order to the renderer and keeps OUT and red SAFE faces in fallback', async () => {
+    const random = new Sequence([
+      ...normal(1, 1, 1, 1, 1), ...normal(2, 2, 2, 2, 2),
+      0, ...normal(1, 5, 2), 0,
+    ]);
+    const store = createGameStore(random);
+    store.dispatch(0, { type: 'start', setup: { ...initialSetup(), diceMode: 5,
+      participants: [{ id: 'w', name: 'W' }, { id: 'l', name: 'L' }] } });
+    store.presented(store.getSnapshot().state.revision);
+    for (const type of ['roll', 'next', 'roll', 'ranking', 'reveal', 'penalty'] as const) {
+      store.dispatch(store.getSnapshot().state.revision, { type });
+      store.presented(store.getSnapshot().state.revision);
+    }
+    const instance = renderer({ present: vi.fn(async () => { throw new Error('Fallback'); }) });
+    render(<App store={store} dicePresentation={{ createRenderer: async () => instance, prefersReducedMotion: () => false, resultStepMs: 0 }} />);
+    fireEvent.click(screen.getByRole('button', { name: 'ペナルティROLL' }));
+    await waitFor(() => expect(instance.present).toHaveBeenCalledOnce());
+    expect(instance.present).toHaveBeenCalledWith({ id: `penalty/${store.getSnapshot().state.revision}`, kind: 'penalty', dice: [
+      { status: 'out', value: null }, { status: 'safe', value: 1 }, { status: 'safe', value: 5 },
+      { status: 'safe', value: 2 }, { status: 'out', value: null },
+    ] });
+    await waitFor(() => expect(screen.getByRole('list', { name: '確定したダイスの出目' })).toBeTruthy());
+    const list = screen.getByRole('list', { name: '確定したダイスの出目' });
+    expect([...list.children].map((die) => die.getAttribute('aria-label'))).toEqual(['OUT', '出目 1', '出目 5', '出目 2', 'OUT']);
+    for (const index of [0, 4]) {
+      expect(list.children[index]!.querySelector('.die-face')).toBeNull();
+      expect(list.children[index]!.textContent).toBe('OUT');
+    }
+    expect(list.querySelectorAll('.die-face-accent')).toHaveLength(2);
+    expect(list.querySelectorAll('.die-status, .die-points')).toHaveLength(0);
+    expect(screen.queryByLabelText('出目 6')).toBeNull();
+    paint();
+    expect(random.calls).toBe(28);
+    expect(screen.getByRole('button', { name: '最終結果を見る' })).toBeTruthy();
+  });
+
   it.each(['initialization', 'presentation'] as const)('ignores completion after unmount during %s', async (phase) => {
     const pending = deferred();
     const instance = renderer(phase === 'initialization'
@@ -189,7 +226,7 @@ describe('3D dice React integration', () => {
     const random = new Sequence([
       ...normal(1, 1, 1, 1, 1, 1, 1),
       ...Array<number>(7).fill(0),
-      ...[1, 2, 3, 4, 5, 6, 1].map((value) => (value - 0.5) / 6),
+      ...normal(1, 2, 3, 4, 5, 6, 1),
     ]);
     const store = createGameStore(random);
     const animations = [deferred(), deferred(), deferred()];
@@ -246,7 +283,7 @@ describe('3D dice React integration', () => {
     expect(penaltyMetrics?.querySelectorAll('.penalty-metric')).toHaveLength(3);
     expect(penaltyMetrics?.textContent).toContain('BASE PENALTY22');
     expect(penaltyMetrics?.textContent).toContain('ペナルティポイント44pt');
-    expect(random.calls).toBe(28);
+    expect(random.calls).toBe(35);
   });
 
   it('presents multiple scoring dice only after they stop, then reveals score and COMPLETE in order', async () => {

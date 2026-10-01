@@ -5,7 +5,7 @@ import { calculateFinalRanking, calculateProvisionalRanking } from '../../src/ga
 import { assertPlayerTurn, getRemainingDice, resolveRoll } from '../../src/game/rollResolver';
 import { shouldStartSuddenDeath, startSuddenDeath } from '../../src/game/suddenDeath';
 import type { SuddenDeathState } from '../../src/game/suddenDeath';
-import type { DieValue, TurnState } from '../../src/game/types';
+import type { DieResult, TurnState } from '../../src/game/types';
 
 function initial(turnId = 'game/round/player'): TurnState {
   return {
@@ -54,7 +54,7 @@ describe('STEP 7 audit regressions', () => {
   });
 
   it('rejects missing penalty faces instead of accepting a zero-point penalty', () => {
-    expect(() => calculatePenalty(new Array<DieValue>(1), 0)).toThrow(RangeError);
+    expect(() => calculatePenalty(new Array<DieResult>(1), 0)).toThrow(RangeError);
   });
 });
 
@@ -102,8 +102,8 @@ describe('cross-phase audit', () => {
     let penalty = createPenaltyState(round, 'game/penalty');
     for (const [index, id] of loserIds.entries()) {
       let draws = 0;
-      penalty = rollPenalty(penalty, id, { next: () => { draws++; return (index % 6 + 0.5) / 6; } }, 'game/penalty');
-      expect(draws).toBe(7);
+      penalty = rollPenalty(penalty, id, { next: () => draws++ % 2 === 0 ? 0.9 : (index % 6 + 0.5) / 6 }, 'game/penalty');
+      expect(draws).toBe(14);
       expect(penalty.penalties[index]).toMatchObject({
         status: 'resolved', basePenalty: 7 * (index % 6 + 1), multiplier: 2 * count + 2,
         finalPenalty: 7 * (index % 6 + 1) * (2 * count + 2),

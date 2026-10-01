@@ -6,6 +6,33 @@ import { DiceRendererError } from '../../src/dice/types';
 afterEach(() => vi.unstubAllGlobals());
 
 describe('ThreeDiceRenderer lifecycle', () => {
+  it.each([5, 7, 10])('uses the existing OUT trajectory for %i penalty dice without converting OUT to a face', async (count) => {
+    const renderer = new ThreeDiceRenderer({} as HTMLElement);
+    const group = new Group();
+    const geometry = new BoxGeometry(1.28, 1.28, 1.28);
+    const materials = Array.from({ length: 6 }, () => new MeshStandardMaterial());
+    const outMaterials = Array.from({ length: 6 }, () => new MeshStandardMaterial());
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal('performance', { now: () => 0 });
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { frames.push(callback); return frames.length; });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    Object.assign(renderer, { initialized: true, renderer: { render: vi.fn() }, scene: {}, camera: {}, group, geometry, materials, outMaterials });
+    const completion = renderer.present({ id: `penalty/${count}`, kind: 'penalty', dice: [
+      { status: 'out', value: null }, ...Array.from({ length: count - 1 }, () => ({ status: 'safe' as const, value: 5 as const })),
+    ] });
+    expect(group.children).toHaveLength(count);
+    const outMesh = group.children[0]!;
+    expect((outMesh as unknown as { material: unknown }).material).toBe(outMaterials);
+    frames.shift()!(900);
+    expect(outMesh.position.y).toBeLessThan(0);
+    expect(group.children).toContain(outMesh);
+    frames.shift()!(1050);
+    await completion;
+    expect(group.children).toHaveLength(count - 1);
+    expect(group.children).not.toContain(outMesh);
+    renderer.dispose();
+  });
+
   it('redraws the committed scene when resizing an idle canvas', () => {
     const renderer = new ThreeDiceRenderer({ clientWidth: 320, clientHeight: 190 } as HTMLElement);
     const render = vi.fn();

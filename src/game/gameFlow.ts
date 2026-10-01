@@ -144,7 +144,7 @@ function apply(state: FlowState, action: FlowAction, random: RandomSource): Flow
   if (state.phase === 'penalty') {
     const entry = state.penalty.penalties[state.penaltyIndex]!;
     if (action.type === 'rollPenalty' && entry.status === 'pending') {
-      return { ...state, penalty: rollPenalty(state.penalty, entry.playerId, random, state.penalty.penaltyId, game.diceMode) };
+      return { ...state, penalty: rollPenalty(state.penalty, entry.playerId, random, state.penalty.penaltyId, game.diceMode, game.throwStyle) };
     }
     if (entry.status !== 'resolved') return state;
     if (action.type === 'nextPenalty' && state.penaltyIndex < state.penalty.penalties.length - 1) {

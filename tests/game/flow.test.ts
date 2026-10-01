@@ -19,7 +19,7 @@ function finishedGame(gameSetup: Setup) {
   const random = new SequenceRandom([
     ...safeFaces(gameSetup.diceMode, 1),
     ...safeFaces(gameSetup.diceMode * (gameSetup.participants.length - 1), 2),
-    ...Array<number>(gameSetup.diceMode * (gameSetup.participants.length - 1)).fill(0),
+    ...safeFaces(gameSetup.diceMode * (gameSetup.participants.length - 1), 1),
   ]);
   let state = initialFlow();
   const perform = (action: FlowAction) => { state = advanceFlow(state, state.revision, action, random); };

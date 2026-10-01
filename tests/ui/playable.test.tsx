@@ -194,7 +194,7 @@ describe('Setup', () => {
 
 describe('playable flows', () => {
   it('plays a two-player game through continuation, complete, ranking, loser, penalty and replay', () => {
-    const { store, random } = mount([...normal(1, 2, 2, 2, 2, 2, 2), ...normal(2, 2, 2, 2, 2, 2), ...seven(1), ...[1, 2, 3, 4, 5, 6].map((face) => (face - 0.5) / 6)]);
+    const { store, random } = mount([...normal(1, 2, 2, 2, 2, 2, 2), ...normal(2, 2, 2, 2, 2, 2), ...seven(1), ...normal(1, 2, 3, 4, 5, 6)]);
     click('サウンド ON');
     names(); fireEvent.click(screen.getByLabelText('乱暴')); click('ゲーム開始');
     expectHeading('現在プレイヤー：あき');
@@ -244,7 +244,7 @@ describe('playable flows', () => {
     expect(replay.game.players.every((p) => p.score === 0 && p.activeDice === 7 && !p.turnFinished)).toBe(true);
     expect(replay.gameNumber).toBe(finished.gameNumber + 1);
     expect(replay).not.toHaveProperty('penalty');
-    expect(random.calls).toBe(46);
+    expect(random.calls).toBe(52);
     expect(screen.getByRole('button', { name: 'サウンド OFF' })).toBeTruthy();
   });
 
@@ -275,7 +275,7 @@ describe('playable flows', () => {
   });
 
   it('reveals all tied losers and rolls their independent penalties in the fixed order', () => {
-    const { random } = mount([...seven(1), ...seven('out'), ...seven(2), ...Array<number>(7).fill(0), ...Array<number>(7).fill(0.99)]);
+    const { random } = mount([...seven(1), ...seven('out'), ...seven(2), ...seven(1), ...seven(6)]);
     click('サウンド ON'); names(['勝者', '敗者A', '敗者B']); click('ゲーム開始');
     click('ROLL'); click('次へ'); click('ROLL');
     expect(screen.getByText('OUTあり・完走不能。OUTダイスは再ROLLされません。')).toBeTruthy();
@@ -290,7 +290,7 @@ describe('playable flows', () => {
     click('ペナルティROLL'); expect(screen.getByText('84')).toBeTruthy();
     click('最終結果を見る');
     expect(screen.getByText('14 pt')).toBeTruthy(); expect(screen.getByText('84 pt')).toBeTruthy();
-    expect(random.calls).toBe(49);
+    expect(random.calls).toBe(63);
     click('新しいゲーム'); click('確認して進む');
     expect(screen.getAllByRole('textbox')).toHaveLength(3);
     expect(screen.getAllByRole('textbox').map((input) => (input as HTMLInputElement).value)).toEqual(['勝者', '敗者A', '敗者B']);

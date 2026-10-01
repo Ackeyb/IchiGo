@@ -82,7 +82,7 @@ describe('session recovery format and validation', () => {
     if (state.phase !== 'penalty') throw new Error('penalty expected');
     const entry = state.penalty.penalties[0]!;
     expectValidStateToBeRejected({ ...state, penalty: { ...state.penalty, penalties: [{ ...entry,
-      status: 'resolved', penaltyRoll: [1], basePenalty: 1, multiplier: 2, finalPenalty: 2,
+      status: 'resolved', penaltyRoll: [{ status: 'safe', value: 1 }], basePenalty: 1, multiplier: 2, finalPenalty: 2,
     }] } });
   });
 

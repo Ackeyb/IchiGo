@@ -149,10 +149,10 @@ describe('Dice Mode round and penalty propagation', () => {
   });
 
   it.each([8, 9, 10] as const)('accepts %i penalty dice in 10 DICE', (count) => {
-    const random = new SequenceRandom(Array<number>(count).fill(0));
-    expect(rollPenaltyDice(count, random, 10)).toEqual(Array<number>(count).fill(1));
-    expect(calculatePenalty(Array<DieValue>(count).fill(6), 0, 10).basePenalty).toBe(count * 6);
-    expect(random.calls).toBe(count);
+    const random = new SequenceRandom(Array.from({ length: count }, () => [0.9, 0]).flat());
+    expect(rollPenaltyDice(count, random, 10)).toEqual(Array<DieResult>(count).fill(safe(1)));
+    expect(calculatePenalty(Array<DieResult>(count).fill(safe(6)), 0, 10).basePenalty).toBe(count * 6);
+    expect(random.calls).toBe(count * 2);
   });
 
   it.each([[5, 6], [7, 8], [10, 11]] as const)('rejects penalty count %i above mode %i', (diceMode, count) => {
@@ -160,12 +160,12 @@ describe('Dice Mode round and penalty propagation', () => {
   });
 
   it('accepts 14 penalty dice and rejects a fifteenth die', () => {
-    const random = new SequenceRandom(Array<number>(14).fill(0));
-    expect(rollPenaltyDice(14, random, 14)).toEqual(Array<number>(14).fill(1));
-    expect(calculatePenalty(Array<DieValue>(14).fill(6), 0, 14).basePenalty).toBe(84);
-    expect(random.calls).toBe(14);
+    const random = new SequenceRandom(Array.from({ length: 14 }, () => [0.9, 0]).flat());
+    expect(rollPenaltyDice(14, random, 14)).toEqual(Array<DieResult>(14).fill(safe(1)));
+    expect(calculatePenalty(Array<DieResult>(14).fill(safe(6)), 0, 14).basePenalty).toBe(84);
+    expect(random.calls).toBe(28);
     expect(() => rollPenaltyDice(15, new SequenceRandom([]), 14)).toThrow(RangeError);
-    expect(() => calculatePenalty(Array<DieValue>(15).fill(1), 0, 14)).toThrow(RangeError);
+    expect(() => calculatePenalty(Array<DieResult>(15).fill(safe(1)), 0, 14)).toThrow(RangeError);
   });
 
   it('uses decisive 10 DICE remaining count without inferring the mode', () => {
