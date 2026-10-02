@@ -84,16 +84,19 @@ SPEC §29・30のサドンデス判定や敗者確定フェーズへの進行は
 ## Penalty（STEP 6）
 
 - `createPenaltyState(round, penaltyId)`: 最終ラウンドの終了状態、元の全参加者一覧、確定済み累積完走数からペナルティ状態を生成します。
-- `rollPenalty(state, playerId, random, expectedPenaltyId)`: 固定順の次の未処理敗者だけを1回ROLLし、新しい確定状態を返します。
-- `rollPenaltyDice(count, random)`: OUT判定をせず、指定個数のD6用乱数だけを消費する低水準関数です。
-- `calculatePenalty(dice, totalCompletionCount)`: 出目合計・倍率・最終ポイントを計算し、出目のコピーとともに返します。
+- `rollPenalty(state, playerId, random, expectedPenaltyId, diceMode?, throwStyle?)`: 固定順の次の未処理敗者だけを1回ROLLし、新しい確定状態を返します。
+- `rollPenaltyDice(count, random, diceMode?, throwStyle?)`: 各dieでOUT判定を行い、SAFEの場合のみD6を生成する低水準関数です。
+- `calculatePenalty(dice, totalCompletionCount, diceMode?)`: SAFEの出目と計算時のみ6換算するOUTから、BASE・倍率・FINALを計算し、die結果のコピーとともに返します。
 - `getPenaltyMultiplier(totalCompletionCount)`: 既存の倍率計算をUI表示にも公開しています。
 
 初期化時は既存Rankingから同率最下位全員を取得し、元の参加者一覧順に並べます。
 全員のターン終了と参加者の整合性を検証し、サドンデス対象ラウンドは拒否します。
-ダイス数は敗者の確定残数（active + stranded）をコピーし、累積完走数も開始時の値を保持します。
+各敗者は元の参加者順で個別に1回ROLLします。通常PlayのROLL上限はPenaltyに適用しません。
+ダイス数は敗者の確定残数（active + stranded）をコピーし、Dice Modeに応じて1〜14個を受け付けます。累積完走数も開始時の値を保持します。
 各結果は `penalties` 内でプレイヤーIDに対応した `penaltyRoll / basePenalty / multiplier / finalPenalty` として保持します。
-通常ROLLの抽選・得点解決処理は呼びません。ゲーム本編の状態は書き換えません。
+PenaltyのOUT確率は通常Playと同じthrowStyleを使います。各dieでOUT判定を先に行い、SAFEだけD6を生成します。
+OUTの権威ある結果は `status: 'out', value: null` です。BASE計算時だけOUTを6として数え、保存・表示上のdie結果を6 faceに変換しません。
+通常ROLLの得点解決処理は呼びません。ゲーム本編の状態は書き換えません。
 
 `penaltyId`はゲームをまたいで再利用しないIDを指定し、要求には操作時点のIDを保持します。
 ID不一致・重複・順番違い・敗者以外のROLL要求は同じ状態を返し、乱数を消費しません。
@@ -102,8 +105,8 @@ ID不一致・重複・順番違い・敗者以外のROLL要求は同じ状態�
 呼び出し元は常に最新のPenaltyStateを渡し、戻り値を採用してから次の要求を処理します。
 過去の状態を再入力することや、処理中に初期化し直すことを隠れた状態で検出する機能は持ちません。
 
-`tests/game/penalty.test.ts` はSPEC §77の31〜34、1〜7個の最小・最大合計、倍率×1/×2/×10、
-OUTなし、1/5の通常加算、元の順序、個別結果、二重確定防止、入力非変更、乱数境界を検証します。
+`tests/game/penalty.test.ts` はSPEC §77の31〜34、1〜7個の合計、倍率×1/×2/×10、1/5の通常加算、元の順序、個別結果、二重確定防止、入力非変更、乱数境界を検証します。
+`tests/game/penaltyOut.test.ts` と `tests/game/diceMode.test.ts` はthrowStyleごとのOUT、SAFEのみのD6生成、OUTの6換算とdie結果保持、14個の有効範囲および15個の拒否を検証します。
 
 ## Core Logic Audit（STEP 7）
 
