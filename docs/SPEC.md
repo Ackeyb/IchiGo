@@ -1,6 +1,6 @@
 # Ichi-Go Game
 
-## Web Application Specification v2
+## Web Application Specification v3
 
 ### Codex Implementation Source of Truth
 
@@ -8,13 +8,13 @@
 
 # 0. この文書について
 
-本書はIchiGo v2の唯一のSource of Truthである。旧仕様、変更設計文書、実装、テストと競合する場合は本書を優先する。
+本書は現在のIchiGo v3正式仕様であり、唯一のSource of Truthである。旧仕様・変更履歴・実装・テストと競合する場合は本書を優先する。
 
-現行実装は、main / 366c732でFinal Auditを完了したv1を基準に拡張したv2。V2 STEP 1〜7の実装・QAとSTEP 8のFinal Auditを完了し、Blocking issue 0件・369テスト成功を確認済み。既存の正しいEngine・Presentation・障害時継続設計を保持している。
+現行実装の基準はmain / cc4ab15。v3実装・人間QAは完了済み。
 
-[変更仕様書](v2_変更仕様書.md)は統合済みの設計履歴であり、第二の正本ではない。[FINAL_AUDIT.md](FINAL_AUDIT.md)はv1の監査記録として保持する。
+[v3変更仕様書](v3_変更仕様書.md)はv2 → v3の設計・変更履歴、[v2変更仕様書](v2_変更仕様書.md)と[FINAL_AUDIT](FINAL_AUDIT.md)は過去の履歴資料であり、第二の正本ではない。
 
-仕様が曖昧な場合に独自のゲームルールを追加しない。以下の具体的な7個の出目・得点例は、明記がない限り7 DICEの例であり、全Modeの初期個数を7に限定しない。
+独自のゲームルールを追加しない。具体的な7個の例は、明記がない限り7 DICEの例であり、全Modeの初期個数を7に限定しない。
 
 ---
 
@@ -22,7 +22,7 @@
 
 2～10人でプレイするダイスゲーム。
 
-各プレイヤーは選択されたDice Mode（5 / 7 / 10）個の6面ダイスから開始する。
+各プレイヤーは選択されたDice Mode（5 / 7 / 10 / 14）個の6面ダイスから開始する。
 
 ゲーム本編では、現在ROLL可能なダイスをすべて振る。
 
@@ -59,17 +59,19 @@ OUTになったダイスは、
 プレイヤーは2〜10人。人数はparticipants.length（Player row数）から派生し、独立したplayerCountを二重管理しない。
 
 ```ts
-type DiceMode = 5 | 7 | 10;
+type DiceMode = 5 | 7 | 10 | 14;
 const DEFAULT_DICE_MODE: DiceMode = 7;
 // authoritative configurationから派生。独立した可変stateとして保存しない。
 const initialDiceCount = diceMode;
 ```
 
-初回Setupは2人・空欄name・初期順・7 DICE・throwStyle=normal。行追加は空欄nameで最大10人まで。各行を削除でき、中間行の削除も許可する。2人のとき削除不可。追加・削除・並べ替え後は配列順から表示順を正常化し、残ったinternal Player IDを振り直さない。IDは一意で名前や表示位置とは独立する。同名を許可する。
+初回Setupは2人・空欄name・初期順・7 DICE・throwStyle=normal・ROLL上限=∞。行追加は空欄nameで最大10人まで。各行を削除でき、中間行の削除も許可する。2人のとき削除不可。追加・削除・並べ替え後は配列順から表示順を正常化し、残ったinternal Player IDを振り直さない。IDは一意で名前や表示位置とは独立する。同名を許可する。
 
-通常Setupでは名前・人数・順番・Dice Mode・投げ方を編集可能。開始時の名前検証は§85・97に従う。再戦準備の制限は§56に従う。
+通常Setupでは名前・人数・順番・Dice Mode・投げ方・ROLL上限を編集可能。開始時の名前検証は§85・97に従う。再戦準備の制限は§56に従う。
 
-Dice Modeはゲーム全体のauthoritative configuration。現在のdice countsやその合計から推測しない。ゲーム開始後は人物・名前・順番・Dice Mode・投げ方を変更不可。Modeで変わるゲームルールは初期ダイス数だけであり、得点、OUT確率、継続、順位、倍率は共通。
+Dice Modeはゲーム全体のauthoritative configuration。現在のdice countsやその合計から推測しない。ゲーム開始後は人物・名前・順番・Dice Mode・投げ方・ROLL上限を変更不可。対応Modeは5 / 7 / 10 / 14のみ。15 DICE以上は非対応。Modeで変わるゲームルールは初期個数だけで、得点・OUT確率・継続・順位・倍率は共通。
+
+Setupの共通設定「ROLL上限」は表示選択肢∞ / 1 / 2 / 3 / 4 / 5、default∞。各Playerのターンへ適用し、Penaltyには適用しない。
 
 ---
 
@@ -160,7 +162,7 @@ removedDice
 activeDice + strandedDice + removedDice === initialDiceCount
 ```
 
-を満たすこと。
+を14 DICEを含む全Modeで満たすこと。initialDiceCountはdiceModeから派生するため、合計はdiceModeと一致する。
 
 順位判定・ペナルティ判定に使用する「残りダイス数」は、
 
@@ -184,6 +186,8 @@ removedDice = 0;
 completed = false;
 turnFinished = false;
 ```
+
+各Playerの新しいターンはROLL 1から開始する。
 
 ---
 
@@ -220,21 +224,9 @@ activeDice -= 1;
 
 そのダイスには有効な1～6の出目を与えない。
 
-OUTは、
+OUTは `status: "out", value: null` の組で表現する。
 
-```ts
-value = null
-```
-
-または、
-
-```ts
-status = "out"
-```
-
-等として表現する。
-
-OUTになったダイスを内部的に1～6としてゲーム判定に使用してはならない。
+通常PlayではOUTを1～6の有効出目として扱わない。Penaltyもstatus out / value nullを保持し、計算時のみ6換算する（§35・36）。
 
 ---
 
@@ -362,26 +354,7 @@ remainingDice = activeDice + strandedDice;
 
 # 13. ROLL継続条件
 
-ROLLを継続できる条件は、
-
-**SAFEなダイスで有効な1または5が最低1個出たこと**
-
-のみ。
-
-概念：
-
-```ts
-const scoringDice =
-  results.filter(
-    die =>
-      die.status === "safe" &&
-      (die.value === 1 || die.value === 5)
-  );
-
-const hasScoringDice = scoringDice.length > 0;
-```
-
-OUTはROLL継続条件に含めない。
+SAFEな1または5が最低1個あり、未完走でactiveDice > 0、ROLL上限が∞または有限上限に未到達なら継続する。OUT自体は継続条件にならない。終了判定の優先順位は§63に従う。
 
 ---
 
@@ -429,7 +402,7 @@ strandedDice = 1
 score += 100
 ```
 
-ROLL継続。
+ROLL上限に未到達なら継続。
 
 状態：
 
@@ -440,7 +413,7 @@ activeDice = 5
 remainingDice = 6
 ```
 
-次回ROLLは5個。
+継続時の次回ROLLは5個。上限到達時は得点・dice stateを確定してTURN END。
 
 ---
 
@@ -448,7 +421,7 @@ remainingDice = 6
 
 プレイヤーは任意にターンを終了できない。
 
-1または5が有効に出ており、かつ `activeDice > 0` なら、必ず次のROLLを行う。
+1または5が有効に出ており、かつ `activeDice > 0` でROLL上限に未到達なら、必ず次のROLLを行う。
 
 現在の得点や暫定順位に関係なく継続する。
 
@@ -481,7 +454,7 @@ remainingDice = 7
 
 で終了。
 
-救済ROLLはない。
+救済ROLLはない。得点あり・未完走でも最後の許可ROLLならTURN END。得点・removed・OUT・activeはすべて確定する。COMPLETE・no-scoreは上限理由に優先する（§63）。
 
 ---
 
@@ -668,7 +641,7 @@ scoreが高い方が上
 remainingDiceが少ない方が上
 ```
 
-それも同じなら完全同順位。
+それも同じなら完全同順位。ROLL使用回数・ROLL上限はRanking条件に含めない。
 
 ---
 
@@ -784,7 +757,7 @@ remainingDiceが全員同じ
 
 # 31. サドンデス
 
-サドンデスにはoriginal players全員がoriginal orderで参加する。Dice ModeとthrowStyleを維持する。5 DICEは5個、7 DICEは7個、10 DICEは10個へリセットし、固定7へ戻さない。
+サドンデスにはoriginal players全員がoriginal orderで参加する。Dice Mode・throwStyle・ROLL上限を維持する。activeDiceは選択Modeの初期個数（5 / 7 / 10 / 14）へ戻す。各Playerの新しいターンはROLL 1から開始する。
 
 前ラウンドの、
 
@@ -812,7 +785,7 @@ completed = false;
 totalCompletionCount
 ```
 
-をゲーム進行の累積値として持ち越す。人物・元の順番・Dice Mode・throwStyleも維持する。ラウンド結果・ランキングは持ち越さない。
+をゲーム進行の累積値として持ち越す。人物・元の順番・Dice Mode・throwStyle・ROLL上限も維持する。ラウンド結果・ランキングは持ち越さない。
 
 ---
 
@@ -868,24 +841,17 @@ remainingDice =
 
 である。
 
-decisive roundの確定remainingDiceを用いる。つまりOUTしたダイスも含まれ、10 DICEでは最大10個になる。
+decisive roundの確定remainingDiceを用いる。つまりOUTしたダイスも含まれ、14 DICEでは最大14個になる。
 
 ---
 
-# 35. ペナルティROLLではOUTを使用しない
+# 35. Penalty OUT
 
-重要：
+Penaltyにも通常Playと同じthrowStyleのOUT確率（rough 3% / normal 1% / careful 0%）を使う。各dieで独立にOUT判定し、SAFEの場合のみD6を生成する。
 
-**OUTシステムはゲーム本編のROLLだけに適用する。**
+OUTのauthoritative resultは `status: "out", value: null`。計算時だけ6換算し、表示・保存結果はOUTを維持する。
 
-ペナルティROLLでは、
-
-- OUT判定なし
-- 1/5特殊効果なし
-- ダイス除外なし
-- 再ROLLなし
-
-通常の6面ダイスとして1回だけ振る。
+各敗者について1回だけROLLする。1/5特殊得点・除外・再ROLLはなく、通常PlayのROLL上限は適用しない。
 
 ---
 
@@ -920,6 +886,16 @@ penaltyMultiplier =
 finalPenalty =
   basePenalty * penaltyMultiplier;
 ```
+
+OUTを含め確定配列の表示順で計算する。OUTを別集計・並べ替えしない。
+
+```text
+OUT(6) + 2 + 5 + OUT(6) = 19
+2 + OUT(6) + 5 = BASE 13
+BASE 13 × MULTIPLIER 3 = FINAL 39
+```
+
+OUTを通常の6 faceへ見せ替えない。
 
 ---
 
@@ -1095,7 +1071,7 @@ OUTが同時発生した場合はOUT演出も表示する。
 6. OUT数
 7. 明示的な「次へ」操作を受付
 
-即座に画面を切り替えない。
+即座に画面を切り替えない。上限理由にはTURN ENDと「ROLL上限に到達しました」を表示する。no-scoreには上限メッセージを表示しない。
 
 ---
 
@@ -1260,7 +1236,7 @@ FINAL PENALTY
 69 pt
 ```
 
-複数敗者なら1人ずつ処理。
+OUTは通常Playと同じ3D場外演出・2D OUT表示を使う。計算式は配列順にOUT(6)を含め、BASE → MULTIPLIER → FINALの段階表示を維持する。複数敗者なら1人ずつ処理。
 
 ---
 
@@ -1276,8 +1252,8 @@ FINAL PENALTY
 
 同一タブ内のsessionStorageを使用し、最後に正常保存された次のいずれかを復元する。
 
-- authoritative committed game state（設定、参加者・順番、phase、手番、dice・score、累積完走数、SD状態、確定結果、操作識別子を含む）。
-- 現在のSetup / preparation draft（参加者ID・入力中name・配列順・Dice Mode・throwStyle・準備画面の種類）。
+- authoritative committed game state（設定（ROLL上限を含む）、現在ターンのROLL進行、参加者・順番、phase、手番、dice・score、累積完走数、SD状態、確定結果、操作識別子を含む）。
+- 現在のSetup / preparation draft（参加者ID・入力中name・配列順・Dice Mode・throwStyle・ROLL上限・準備画面の種類）。
 
 対象draftは、初回Setupの入力途中、新しいゲームで戻ったSetupと編集途中、再戦準備と並べ替え途中、full reset後のSetupのすべて。最新draftをメモリ上で確定して保存を試みる。正常保存後のreloadで前ゲームのFinal Resultへ戻してはならない。
 
@@ -1319,9 +1295,9 @@ sessionStorage保存
 
 # 56. 同じメンバーでもう一度
 
-Final Resultから選ぶと、即ゲーム開始せず再戦準備へ移動する。人物・internal ID・名前・Dice Mode・throwStyle・Soundを維持する。編集可能なのはplayer orderのみ。rename・add・delete・Dice Mode変更・throwStyle変更は禁止し、UIだけでなくFlowでも制限する。
+Final Resultから選ぶと、即ゲーム開始せず再戦準備へ移動する。人物・internal ID・名前・Dice Mode・throwStyle・ROLL上限・Soundを維持する。編集可能なのはplayer orderのみ。rename・add・delete・Dice Mode変更・throwStyle変更・ROLL上限変更は禁止し、UIだけでなくFlowでも制限する。
 
-準備後の明示的な開始操作で、選択した順番を次ゲームの固定順として開始する。開始時はscore、dice state、completed、turnFinished、rank、round results、penalty results、totalCompletionCount、suddenDeathCountを新規化し、倍率は累積完走数0から×1へ派生する。activeDiceは維持したDice Modeから初期化する。
+準備後の明示的な開始操作で、選択した順番を次ゲームの固定順として開始する。開始時はscore、dice state、completed、turnFinished、rank、round results、penalty results、totalCompletionCount、suddenDeathCountを新規化し、倍率は累積完走数0から×1へ派生する。activeDiceは維持したDice Modeから初期化し、ROLL番号は1から開始する。設定表示は有限時「ROLL 3回」等、無制限時「ROLL ∞」。
 
 準備中・並べ替え途中もdraft recovery対象。操作revision・ゲーム識別子を巻き戻して旧要求を再利用してはならない。
 
@@ -1329,7 +1305,7 @@ Final Resultから選ぶと、即ゲーム開始せず再戦準備へ移動す�
 
 # 57. 新しいゲーム
 
-Final Resultから選ぶと、人数・名前・internal ID・順番・Dice Mode・throwStyle・Soundを引き継いだ通常Setupへ戻る。以後rename・add・delete・reorder・Dice Mode変更・throwStyle変更を許可する。人数は行数から派生する。
+Final Resultから選ぶと、人数・名前・internal ID・順番・Dice Mode・throwStyle・ROLL上限・Soundを引き継いだ通常Setupへ戻る。以後rename・add・delete・reorder・Dice Mode変更・throwStyle変更・ROLL上限変更を許可する。人数は行数から派生する。
 
 前ゲームのscore・順位・OUT・完走・累積完走数・SD・Penalty結果は次ゲームへ持ち越さない。Setupへの遷移と編集draftを保存し、明示的な開始で新しい進行stateを作る。§104のfull resetとは別操作。
 
@@ -1337,49 +1313,23 @@ Final Resultから選ぶと、人数・名前・internal ID・順番・Dice Mode
 
 ---
 
-# 58. 推奨Player型
+# 58. Player state
 
-```ts
-type Player = {
-  id: string;
-  name: string;
-  // 表示順はparticipants配列順から派生。IDは並べ替え・削除で変更しない。
+Playerはscore・activeDice・strandedDice・removedDice・completed・turnFinishedを持つ。ID・名前・順序はparticipantsを基準とする。remainingDiceはactiveDice + strandedDiceから派生する。
 
-  score: number;
-
-  activeDice: number;
-  strandedDice: number;
-  removedDice: number;
-
-  completed: boolean;
-  turnFinished: boolean;
-
-  rank?: number;
-
-  penaltyRoll?: number[];
-  basePenalty?: number;
-  finalPenalty?: number;
-};
-```
-
-`remainingDice` は保存してもよいが、可能なら派生値として扱う。
-
-```ts
-function getRemainingDice(player: Player): number {
-  return player.activeDice + player.strandedDice;
-}
-```
+Ranking・Penalty結果・現在ターンのROLL進行はそれぞれのEngine / Flow stateで扱い、Playerへ重複した可変stateを置かない。Penalty結果は§60のDieResult配列を保存する。
 
 ---
 
 # 59. 設定・Flow・Presentationの責務
 
-概念上のゲーム設定は以下。具体的な型/API構成は既存実装へ段階的に適用する。
+概念上のゲーム設定は以下。具体的な型/APIはsrc/game/types.ts・setup.ts・gameFlow.tsを参照する。
 
 ```ts
 type GameConfiguration = Readonly<{
   diceMode: DiceMode;
   throwStyle: ThrowStyle;
+  rollLimit: RollLimit;
 }>;
 ```
 
@@ -1393,7 +1343,7 @@ ROLL中の演出stage・interaction lock・visibleStateは確定ゲーム状態�
 
 # 60. RollResult型
 
-ゲーム本編ではOUTを通常の数字と混同しない。
+通常Play・PenaltyともOUTを通常の数字と混同しない。
 
 推奨：
 
@@ -1415,130 +1365,37 @@ type DieResult =
 
 ---
 
-# 61. ROLL処理概念
+# 61. ROLL生成
 
-```ts
-function rollGameDice(
-  count: number,
-  outProbability: number
-): DieResult[] {
-  const results: DieResult[] = [];
+rollGameDice(count, throwStyle, random, diceMode)はRandomSourceを注入し、各dieにOUT判定を1回行い、SAFEのみD6用のnext()を追加消費する。carefulもOUT判定用のdrawを行うが、OUT確率0%なので必ずSAFE。Penaltyも同じ生成順を使用する。
 
-  for (let i = 0; i < count; i++) {
-    const isOut =
-      Math.random() < outProbability;
-
-    if (isOut) {
-      results.push({
-        status: "out",
-        value: null,
-      });
-
-      continue;
-    }
-
-    const value =
-      (Math.floor(Math.random() * 6) + 1) as
-        1 | 2 | 3 | 4 | 5 | 6;
-
-    results.push({
-      status: "safe",
-      value,
-    });
-  }
-
-  return results;
-}
-```
-
-実際の実装では乱数生成処理を注入可能にし、テスト可能にすること。
+Renderer・UI・Recoveryは抽選しない。低水準APIの引数・検証はsrc/game/rollGenerator.tsを参照する。
 
 ---
 
 # 62. ROLL解決
 
-概念：
+resolveRollはPlayer state・確定DieResult配列・Dice Mode・ROLL番号・上限を受け取り、入力を変更せず次のPlayer stateとRollResolutionを返す。
 
-```ts
-function resolveRoll(
-  player: Player,
-  results: DieResult[]
-) {
-  const outCount =
-    results.filter(
-      die => die.status === "out"
-    ).length;
+SAFEな1/5のscore・scoringCount、OUTのoutCountを計算し、activeDiceをoutCount + scoringCountだけ減らす。strandedDiceへoutCount、removedDiceへscoringCountを加える。outcomeとturn-end reasonは§63に従う。
 
-  const safeResults =
-    results.filter(
-      (die): die is SafeDieResult =>
-        die.status === "safe"
-    );
-
-  const ones =
-    safeResults.filter(
-      die => die.value === 1
-    ).length;
-
-  const fives =
-    safeResults.filter(
-      die => die.value === 5
-    ).length;
-
-  const scoringCount =
-    ones + fives;
-
-  const gainedScore =
-    ones * 100 +
-    fives * 50;
-
-  player.score += gainedScore;
-
-  player.strandedDice += outCount;
-  player.removedDice += scoringCount;
-
-  player.activeDice -=
-    outCount + scoringCount;
-
-  return {
-    outCount,
-    scoringCount,
-    gainedScore,
-    hasScoringDice:
-      scoringCount > 0,
-  };
-}
-```
+操作受付・重複処理防止はgameEngine / gameFlowの境界で行う。結果解決をReact・Rendererへ複製しない。
 
 ---
 
 # 63. ROLL後の判定順
 
-ROLL解決後：
+得点・除外・OUT・remainingを確定後、Engineで次の優先順位に従って結果を決める。
 
-```ts
-if (
-  player.activeDice === 0 &&
-  player.strandedDice === 0
-) {
-  // COMPLETE
-}
-else if (
-  player.activeDice === 0
-) {
-  // OUTが残っているため非完走終了
-}
-else if (
-  hasScoringDice
-) {
-  // 次ROLL
-}
-else {
-  // TURN END
-}
-```
+1. COMPLETE（activeDice = 0、strandedDice = 0）
+2. no-score（SAFEな1/5なし）：得点なしでTURN END
+3. ROLL上限：得点あり・未完走ならTURN END
+4. no-active-dice（activeDice = 0）：非完走でTURN END
+5. 通常継続
 
-この順序を崩さないこと。
+上限とactiveDice = 0が同時でも上限理由を優先する。UIはEngineのauthoritative outcome・終了理由を表示し、独自判定しない。
+
+最後の許可ROLLが `1, OUT, 3` なら100点加算・1個removed・1個stranded・1個activeを確定してTURN END。remainingはactive + stranded = 2。
 
 ---
 
@@ -1627,12 +1484,12 @@ function shouldStartSuddenDeath(
 
 ```ts
 function calculatePenalty(
-  diceResults: number[],
+  diceResults: readonly DieResult[],
   totalCompletionCount: number
 ) {
   const basePenalty =
     diceResults.reduce(
-      (sum, value) => sum + value,
+      (sum, die) => sum + (die.status === "out" ? 6 : die.value),
       0
     );
 
@@ -1652,7 +1509,7 @@ function calculatePenalty(
 
 # 67. 乱数処理の設計
 
-ゲームロジックから `Math.random()` を直接呼び続ける構成は避けることを推奨する。
+乱数源はRandomSourceとして注入する。本番用mathRandomSourceだけがMath.random()を呼び、テストは決定論的入力を使用する。next()の値域は有限な[0, 1)。
 
 例：
 
@@ -1662,7 +1519,7 @@ interface RandomSource {
 }
 ```
 
-OUT判定・D6判定に同じ抽象化を利用する。
+通常Play・PenaltyのOUT判定・D6判定に同じ抽象化を利用する。
 
 これによりユニットテストで、
 
@@ -1709,7 +1566,7 @@ OUTをどう見せるか
 
 # 69. OUT演出同期
 
-理想的な処理：
+処理契約（authoritative commitと保存試行は演出前、§91）：
 
 ```text
 Engine generates logical result
@@ -1759,6 +1616,10 @@ PENALTY
 
 を確認できるようにする。
 
+有限時のみPLAYER付近にROLL n/limitを表示する。意味は「次に振るROLLが何投目か」。押下直後に次番号へ進めず、そのROLLのanimation・結果演出中は同じ番号を保つ。継続可能になったら次番号へ進み、終了後は非表示。∞では表示しない。
+
+limit 3：ROLL 1/3 → 1投目animation中も1/3 → 継続可能で2/3 → 2投目animation中も2/3 → 継続可能で3/3 → 3投目animation中も3/3 → 結果確定後TURN END（COMPLETE・no-score優先）。
+
 ---
 
 # 71. スマートフォン優先
@@ -1778,6 +1639,8 @@ PENALTY
 - 倍率
 
 を優先表示する。
+
+Mobile Stable Layout対象は320x568 / 375x667 / 390x844 / 430x932。PlayはPLAYER n/n上端から主要Action下端まで、PenaltyはPENALTY n/n上端から主要Action下端までが1 viewport内に収まる。通常ROLL・続けてROLL・Penalty ROLL前後でscroll positionを勝手に動かさず、Actionの大きな移動・animation / result切替のlayout shiftを起こさない。reserved presentation領域・READY領域・Action Slotを維持する（§111、AGENTS、PLAYABLE_UI）。
 
 ---
 
@@ -1803,7 +1666,9 @@ PENALTY
 ・OUT数を順位タイブレークに使用
 ・OUTダイスをremainingDiceから除外
 ・OUTが存在する状態でCOMPLETE
-・ペナルティROLLへのOUT適用
+・Penalty OUTを通常の6 faceへ変換
+・ROLL上限後の通常ROLL
+・ROLL回数をRanking条件へ追加
 ・完走者同士をscoreで順位付け
 ・サドンデス時のscore持ち越し
 ・サドンデス時のOUT状態持ち越し
@@ -1888,7 +1753,7 @@ completed === false
 
 # 77. テスト必須ケース
 
-最低限、以下のユニットテストを実装すること。
+最低限、以下のユニットテストを維持する。継続例は上限未到達または∞を前提とする。
 
 ```text
 01. 初回0点終了
@@ -1922,7 +1787,7 @@ completed === false
 29. 最終ラウンド完走者も累積
 30. 1224順位方式
 31. ペナルティダイス数にOUT分を含む
-32. ペナルティROLLではOUTなし
+32. Penalty OUTを計算時のみ6換算し、順序・OUT表示を維持
 33. ペナルティROLLの1/5に特殊効果なし
 34. 複数敗者が個別ROLL
 35. OUT確率0%（丁寧ではOUTが発生しない）
@@ -1991,21 +1856,11 @@ completed === false
 
 ---
 
-# 79. v2実装順序
+# 79. 実装・保守フロー
 
-完成済みv1（main / 366c732）を拡張し、ゼロから作り直さない。詳細は[実装進行ガイド](../実装進行ガイド.md)。
+v3実装・人間QAは完了済み。今後の依頼ごとにAGENTS・該当SPEC・Git status/diff・関連実装とテストを確認し、狭いレビュー単位で作業する。詳細・過去STEP記録は[実装進行ガイド](../実装進行ガイド.md)を参照。
 
-0. 仕様統合・文書同期（文書のみ）
-1. Dice Mode型・Engine invariant一般化（Ranking / SD / Penaltyの検証も含む）
-2. Flow / Replay Preparation / New Game / Full Reset
-3. Session Recovery schema v2・draft recovery・Sound schema分離
-4. Setup UI
-5. 2D Dice / Penalty UI / Action Slot
-6. Three.jsの1/5 visual・10 DICE確認
-7. Responsive / Manual QA
-8. Final v2 Audit
-
-各段階をレビュー可能な変更へ分割し、関連検証を完了する。未依頼の次段階へ進まない。commit・pushはその作業の明示的な許可に従い、最終pushも自動実行しない。
+未依頼の機能・UI再設計・次段階を追加しない。関連検証・差分レビューを行い、commit・pushは明示許可に従う。文書のみの作業ではコードを変更しない。
 
 ---
 
@@ -2035,13 +1890,13 @@ completed === false
 
 # 81. Definition of Done
 
-v2実装完了時は最低限以下を満たすこと。文書統合だけでは達成扱いにしない。
+現行v3の維持・変更検証では最低限以下を満たすこと。文書統合だけでは達成扱いにしない。
 
 ```text
 ✓ 2～10人
 ✓ プレイヤー名設定
 ✓ プレイ順変更
-✓ 5 / 7 / 10 DICE開始・デフォルト7
+✓ 5 / 7 / 10 / 14 DICE開始・デフォルト7
 ✓ 1 = 100
 ✓ 5 = 50
 ✓ 1/5自動除外
@@ -2060,7 +1915,8 @@ v2実装完了時は最低限以下を満たすこと。文書統合だけでは
 ✓ OUTだけではROLL継続不可
 ✓ OUTはremainingDiceに含む
 ✓ OUTがあれば完走不可
-✓ ペナルティROLLではOUTなし
+✓ Penalty OUT・計算時のみ6換算・最大14・1回ROLL
+✓ ROLL上限∞ / 1〜5・default∞・番号表示・終了優先順位
 
 ✓ COMPLETE
 ✓ 累積完走者数
@@ -2098,13 +1954,14 @@ v2実装完了時は最低限以下を満たすこと。文書統合だけでは
 ✓ 操作ロック
 ✓ モーダル背面操作防止
 
-✓ schema v2でgame / setup / preparation draft復旧・Sound設定保持
+✓ schema 3でgame / setup / preparation draft復旧・v2拒否・Sound schema 1保持
 ✓ 過去ゲーム履歴なし
 ✓ SAME PLAYERS再戦準備・順番のみ編集・明示開始
 ✓ NEW GAME設定引き継ぎ
 ✓ 専用full reset・Sound維持
-✓ Mode別カード配置・1/5 face design・Penalty statusなし・Action Slot
+✓ Mode別カード配置・1/5 face design・Penalty SAFE/GET labelなし・OUT表示・Action Slot
 
+✓ Mobile Stable Layout・ROLL前後のscroll/Action位置安定
 ✓ スマートフォン対応
 ✓ PC対応
 
@@ -2260,7 +2117,7 @@ type Player = {
 別端末
 ```
 
-v2でも `sessionStorage` を使用する。
+Session Recoveryは `sessionStorage` を使用する。
 
 `localStorage` 等を利用して、終了したブラウザセッションを越えて進行中ゲームを永続保存する必要はない。
 
@@ -2287,6 +2144,9 @@ score
 currentPlayerIndex
 totalCompletionCount
 throwStyle
+rollLimit
+現在ターンのROLL進行・終了理由
+PenaltyのDieResult配列・計算結果
 ```
 
 等を検証する。
@@ -2340,16 +2200,9 @@ removedDice = 4
 
 # 89. 保存データのバージョン
 
-ゲーム状態およびSetup / preparation draftのenvelopeはversion 2とする。
+Game / Setup / Replay PreparationのSession Recovery schemaは3。Sound schemaは1で、別キー・独立validationを使用する。
 
-```ts
-// 概念例。stateは検証可能なgame / draftの判別共用体。
-type StoredSession = { version: 2; state: GameOrDraftState };
-```
-
-v1ゲームsaveをv2として推測復元しない。未対応versionは安全に拒否し、破棄を試み、新しいSetupを利用可能にする。v1 migrationは必須ではない。corrupt/unsupportedの推測修復は禁止。
-
-Sound settingの保存形式・version管理はgame recovery schemaから論理的に分離する。Sound形式に変更がなければ、game schemaを2へ上げたことを理由に有効な既存Sound ON/OFFを破棄・初期化しない。
+v1 / v2 Game Recoveryはmigrationせずunsupportedとして安全に拒否し、破棄を試み、初期Setupを利用可能にする。v2にROLL ∞を推測補完しない。不正・unsupportedデータの推測修復は禁止。Game schema変更・拒否を理由に有効なSound ON/OFFを初期化しない。
 
 ---
 
@@ -2428,7 +2281,7 @@ interaction lock
 ↓
 次のauthoritative state確定
 ↓
-必要であれば確定状態をsessionStorageへ保存
+確定状態をsessionStorageへ保存試行
 ↓
 3D / UI / Sound演出
 ↓
@@ -2461,7 +2314,7 @@ totalCompletionCount二重加算
 
 演出開始前にauthoritative stateを確定する。
 
-Session Recovery実装後は、その確定状態をsessionStorageへ保存してから演出を開始する。
+確定状態をsessionStorageへ保存試行してから演出を開始する。保存失敗時は§93・101に従う。
 
 したがって演出中にリロードされた場合、
 
@@ -2831,6 +2684,7 @@ Player names = blank
 Player order = initial
 Dice Mode = 7
 throwStyle = normal
+ROLL上限 = ∞
 ```
 
 Sound settingのみ維持する。前ゲームの進行stateや結果を持ち越さない。初期化後の空欄draftも保存・復元対象であり、単なる保存削除で代用しない。ゲーム開始時に選択設定からscore・dice state等を初期化する。
@@ -3017,11 +2871,11 @@ Sound失敗
 
 # 110. Draft validationと復旧の整合性
 
-Draft validationは保存・復元可能な構造を検証する。2〜10行、一意な空でないID、nameが文字列であること、配列順、Dice Mode、throwStyle、準備種別を確認する。空欄や開始条件を満たさない編集中nameは、それだけでcorrupt扱いしない。Start validationは別にtrim後1〜12 grapheme等を要求する。再戦準備では保持した人物・名前・設定を変更できず、順序だけを変更する。
+Draft validationは保存・復元可能な構造を検証する。2〜10行、一意な空でないID、nameが文字列であること、配列順、Dice Mode、throwStyle、ROLL上限、準備種別を確認する。空欄や開始条件を満たさない編集中nameは、それだけでcorrupt扱いしない。Start validationは別にtrim後1〜12 grapheme等を要求する。再戦準備では保持した人物・名前・設定を変更できず、順序だけを変更する。
 
-ゲーム復旧では全Playerの個数合計を保存されたDice Modeと照合し、ready・未プレイPlayer・初回ROLL前の逆算状態もinitialDiceCountで検証する。Turn/Game/result.playerの整合、操作ID、手番、ROLL番号、累積完走数、carefulでOUTなし、Penaltyのdecisive remaining・配列長・計算結果の検証を維持する。
+ゲーム復旧では全Playerの個数合計を保存されたDice Modeと照合し、ready・未プレイPlayer・初回ROLL前の逆算状態もinitialDiceCountで検証する。Turn/Game/result.playerの整合、操作ID、手番、ROLL番号・上限・Engine終了理由、累積完走数、carefulでOUTなし、Penaltyのdecisive remaining・配列長・計算結果の検証を維持する。
 
-メモリ上のgame/draft確定→保存試行→表示通知の順を守る。ゲームROLLはその後に演出する。復旧時は確定結果を直ちに表示し、再ROLL・再加点・再OUT・二重完走更新をしない。draft復旧で自動STARTしない。
+メモリ上のgame/draft確定→保存試行→表示通知の順を守る。ゲームROLLはその後に演出する。復旧時は確定結果を直ちに表示し、再ROLL・再加点・再OUT・二重完走更新をしない。有限ゲームは保存したROLL進行を復元し、reload前がROLL 2/3なら復元後も2/3。確定Penalty OUTもstatus out / value nullのまま復元し、再抽選・face再生成・RandomSource再消費を行わない。draft復旧で自動STARTしない。
 
 Storageのread/write/delete失敗でもapp/gameは継続可能。警告し、最後の正常保存までだけを保証する。保存失敗後のreloadでは古い正常saveへ戻り得る。削除失敗時はmarker置換等を試み、現在のインスタンスで不正データを再採用しない。削除と置換の双方が失敗した場合のreload後の排除は保証しない。Sound障害・3D障害もゲーム結果を変更しない。
 
@@ -3034,8 +2888,9 @@ Storageのread/write/delete失敗でもapp/gameは継続可能。警告し、最
 | 5 DICE | 最大5個・1行 |
 | 7 DICE | 最大7個・1行、wrap・横scrollなし |
 | 10 DICE | 最大5列。10→5+5、9→5+4、8→5+3、7→5+2、6→5+1、5以下→1行 |
+| 14 DICE | 最大7列。14→7+7、13→7+6、12→7+5、11→7+4、10→7+3、9→7+2、8→7+1、7以下→1行 |
 
-2D/Three.js、normal/penalty共通でface 1/5のpipまたはstarを赤にする。赤はGET状態ではなくface design。通常ROLLはGET・得点等のnon-color indicatorを維持する。PenaltyはfaceのみでSAFE/GET/OUT等の通常status labelを表示しない。内部Engine representationを表示都合で変えない。出目は読み上げ可能にする。
+2D/Three.js、normal/penalty共通でface 1/5のpipまたはstarを赤にする。赤はGET状態ではなくface design。通常ROLLはGET・得点等のnon-color indicatorを維持する。PenaltyのSAFEはfaceのみでSAFE/GET labelを表示しない。OUTは専用OUT表示・読み上げを維持し、6 faceに置換しない。内部Engine representationを表示都合で変えない。出目は読み上げ可能にする。
 
 PenaltyのBASE / MULTIPLIER / FINALはラベルと値を各表示スクエア内で中央揃えにし、桁数変化に対応する。確定計算値の段階表示順は維持する。
 
@@ -3043,14 +2898,14 @@ Presentation領域はDice→Result/Message→Action Slotを基本に、次へ・
 
 320/375/390/430/768pxおよびdesktopで横overflow・clipping・overlapがなくfaceを判別できること。safe area、44px以上を基本とするtouch target、keyboard、focus management、Dialogのviewport内表示とfocus restoration、reduced motionを維持する。
 
-Three.jsはcommitted結果のadapterを維持する。全Modeでcleanup・timeout・rejection・context loss・resize・unmount・2D fallbackを検証する。同じ結果のface/status/orderを2Dと3Dで一致させ、fallbackでRandomSourceを再消費しない。個数増加を理由にRendererを書き直したり物理から結果を決めたりしない。
+2D結果カードとThree.js animationの物理配置は別仕様。Three.jsは14個が自然に見え、tray内で不自然にならず見切れないことを要件とし、厳密7+7を要求しない。Three.jsはcommitted結果のadapterを維持する。全Modeでcleanup・timeout・rejection・context loss・resize・unmount・2D fallbackを検証する。同じ結果のface/status/orderを2Dと3Dで一致させ、fallbackでRandomSourceを再消費しない。個数増加を理由にRendererを書き直したり物理から結果を決めたりしない。
 
-# 112. コピー・v2検証・対象外
+# 112. コピー・検証・対象外
 
-採用コピーは「ONE ROLL AT A TIME」「最後のダイスまで。」。ブランド説明に固定ダイス数を含めない。選択UIの5/7/10 DICE表示は維持する。
+採用コピーは「ONE ROLL AT A TIME」「最後のダイスまで。」。ブランド説明に固定ダイス数を含めず、5 / 7 / 10 / 14 DICE選択を維持する。
 
-§77の既存ルール検証に加え、各Modeでinitial/scoring/multiple scoring/OUT/no-score/COMPLETE/invariant/Ranking/SD/Penalty/replay/new game/Recoveryを決定論的に検証する。7 DICEはv1回帰を維持する。新規テストは再戦の禁止操作、full reset、Player追加・中間削除・並べ替え・ID、draft/start validation分離、全draftのreload、unsupported v1、corrupt、Sound schema独立、10個layout、Penalty status label不在を含む。
+§77に加え、各ModeのEngine / Ranking / SD / Penalty / Replay / New Game / Full Reset / Recoveryを決定論的に検証する。14 DICEはparameterized・boundary・representative deterministic casesを中心とし、7 DICEのexhaustive探索を単純拡張しない。ROLL 1 / 3 / 5 / ∞、終了優先順位、OUT + score + limit、SDの番号reset、Penalty OUT・最大14・順序、全draft・ROLL進行の復旧、v2拒否、Sound独立、Mode別layout、Renderer lifecycle / fallbackを維持する。
 
-手動QAは各Modeの通常ゲーム・OUT・COMPLETE・Penalty、10個から6個まで各カード配置、連続SD、Setup編集、再戦順序、全reset、reload、全指定幅を含む。255本のv1基準テストを出発点とし、意図された仕様変更以外を回帰させない。
+手動QAでは各Mode、14→1個のカード配置、通常ROLL / 続けてROLL / Penalty ROLL、OUT、COMPLETE、連続SD、Setup、Replay、reset、reloadと指定viewportのMobile Stable Layout・Action/scroll位置安定を確認する。
 
-v2対象外：Mode別の得点/OUT確率/Ranking/倍率変更、人数上限変更、online multiplayer、server persistence、履歴、AI player、新Dice Mode（12/15等）、Three.js library変更、大規模Renderer rewrite。
+対象外：Mode別の得点/OUT確率/Ranking/倍率変更、人数上限変更、online multiplayer、server persistence、履歴、AI player、追加Dice Mode（15以上等）、Three.js library変更、大規模Renderer rewrite、依頼外のUI/UX再設計。

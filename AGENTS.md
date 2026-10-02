@@ -18,9 +18,9 @@ Before making any implementation decision, read this file and `docs/SPEC.md`.
 
 ## 2. Source of Truth
 
-`docs/SPEC.md` is the **single source of truth for v2 game behavior**.
+`docs/SPEC.md` is the **single source of truth for current v3 game behavior**.
 
-The completed implementation baseline is v1 at main / 366c732. The v2 specification is a target, not a claim that v2 is implemented. `docs/v2_変更仕様書.md` is integrated design history, not a second authority.
+The completed v3 implementation baseline is main / cc4ab15, with human QA completed. `docs/v3_変更仕様書.md` records the v2 → v3 design/change history; `docs/v2_変更仕様書.md`, past STEP records, and `docs/FINAL_AUDIT.md` are historical material, not a second authority.
 
 If any of the following conflict with `docs/SPEC.md`:
 
@@ -82,23 +82,9 @@ Visual polish must never override game correctness.
 
 ## 5. Development Phases
 
-Follow the implementation phases defined in `docs/SPEC.md`.
+v3 implementation and human QA are complete. Consult `実装進行ガイド.md` for the current maintenance workflow and historical STEP records. Preserve the working application; do not rebuild it from scratch.
 
-The v2 order extends the completed v1; do not rebuild it from scratch.
-
-```text
-V2 STEP 0 — Specification and documentation
-V2 STEP 1 — Dice Mode and engine invariants
-V2 STEP 2 — Flow and preparation/reset semantics
-V2 STEP 3 — Recovery v2 and drafts
-V2 STEP 4 — Setup UI
-V2 STEP 5 — 2D / Penalty UI / Action Slot
-V2 STEP 6 — Three.js visuals and ten-dice verification
-V2 STEP 7 — Responsive and manual QA
-V2 STEP 8 — Final audit
-```
-
-Unless explicitly instructed otherwise, work only on the requested phase.
+Work only on the requested scope. Documentation-only work must not modify implementation, tests, CSS, dependencies, configuration, or assets. Do not rewrite historical documents as current specifications.
 
 Do not implement future phases merely because they appear straightforward.
 
@@ -215,7 +201,7 @@ strandedDice +
 removedDice === initialDiceCount;
 ```
 
-Dice Mode (`5 | 7 | 10`, default 7) is explicit authoritative game configuration. Derive `initialDiceCount` from `diceMode`; do not maintain a second independently mutable value. Never infer Dice Mode from current counts or their sum, including during recovery.
+Dice Mode (`5 | 7 | 10 | 14`, default 7; maximum 14) is explicit authoritative game configuration. Derive `initialDiceCount` from `diceMode`; do not maintain a second independently mutable value. Never infer Dice Mode from current counts or their sum, including during recovery. Reject unsupported modes, including 15. Player count remains 2–10; do not confuse the player maximum with the dice maximum.
 
 Remaining dice are:
 
@@ -273,7 +259,13 @@ ROUND_COMPLETE
 
 Do not allow UI components to independently mutate game rules.
 
-Keep replay preparation, new-game setup, and full reset separate. Replay preparation preserves participants/IDs/names/Dice Mode/throwStyle and permits only reordering before explicit start. New game carries settings to editable setup. Full reset requires confirmation and restores two blank rows, initial order, Dice Mode 7, normal throw style; Sound persists. Derive player count/order from the participant array and never renumber surviving IDs. Enforce preparation restrictions in Flow, not only disabled UI controls.
+Keep replay preparation, new-game setup, and full reset separate. Replay preparation preserves participants/IDs/names/Dice Mode/throwStyle/ROLL上限 and permits only reordering before explicit start. New game carries settings to editable setup. Full reset requires confirmation and restores two blank rows, initial order, Dice Mode 7, normal throw style, ROLL ∞; Sound persists. Derive player count/order from the participant array and never renumber surviving IDs. Enforce preparation restrictions in Flow, not only disabled UI controls.
+
+ROLL上限 is game-wide configuration: `RollLimit = null | 1 | 2 | 3 | 4 | 5`, default null (∞). Setup drafts own editable settings; running games own authoritative settings. Do not duplicate mutable limits on players/turns or infer them from UI. `TurnState.nextRollNumber` starts at 1; committed results also retain `rollNumber`. Counts reset for each new player turn, including Sudden Death. Penalty does not use this limit.
+
+After committing scoring/removal/OUT, Engine priority is COMPLETE > no-score > ROLL上限 > no-active-dice > continuation. Turn-end reasons are `noScore | rollLimit | noActiveDice`; UI displays the authoritative reason. Ranking excludes roll count/limit.
+
+For finite games, show the next ROLL number near PLAYER, keep the current number throughout animation/result presentation, and advance only when continuation becomes available. Hide the counter for ∞ and after turn end.
 
 ---
 
@@ -331,7 +323,9 @@ For session recovery:
 
 Treat persistence as a state transaction problem, not an animation restoration problem.
 
-Save initial setup, new-game setup, replay preparation (including edits/order changes), and full-reset setup. Separate draft validation from start validation: blank or unfinished names are not corrupt merely because START is invalid. Game recovery uses schema version 2; reject unsupported v1 game data without guessing. Storage failures remain fail-open. Sound format/version management is independent; a game schema bump must not reset valid Sound settings.
+Save initial setup, new-game setup, replay preparation (including edits/order changes), and full-reset setup. Separate draft validation from start validation: blank or unfinished names are not corrupt merely because START is invalid. Game recovery uses schema version 3; reject unsupported v1/v2 game data without migration or guessing ROLL ∞. Storage failures remain fail-open. Sound format/version management is independent; Sound schema remains version 1; a game schema bump must not reset valid Sound settings.
+
+Validate saved rollLimit, nextRollNumber, rollNumber, result reason and the resolver-derived player/result together. A finite ended result may legitimately have `rollNumber = limit` and `nextRollNumber = limit + 1`; reject an over-limit ready/continuing turn, not this committed ended result. Restore Penalty OUT as status out/value null, validate BASE/MULTIPLIER/FINAL using 6 only for calculation, and never draw new randomness on recovery.
 
 ---
 
@@ -360,6 +354,7 @@ When starting sudden death:
 - preserve cumulative completion count
 - preserve the selected throw style / OUT probability
 - preserve Dice Mode and reset activeDice to its initialDiceCount
+- preserve ROLL上限 and reset each new turn to ROLL 1
 
 Do not carry previous-round ranking data into the new round as authoritative ranking state.
 
@@ -373,12 +368,14 @@ Do not reuse normal-roll behavior without explicitly disabling incompatible rule
 
 Penalty dice:
 
-- do not use OUT checks
+- use the same throwStyle OUT probability as normal Play (rough 3%, normal 1%, careful 0%)
+- check OUT independently first and generate D6 only for SAFE
+- retain OUT as status out/value null; use 6 only when calculating BASE
 - do not score 1 or 5 specially
 - are not removed
 - are not rerolled
 
-Penalty dice count is the decisive round remainingDice, up to 10 in 10 DICE.
+Penalty dice count is the decisive round remainingDice, up to 14 in 14 DICE. ROLL上限 does not apply. Preserve committed die order in expressions such as `OUT(6) + 2 + 5 + OUT(6) = 19`, then BASE × MULTIPLIER = FINAL. Never display OUT as face 6.
 
 Only the final penalty calculation uses the cumulative multiplier defined in `docs/SPEC.md`.
 
@@ -396,7 +393,7 @@ UI components should primarily:
 
 UI components should not contain duplicated implementations of core game rules.
 
-Result-card layout uses Dice Mode plus displayed count (10 DICE uses at most five columns). Layout never changes engine results. Red face 1/5 is face design, not GET status. Penalty cards show faces without normal status labels. Preserve non-color indicators for normal scoring.
+Result-card layout uses Dice Mode plus displayed count: 5/7 DICE use one row, 10 DICE uses at most five columns, and 14 DICE uses at most seven columns (14→7+7 through 8→7+1; ≤7 one row). This 2D result-card contract is distinct from Three.js animation positions. Layout never changes engine results. Red face 1/5 is face design, not GET status. Penalty SAFE cards show faces without SAFE/GET labels; OUT remains explicitly labeled and accessible. Preserve non-color indicators for normal scoring.
 
 For example, avoid implementing scoring separately inside a React component when scoring already exists in the game engine.
 
@@ -404,7 +401,7 @@ For example, avoid implementing scoring separately inside a React component when
 
 ## 19. 3D Dice Integration
 
-Treat the 3D dice implementation as an adapter/renderer.
+Treat the 3D dice implementation as an adapter/renderer. It supports at most 14 dice and rejects 15. The 11–14 presentation layout balances rows; narrow-stage camera framing adapts while existing tray/dice dimensions remain unchanged. It need not match the 2D strict 7+7 result layout. It does not consume RandomSource or decide results; reuse resources and preserve resize/context-loss/timeout/cleanup/2D fallback contracts.
 
 Keep library-specific code isolated from game rules.
 
@@ -492,7 +489,7 @@ deterministic input
 expected state after
 ```
 
-Prefer focused unit tests for the game engine.
+Prefer focused unit tests for the game engine. For 14 DICE, use parameterized, boundary and representative deterministic tests; do not expand seven-dice exhaustive enumeration to fourteen dice.
 
 UI tests should not replace engine tests.
 
@@ -562,7 +559,7 @@ Avoid unrelated:
 - folder restructuring
 - visual redesigns
 
-unless required for the requested implementation.
+unless required for the requested implementation. Do not propose or implement improvements outside the specified scope, including unsolicited UI/UX redesign.
 
 A task should produce a reviewable diff.
 
@@ -636,6 +633,10 @@ However, desktop and tablet layouts must remain usable.
 Do not implement mobile support as a separate game implementation.
 
 Use one responsive application.
+
+Preserve Mobile Stable Layout at 320x568, 375x667, 390x844 and 430x932: Play from PLAYER n/n top to main Action bottom, and Penalty from PENALTY n/n top to main Action bottom, fit in one viewport. Normal ROLL, continued ROLL and Penalty ROLL must not move scroll position, substantially move the Action, or shift layout when animation/results change.
+
+Reserved presentation space, READY areas, animation areas and Action Slot are intentional stability mechanisms, not wasted whitespace. Do not gain height by deleting/merging/reordering elements, moving status or Action Slot, using sticky/fixed positioning, hiding content with overflow, or shortening animation duration. If the stable structure needs to change, stop and return the decision to the human; do not invent an alternative UI. Preserve reduced-motion behavior.
 
 Prioritize visibility of:
 
@@ -841,7 +842,7 @@ If the user requests a game-rule change:
 4. update tests
 5. verify affected behavior
 
-Do not leave accidental contradictions between specification, code, and tests. For an explicitly documentation-only preparation task, document Current v1 versus Planned v2 and defer implementation/tests; never cross the requested scope merely to synchronize code.
+Do not leave accidental contradictions between specification, code, and tests. For explicitly documentation-only work, follow the requested baseline and synchronize documents only; never cross scope to change code or tests.
 
 ---
 
