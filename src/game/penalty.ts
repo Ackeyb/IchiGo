@@ -39,7 +39,7 @@ export function getPenaltyMultiplier(totalCompletionCount: number): number {
   return totalCompletionCount + 1;
 }
 
-/** v3 §3.2: OUT first, then a D6 draw only for SAFE; no normal scoring resolution. */
+/** Generate one OUT-first penalty roll; normal scoring/removal/continuation and the game's ROLL limit do not apply. */
 export function rollPenaltyDice(
   count: number, random: RandomSource, diceMode: DiceMode = DEFAULT_DICE_MODE,
   throwStyle: ThrowStyle = DEFAULT_THROW_STYLE,
@@ -48,7 +48,11 @@ export function rollPenaltyDice(
   return rollGameDice(count, throwStyle, random, diceMode);
 }
 
-/** v3 §3.3: conversion is for calculation only; authoritative OUT keeps value null. */
+/**
+ * Return a value for penalty arithmetic only.
+ * Keep OUT as { status: 'out', value: null } in committed results so rendering,
+ * recovery and accessibility can distinguish it from a SAFE six.
+ */
 export function getPenaltyDieValue(die: DieResult): DieValue {
   if (typeof die === 'object' && die !== null) {
     if (die.status === 'out' && die.value === null) return 6;
@@ -57,7 +61,7 @@ export function getPenaltyDieValue(die: DieResult): DieValue {
   throw new RangeError('Invalid penalty die result.');
 }
 
-/** v3 §3.3–3.6: SAFE faces and OUT(6) are summed in committed order before multiplying. */
+/** Sum SAFE faces and calculation-only OUT(6) in committed order before applying the multiplier. */
 export function calculatePenalty(dice: readonly DieResult[], totalCompletionCount: number, diceMode: DiceMode = DEFAULT_DICE_MODE): PenaltyResult {
   assertDiceCount(dice.length, diceMode);
   const multiplier = getPenaltyMultiplier(totalCompletionCount);

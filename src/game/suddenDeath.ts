@@ -64,7 +64,7 @@ export function startSuddenDeath(
     throw new RangeError('Sudden death counter exceeds exact numeric representation.');
   }
 
-  // SPEC §31, §98: whitelist retained fields; never spread old player/round results.
+  // Keep the original roster/order, configuration and cumulative count, but rebuild players so prior-round score, dice, OUT and turn progress cannot leak.
   return {
     participants: state.participants.map(({ id, name }) => ({ id, name })),
     players: state.participants.map(({ id }) => ({

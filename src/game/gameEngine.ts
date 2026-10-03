@@ -36,7 +36,7 @@ export function createTurn(context: TurnContext, throwStyle: ThrowStyle = DEFAUL
   };
 }
 
-/** Apply to the caller's latest state. Rejected commands consume no randomness. */
+/** Apply the captured turn ID and roll number to the latest state; stale or out-of-order requests are rejected before randomness. */
 export function rollTurn(
   state: TurnState,
   rollNumber: number,
@@ -54,6 +54,7 @@ export function rollTurn(
   assertPlayerTurn(state.player, diceMode);
   const dice = rollGameDice(state.player.activeDice, state.throwStyle, random, diceMode);
   const result = resolveRoll(state.player, dice, diceMode, rollNumber, rollLimit);
+  // The committed result keeps this operation's rollNumber while nextRollNumber advances independently.
   return {
     turnId: state.turnId,
     // SPEC §22, §91: commit once with the completing roll, before presentation.

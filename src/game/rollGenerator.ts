@@ -25,7 +25,8 @@ export function rollGameDice(
   }
 
   return Array.from({ length: count }, (): DieResult => {
-    // SPEC §9: OUT is decided first; OUT consumes no D6 draw.
+    // Every die consumes an OUT-check draw, including careful throws; SAFE alone draws a face.
+    // This order preserves deterministic sequences shared by normal and penalty generation.
     if (nextRandom(random) < OUT_PROBABILITIES[throwStyle]) {
       return { status: 'out', value: null };
     }

@@ -7,6 +7,7 @@ export function getRemainingDice(player: PlayerTurn): number {
 
 export function assertPlayerTurn(player: PlayerTurn, diceMode: DiceMode = DEFAULT_DICE_MODE): void {
   if (!isDiceMode(diceMode)) throw new RangeError('Unknown dice mode.');
+  // diceMode is authoritative; the three buckets must account for every die without inferring a mode from counts.
   const counts = [player.activeDice, player.strandedDice, player.removedDice];
   if (counts.some((count) => !Number.isInteger(count) || count < 0 || count > diceMode)
     || counts.reduce((sum, count) => sum + count, 0) !== diceMode) {
@@ -63,7 +64,9 @@ export function resolveRoll(
 
   const activeDice = player.activeDice - outCount - scoringCount;
   const strandedDice = player.strandedDice + outCount;
-  // v3 §4.8: COMPLETE, no-score, roll limit, no active dice, continuation.
+  // Classify termination only after calculating this roll's score and dice changes.
+  // Priority is contractual: COMPLETE > no-score > ROLL limit > no active dice > continue.
+  // In particular, no-score wins over the limit, and the limit wins over no active dice.
   const ending: RollOutcome = activeDice === 0 && strandedDice === 0
     ? { outcome: 'complete' }
     : scoringCount === 0 ? { outcome: 'turnEnd', reason: 'noScore' }

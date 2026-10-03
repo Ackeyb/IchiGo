@@ -28,7 +28,8 @@ function rankFinishedPlayers(players: readonly RankingPlayer[], diceMode: DiceMo
     if (ids.has(player.id)) throw new Error('Ranking requires unique player IDs.');
     ids.add(player.id);
   }
-  // Copy before sorting. Input order is preserved within a tie, not used as a tiebreaker.
+  // Copy before sorting; input order is stable within ties but is not a tiebreaker.
+  // Ties share a competition rank and leave gaps in the following ranks.
   const sorted = [...players].sort(comparePlayers);
   let rank = 0;
   return sorted.map((player, index) => {

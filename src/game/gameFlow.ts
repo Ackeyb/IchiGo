@@ -84,6 +84,7 @@ function apply(state: FlowState, action: FlowAction, random: RandomSource): Flow
     }
     if (action.type === 'start') return start(state, action.setup);
     if (action.type === 'fullReset') {
+      // Flow owns game setup only; Sound is independent state and is intentionally untouched.
       const draft = initialSetup();
       if (state.setupKind === 'fullReset' && sameSetup(state.draft, draft)) return state;
       return { ...state, draft, setupKind: 'fullReset' };
@@ -97,10 +98,12 @@ function apply(state: FlowState, action: FlowAction, random: RandomSource): Flow
   }
   const { game, gameNumber, revision } = state;
   if (action.type === 'replay' && state.phase === 'finished') {
+    // Replay retains the finished game's settings; its preparation phase permits only participant reordering.
     const replaySource = preparationFromGame(game);
     return { phase: 'replayPreparation', revision, gameNumber, draft: replaySource, replaySource };
   }
   if (action.type === 'newGame' && state.phase === 'finished') {
+    // New Game carries the same settings into an editable Setup draft.
     return { phase: 'setup', revision, gameNumber, draft: preparationFromGame(game), setupKind: 'newGame' };
   }
   if (action.type === 'exitGame' && state.phase !== 'finished') {
@@ -157,7 +160,7 @@ function apply(state: FlowState, action: FlowAction, random: RandomSource): Flow
   return state;
 }
 
-/** Requests capture the rendered revision; never rebind an old request to new state. */
+/** Reject a stale captured revision before applying the action, so an old ROLL cannot reach random generation. */
 export function advanceFlow(state: FlowState, expectedRevision: number, action: FlowAction, random: RandomSource): FlowState {
   if (expectedRevision !== state.revision) return state;
   const next = apply(state, action, random);

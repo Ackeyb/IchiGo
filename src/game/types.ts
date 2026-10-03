@@ -6,6 +6,7 @@ export type DieResult =
 export type ThrowStyle = 'rough' | 'normal' | 'careful';
 export type DiceMode = 5 | 7 | 10 | 14;
 export const DEFAULT_DICE_MODE: DiceMode = 7;
+/** Game-wide setting; null is unlimited. Track usage through TurnState progression, not a duplicate limit. */
 export type RollLimit = null | 1 | 2 | 3 | 4 | 5;
 export const DEFAULT_ROLL_LIMIT: RollLimit = null;
 
