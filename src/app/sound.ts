@@ -17,6 +17,7 @@ export interface SoundPlayer {
 
 type AudioContextFactory = new () => AudioContext;
 
+// Pattern tuples are [frequencyHz, delaySeconds, durationSeconds].
 const patterns: Readonly<Record<SoundCue, readonly (readonly [number, number, number])[]>> = {
   ui: [[660, 0, 0.06]],
   roll: [[180, 0, 0.07], [240, 0.07, 0.08]],

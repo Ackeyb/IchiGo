@@ -7,6 +7,7 @@ export function RankingBoard({ game, final = false, currentHasRolled = false }: 
     ? calculateFinalRanking(game.players, game.diceMode)
     : calculateProvisionalRanking(game.players, game.diceMode);
   const bottom = 'bottomIds' in result ? result.bottomIds : [];
+  // Append unfinished players without a provisional rank; current-player emphasis remains presentation only.
   const ids = [...result.rankings.map((entry) => entry.playerId), ...game.players.filter((p) => !p.turnFinished).map((p) => p.id)];
   return <section className="panel ranking" aria-label={final ? '最終順位' : '暫定順位'}>
     <h3>{final ? '最終順位' : '暫定順位'}</h3>

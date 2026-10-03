@@ -11,6 +11,7 @@ export function ConfirmDialog({ title, description = '現在のゲーム内容�
   const dialog = useRef<HTMLDialogElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
   const confirm = useRef<HTMLButtonElement>(null);
+  // The dialog owns focus lifecycle; its caller owns the captured revision and confirmed action.
   useEffect(() => {
     const element = dialog.current!;
     element.showModal();

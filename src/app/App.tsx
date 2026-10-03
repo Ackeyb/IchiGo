@@ -61,6 +61,7 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
     const first = requestAnimationFrame(() => { second = requestAnimationFrame(() => store.presented(committedState.revision)); });
     return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
   }, [busy, committedState, store]);
+  // Keep focus on the current heading without browser scrolling during in-phase Play/Penalty updates.
   useEffect(() => {
     const preventRollScroll = focusedPhase.current === state.phase
       && (state.phase === 'turn' || state.phase === 'penalty');
@@ -107,7 +108,8 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
         multiplier: getPenaltyMultiplier(committedState.game.totalCompletionCount),
       } : undefined;
       const current = game.participants[game.currentPlayerIndex]!;
-      // Keep the committed roll number until the presenter unlocks the next action.
+      // The counter names the next roll to take; while busy, retain the committed result's number
+      // and advance to nextRollNumber only when presentation unlocks continuation.
       const nextRollLabel = busy && committedState.phase === 'turn' && committedState.turn.phase === 'result'
         ? committedState.turn.rollNumber : state.turn.nextRollNumber;
       content = <div className="game-layout"><section className="play panel">
@@ -133,6 +135,7 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
           {player.strandedDice > 0 && <p>OUTあり・完走不能。OUTダイスは再ROLLされません。</p>}
         </div>
         <div className="turn-action-slot">
+          {/* Preserve the context line when empty so the primary Action stays in its reserved slot. */}
           <p className="turn-action-context">{player.turnFinished && game.currentPlayerIndex < game.participants.length - 1
             ? <>次のプレイヤー：<strong>{game.participants[game.currentPlayerIndex + 1]!.name}</strong></> : '\u00a0'}</p>
           {!player.turnFinished ? action(result ? '続けてROLL' : 'ROLL', 'roll') : game.currentPlayerIndex < game.participants.length - 1

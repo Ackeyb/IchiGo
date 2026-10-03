@@ -10,6 +10,7 @@ export function ReplayPreparationScreen({ draft, busy, onReorder, onStart }: {
 }) {
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => { heading.current?.focus(); }, []);
+  // Replay edits order only; Flow and Recovery also enforce the locked identities and game settings.
   function move(index: number, offset: number) {
     const ids = draft.participants.map((participant) => participant.id);
     const target = index + offset;

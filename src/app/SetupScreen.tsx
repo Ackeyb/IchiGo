@@ -23,6 +23,7 @@ export function SetupScreen({ busy, onStart, onDraftChange, onFullReset, focusOn
   useEffect(() => { if (focusOnMount) heading.current?.focus(); }, [focusOnMount]);
   useEffect(() => { setSetup(initial); }, [initial]);
 
+  // Publish edits as recoverable drafts, not running-game state; blank names are valid drafts and START validates separately.
   function update(next: Setup) {
     setSetup(next);
     onDraftChange(next);
@@ -35,6 +36,7 @@ export function SetupScreen({ busy, onStart, onDraftChange, onFullReset, focusOn
   }
   function addPlayer() {
     if (setup.participants.length >= 10) return;
+    // Allocate new identity independently of row position/name; preserve carried IDs and skip collisions.
     let id: string;
     do { id = `p${nextId.current++}`; } while (setup.participants.some((participant) => participant.id === id));
     update({ ...setup, participants: [...setup.participants, { id, name: '' }] });
