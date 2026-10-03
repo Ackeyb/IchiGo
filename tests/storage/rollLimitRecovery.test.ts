@@ -93,6 +93,7 @@ describe('ROLL limit Recovery v3', () => {
     expect(state.turn).toMatchObject({ rollNumber: 2, nextRollNumber: 3, result: { outcome: 'continue' } });
   });
   it('accepts final roll 3 termination and nextRollNumber 4, and rejects further rolls without draws', () => {
+    // A committed final roll advances progression to limit + 1; the ended turn cannot roll again.
     const state = afterRolls(3);
     const restored = load(state).state;
     expect(restored).toEqual(state);

@@ -18,6 +18,7 @@ class Sequence implements RandomSource {
 const normal = (...faces: number[]) => faces.flatMap((face) => [0.9, (face - 0.5) / 6]);
 let frames = new Map<number, FrameRequestCallback>();
 let frameId = 0;
+// Advance the two-RAF post-reveal acknowledgment; this models the component boundary, not browser layout measurement.
 function paint() {
   act(() => {
     for (let index = 0; index < 2; index++) {

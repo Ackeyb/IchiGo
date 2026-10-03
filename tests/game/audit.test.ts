@@ -144,6 +144,7 @@ describe('cross-phase audit', () => {
   });
 
   it('preserves invariants throughout every reachable roll-resolution state', () => {
+    // Enumerate count categories, not die orderings; visited-state deduplication bounds repeated transitions.
     const pending = [initial().player];
     const visited = new Set<string>();
     while (pending.length) {

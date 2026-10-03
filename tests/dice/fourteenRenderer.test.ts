@@ -7,6 +7,7 @@ import { mathRandomSource } from '../../src/game/randomSource';
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 const safe = (count: number): DieResult[] => Array.from({ length: count }, (_, i) => ({ status: 'safe', value: (i % 6 + 1) as DieValue }));
+// GPU drawing is stubbed so deterministic geometry/camera state is inspectable; browser QA covers visual quality.
 function fixture() {
   const container = { clientWidth: 244, clientHeight: 80 } as HTMLElement;
   const renderer = new ThreeDiceRenderer(container);

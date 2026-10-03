@@ -18,6 +18,7 @@ class SequenceRandom implements RandomSource {
 const out: DieResult = { status: 'out', value: null };
 const safe = (value: DieValue): DieResult => ({ status: 'safe', value });
 const results = (...values: (DieValue | 'out')[]) => values.map((v) => v === 'out' ? out : safe(v));
+// Match rollGameDice consumption: OUT uses its check draw; SAFE uses that draw plus a face draw.
 const sourceFor = (...values: (DieValue | 'out')[]) => new SequenceRandom(
   values.flatMap((v) => v === 'out' ? [0] : [0.9, (v - 0.5) / 6]),
 );
@@ -103,6 +104,7 @@ describe('SPEC §77 cases 01–17: normal roll resolution', () => {
 describe('SPEC §77 cases 35–38: deterministic random generation', () => {
   it.each([['normal', 0.01], ['rough', 0.03]] as const)('%s uses an independent strict OUT threshold per die', (style, probability) => {
     expect(OUT_PROBABILITIES[style]).toBe(probability);
+    // The generator compares with <, so just-below is OUT and the exact threshold is SAFE.
     const random = new SequenceRandom([probability - 0.000001, probability, 0, probability + 0.000001, 1 - Number.EPSILON]);
     expect(rollGameDice(3, style, random)).toEqual([out, safe(1), safe(6)]);
     expect(random.calls).toBe(5);
@@ -210,6 +212,7 @@ describe('invalid input and invariants', () => {
   });
 
   it('preserves invariants for all seven-die combinations of OUT, one, five and non-scoring', () => {
+    // Exhaust four scoring-equivalent categories for seven dice only; keep 14-die checks representative instead of scaling this Cartesian loop.
     const choices = [out, safe(1), safe(5), safe(2)] as const;
     for (let code = 0; code < 4 ** 7; code++) {
       const dice = Array.from({ length: 7 }, (_, index) => choices[Math.floor(code / 4 ** index) % 4]!);

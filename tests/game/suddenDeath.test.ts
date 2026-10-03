@@ -113,7 +113,7 @@ describe('SPEC §77 cases 25–28: explicit round reset', () => {
       expect(next.suddenDeathCount).toBe(count + 1);
       expect(next.totalCompletionCount).toBe(2);
       expect(next.players.map((p) => p.id)).toEqual(['b', 'a']);
-      // Resolve a complete, non-scoring round with the existing Phase 1 engine.
+      // Resolve a round where every player ends on an all-OUT, no-score turn.
       state = {
         ...next,
         players: next.players.map(({ id }) => ({ id, ...rollTurn(createTurn({ turnId: 'test-turn', totalCompletionCount: 0 }, next.throwStyle), 1, { next: () => 0 }, 'test-turn').player })),
