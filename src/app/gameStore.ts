@@ -3,6 +3,10 @@ import type { FlowAction } from '../game/gameFlow';
 import type { RandomSource } from '../game/randomSource';
 import type { RecoveryNotice, SessionRecovery } from '../storage/sessionRecovery';
 
+/**
+ * Coordinates authoritative game state with staged presentation and persistence.
+ * `state` is committed game state; `visibleState` is presentation-facing and may lag it, never driving game rules.
+ */
 /** Owned by one mounted app, not a React updater: StrictMode cannot replay random draws. */
 export function createGameStore(random: RandomSource, recovery?: Pick<SessionRecovery, 'loadGame' | 'saveGame'>) {
   const loaded = recovery?.loadGame();
@@ -36,6 +40,7 @@ export function createGameStore(random: RandomSource, recovery?: Pick<SessionRec
         const state = advanceFlow(before, revision, action, random);
         const waitsForDice = state !== before && (action.type === 'roll' || action.type === 'rollPenalty');
         const isDraftEdit = action.type === 'updateSetup' || action.type === 'reorderReplay';
+        // Commit authoritative memory first; keep visibleState staged until presentation reveals a dice result.
         snapshot = {
           ...snapshot,
           state,
@@ -45,7 +50,7 @@ export function createGameStore(random: RandomSource, recovery?: Pick<SessionRec
           recovered: false,
         };
         if (state !== before && recovery) {
-          // State is authoritative in memory before persistence; storage failure is fail-open.
+          // This save attempt follows the memory commit and precedes emit; storage failure cannot undo or reroll the result.
           snapshot = { ...snapshot, recoveryNotice: recovery.saveGame(state) };
         }
       } catch (error) {
@@ -54,12 +59,14 @@ export function createGameStore(random: RandomSource, recovery?: Pick<SessionRec
       emit();
     },
     reveal(revision: number) {
+      // Reveal changes presentation only; the revision guard rejects callbacks from an older committed state.
       if (!snapshot.busy || snapshot.state.revision !== revision) return;
       if (snapshot.visibleState === snapshot.state) return;
       snapshot = { ...snapshot, visibleState: snapshot.state };
       emit();
     },
     presented(revision: number) {
+      // This later presentation acknowledgment unlocks actions; keep it distinct from reveal and revision-bound.
       if (!snapshot.busy || snapshot.state.revision !== revision) return;
       snapshot = { ...snapshot, visibleState: snapshot.state, busy: false };
       emit();

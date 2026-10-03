@@ -8,6 +8,11 @@ import { isDiceMode, isRollLimit } from '../game/types';
 import type { DiceMode, DieResult, PlayerTurn, RollResolution, ThrowStyle, TurnState } from '../game/types';
 import type { SuddenDeathState } from '../game/suddenDeath';
 
+/**
+ * Validates and restores persisted data as untrusted input.
+ * Unsupported or corrupt game state is rejected, not migrated, inferred or repaired.
+ * Recovery never re-rolls committed results. Game and Sound schemas are independent.
+ */
 export const SESSION_GAME_KEY = 'ichi-go:game';
 export const SESSION_SOUND_KEY = 'ichi-go:sound';
 export const SESSION_SCHEMA_VERSION = 3 as const;
@@ -54,6 +59,7 @@ function validPlayer(value: unknown, diceMode: DiceMode): value is PlayerTurn {
 }
 
 function validRound(value: unknown): value is SuddenDeathState {
+  // Dice Mode and rollLimit must be present and supported; recovery never supplies configuration defaults.
   if (!isRecord(value) || !Array.isArray(value.participants) || !Array.isArray(value.players)
     || !isSafeCount(value.totalCompletionCount) || !isSafeCount(value.suddenDeathCount)
     || !Number.isInteger(value.currentPlayerIndex) || !isDiceMode(value.diceMode) || !isRollLimit(value.rollLimit)) return false;
@@ -77,6 +83,7 @@ function validRound(value: unknown): value is SuddenDeathState {
     && Number(value.totalCompletionCount) <= maximumCompletions;
 }
 
+/** Reconstruct a candidate pre-roll state only for validation; never write it back as a repair. */
 function previousPlayer(result: RollResolution, diceMode: DiceMode): PlayerTurn | undefined {
   const previous: PlayerTurn = {
     score: result.player.score - result.gainedScore,
@@ -105,6 +112,7 @@ function validTurn(value: unknown, game: SuddenDeathState, gameNumber: number, r
     || !Number.isSafeInteger(value.nextRollNumber) || Number(value.nextRollNumber) < 1 || Number(value.nextRollNumber) > revision + 1
     || !validPlayer(value.player, game.diceMode) || !same(value.player, currentPlayer)) return false;
   if (value.phase === 'ready') {
+    // READY must point to an allowed next roll; the committed RESULT case below has a different boundary.
     if (value.result !== undefined || value.rollNumber !== undefined || value.player.turnFinished
       || value.player.activeDice === 0
       || (game.rollLimit !== null && Number(value.nextRollNumber) > game.rollLimit)) return false;
@@ -112,6 +120,7 @@ function validTurn(value: unknown, game: SuddenDeathState, gameNumber: number, r
     return value.nextRollNumber === 1 ? isInitialPlayer(value.player, game.diceMode)
       : value.player.removedDice >= Number(value.nextRollNumber) - 1;
   }
+  // A committed final roll may advance nextRollNumber to limit + 1; this is progression, not permission to roll again.
   if (!Number.isSafeInteger(value.rollNumber) || Number(value.rollNumber) < 1
     || Number(value.rollNumber) > revision || value.nextRollNumber !== Number(value.rollNumber) + 1 || !isRecord(value.result)
     || !Array.isArray(value.result.dice) || !value.result.dice.every(validDie)) return false;
@@ -122,6 +131,7 @@ function validTurn(value: unknown, game: SuddenDeathState, gameNumber: number, r
   if (value.rollNumber === 1 ? !isInitialPlayer(previous, game.diceMode)
     : previous.removedDice < Number(value.rollNumber) - 1) return false;
   try {
+    // Reuse live termination semantics against saved dice; this consumes no randomness and repairs no fields.
     return same(resolveRoll(previous, result.dice, game.diceMode, Number(value.rollNumber), game.rollLimit), result);
   } catch {
     return false;
@@ -133,6 +143,7 @@ function validPenaltyEntry(value: unknown, expected: PenaltyEntry, totalCompleti
     || (value.status !== 'pending' && value.status !== 'resolved')) return false;
   if (value.status === 'pending') return value.penaltyRoll === undefined && value.basePenalty === undefined
     && value.multiplier === undefined && value.finalPenalty === undefined;
+  // Preserve committed DieResult values: careful rejects OUT, and only arithmetic validation maps OUT to six.
   if (!Array.isArray(value.penaltyRoll) || value.penaltyRoll.length !== expected.diceCount
     || !value.penaltyRoll.every(validDie)
     || (throwStyle === 'careful' && value.penaltyRoll.some((die) => die.status === 'out'))) return false;
@@ -164,7 +175,7 @@ function validPenalty(value: unknown, game: SuddenDeathState, gameNumber: number
     : position > index ? entry.status === 'pending' : true);
 }
 
-/** Rejects unreachable or internally inconsistent snapshots instead of repairing them. */
+/** Reject unreachable or contradictory snapshots; validation never fills defaults or writes reconstructed values back. */
 export function validateStoredFlowState(value: unknown): value is FlowState {
   if (!isRecord(value) || !isSafeCount(value.revision) || !isSafeCount(value.gameNumber)
     || value.revision >= Number.MAX_SAFE_INTEGER || value.gameNumber >= Number.MAX_SAFE_INTEGER
@@ -176,6 +187,7 @@ export function validateStoredFlowState(value: unknown): value is FlowState {
   if (value.phase === 'replayPreparation') {
     if (value.gameNumber < 1 || value.gameNumber > value.revision
       || !validateSetupDraft(value.draft) || !validateSetupDraft(value.replaySource)) return false;
+    // Replay may reorder participants, but names, identities and game settings stay locked to the source.
     if (!validateSetup(value.draft) || !validateSetup(value.replaySource)
       || value.draft.diceMode !== value.replaySource.diceMode
       || value.draft.throwStyle !== value.replaySource.throwStyle
@@ -242,6 +254,7 @@ export class SessionRecovery {
     }
   }
 
+  /** A storage failure is fail-open; a later reload can recover only the last successful checkpoint. */
   saveGame(state: FlowState): RecoveryNotice | undefined {
     const storage = this.getStorage();
     if (!storage) return 'unavailable';
@@ -257,6 +270,7 @@ export class SessionRecovery {
   clearGame(): RecoveryNotice | undefined {
     const storage = this.getStorage();
     if (!storage) return 'unavailable';
+    // Ignore the old checkpoint in memory before attempting removal or the cleared-marker fallback.
     this.ignoreStoredGame = true;
     this.gameLoadResult = { recovered: false };
     try { storage.removeItem(SESSION_GAME_KEY); return undefined; } catch {
@@ -311,6 +325,7 @@ export class SessionRecovery {
 
   private discardInvalid(storage: StorageAdapter): void {
     try { storage.removeItem(SESSION_GAME_KEY); } catch {
+      // If removal fails, a marker prevents revival; if its write also fails, the caller ignores stale data only in memory.
       try { storage.setItem(SESSION_GAME_KEY, JSON.stringify({ version: SESSION_SCHEMA_VERSION, cleared: true })); } catch { /* memory-only */ }
     }
   }
