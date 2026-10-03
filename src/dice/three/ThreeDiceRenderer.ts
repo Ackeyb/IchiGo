@@ -73,6 +73,10 @@ function smoothstep(value: number): number {
   return value * value * (3 - 2 * value);
 }
 
+/**
+ * Animates already committed dice results.
+ * Motion and settle orientation are presentation only and never determine game state or consume its RandomSource.
+ */
 export class ThreeDiceRenderer implements DiceRenderer {
   private renderer: WebGLRenderer | undefined;
   private scene: Scene | undefined;
@@ -142,6 +146,7 @@ export class ThreeDiceRenderer implements DiceRenderer {
       const textures: CanvasTexture[] = [];
       this.textures = textures;
       for (const value of MATERIAL_VALUES) textures.push(makeFaceTexture(value));
+      // This order follows BoxGeometry's face order and must stay aligned with the D6 face-normal mapping.
       const materials = textures.map((map) => new MeshStandardMaterial({ map, roughness: 0.68, metalness: 0 }));
       const outMaterials = MATERIAL_VALUES.map(() => new MeshStandardMaterial({ color: '#b44b2a', roughness: 0.76, metalness: 0 }));
 
@@ -209,6 +214,7 @@ export class ThreeDiceRenderer implements DiceRenderer {
   }
 
   clear(): void {
+    // Cancel the active animation and empty the scene while retaining reusable GPU resources.
     if (this.frame !== undefined) cancelAnimationFrame(this.frame);
     this.frame = undefined;
     const reject = this.activeReject;
@@ -314,7 +320,7 @@ export class ThreeDiceRenderer implements DiceRenderer {
 
   private frameCamera(): void {
     if (!this.camera) return;
-    // Only larger sets need extra horizontal room in narrow desktop/tablet stages.
+    // Tight stages need extra camera distance for 11–14 dice; this changes framing, not tray or die dimensions.
     const distance = this.diceCount > 10 ? Math.max(1, 2 / this.camera.aspect) : 1;
     this.camera.position.set(0, 7.5 * distance, 10 * distance);
     this.camera.lookAt(0, 0, 0);

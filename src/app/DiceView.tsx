@@ -35,6 +35,7 @@ export function DiceView({ dice, diceMode, kind, removing = false }: {
   return <ol className="dice" aria-label="確定したダイスの出目" data-dice-mode={diceMode}
     data-columns={layout.columns} data-rows={layout.rows.join(',')} style={style}>
     {dice.map((die, index) => {
+      // Red 1/5 is face styling shared with Penalty; GET status belongs only to normal scoring.
       const scored = kind === 'normal' && die.status === 'safe' && (die.value === 1 || die.value === 5);
       const status = die.status === 'out' ? 'OUT' : scored ? 'GET' : kind === 'normal' ? 'SAFE' : undefined;
       const ariaLabel = die.status === 'out' ? 'OUT' : `出目 ${die.value}${status ? `、${status}` : ''}`;

@@ -5,7 +5,10 @@ const ROW_CAPACITY = 5;
 const COLUMN_GAP = 1.6;
 const ROW_DEPTH = 1.15;
 
-/** Presentation-only settle positions. Logical Dice Mode remains owned by the game state. */
+/**
+ * Animated 3D staging positions; these differ from the strict 2D result grid.
+ * Larger sets are balanced to stay visible in the tray and camera frame.
+ */
 export function getDiceSettlePositions(count: number): readonly DiceSettlePosition[] {
   if (!Number.isInteger(count) || count < 0 || count > MAX_DICE) {
     throw new RangeError('3D dice count must be an integer from 0 to 14');

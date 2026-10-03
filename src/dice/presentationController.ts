@@ -40,6 +40,7 @@ export class DicePresentationController {
     if ((this.options.prefersReducedMotion ?? prefersReducedMotion)()) {
       return { mode: 'fallback', reason: 'reduced-motion' };
     }
+    // A request ID names one immutable committed payload; reuse its completion instead of replaying it.
     if (this.current?.id === request.id) return this.current.completion;
 
     const completion = this.run(request);
@@ -47,6 +48,7 @@ export class DicePresentationController {
     return completion;
   }
 
+  // Cancel the active presentation while retaining reusable renderer resources.
   clear(): void {
     this.current = undefined;
     try { this.renderer?.clear(); } catch { /* cleanup failure must not block fallback or navigation */ }
@@ -55,6 +57,7 @@ export class DicePresentationController {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    // Unlike clear(), disposal is terminal and releases renderer resources.
     this.current = undefined;
     this.disposeRenderer(this.renderer);
     this.disposeRenderer(this.initializingRenderer);
@@ -74,6 +77,7 @@ export class DicePresentationController {
       if (this.disposed) return { mode: 'fallback', reason: 'unsupported' };
       return { mode: 'three' };
     } catch (error) {
+      // Renderer failure changes only the presentation path; fallback keeps the caller's committed dice.
       const reason = this.failureReason(error);
       this.unavailableReason = reason;
       this.disposeRenderer(this.renderer);

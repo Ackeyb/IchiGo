@@ -97,6 +97,8 @@ export function DicePresentation({
     };
   }, [createRenderer, prefersReducedMotion, timeoutMs]);
 
+  // These stages reveal values already committed by the engine; they do not calculate results.
+  // Keep the order so later score and penalty values are not exposed early.
   useEffect(() => {
     if (!hasDice || !dice) {
       controller.current?.clear();
@@ -105,6 +107,7 @@ export function DicePresentation({
       setStage(0);
       return;
     }
+    // A recovered settled result is already committed; only a live busy request starts this presentation.
     if (!busy || !controller.current) return;
     let current = true;
     let secondFrame = 0;
@@ -121,6 +124,7 @@ export function DicePresentation({
     const reveal = () => {
       if (!current) return;
       onReveal(revision);
+      // Reveal changes visible content; the later paint acknowledgment unlocks the next action.
       firstFrame = requestAnimationFrame(() => {
         secondFrame = requestAnimationFrame(() => onPresented(revision));
       });
@@ -153,6 +157,7 @@ export function DicePresentation({
     if (result instanceof Promise) void result.then(finish);
     else finish(result);
     return () => {
+      // Invalidate old timers and frame callbacks so they cannot reveal or unlock a newer revision.
       current = false;
       timers.forEach(clearTimeout);
       cancelAnimationFrame(firstFrame);

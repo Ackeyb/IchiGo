@@ -8,7 +8,10 @@ export type DiceGridLayout = Readonly<{
   secondRowStart?: number;
 }>;
 
-/** Result-card layout is selected from the authoritative mode as well as the displayed count. */
+/**
+ * Owns strict 2D result-card rows selected from mode and displayed count.
+ * Three.js settle positions are separate and must not inherit these row rules.
+ */
 export function getDiceGridLayout(diceMode: DiceMode, displayedCount: number): DiceGridLayout {
   if (!Number.isInteger(displayedCount) || displayedCount < 1 || displayedCount > diceMode) {
     throw new RangeError('displayed dice count must be within the selected Dice Mode');
@@ -17,6 +20,7 @@ export function getDiceGridLayout(diceMode: DiceMode, displayedCount: number): D
   const rowCapacity = diceMode === 10 ? 5 : diceMode === 14 ? 7 : diceMode;
   if (displayedCount > rowCapacity) {
     const secondRowCount = displayedCount - rowCapacity;
+    // Center the short visual row without reordering the committed dice array.
     return {
       columns: rowCapacity,
       rows: [rowCapacity, secondRowCount],

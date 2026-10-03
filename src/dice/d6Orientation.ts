@@ -22,6 +22,7 @@ export function getD6TargetQuaternion(value: DieValue, yaw = 0): Quaternion {
 }
 
 export function getDisplayedTopValue(quaternion: Quaternion): DieValue {
+  // This reads presentation orientation for verification only; it is not a game roll result.
   let best: DieValue = 1;
   let bestY = -Infinity;
   for (const value of [1, 2, 3, 4, 5, 6] as const) {
