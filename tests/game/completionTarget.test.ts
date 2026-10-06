@@ -16,7 +16,7 @@ const setup = (targetCompletions: CompletionTarget = 2, count = 2, diceMode: Dic
   participants: Array.from({ length: count }, (_, i) => ({ id: `p${i}`, name: `P${i}` })),
 });
 const act = (state: FlowState, type: Extract<FlowAction, { type: string }>['type']) => {
-  if (type === 'start' || type === 'updateSetup' || type === 'reorderReplay') throw new Error('Use a complete action');
+  if (type === 'start' || type === 'updateSetup' || type === 'reorderReplay' || type === 'nextSeriesGame') throw new Error('Use a complete action');
   return advanceFlow(state, state.revision, { type }, noDraw);
 };
 const start = (draft = setup()) => advanceFlow(initialFlow(), 0, { type: 'start', setup: draft }, noDraw);
@@ -71,8 +71,8 @@ describe('Completion Target round policy and flow', () => {
     const draft: Setup = { ...setup(), mode: { type: 'completionTarget', targetCompletions: 2 }, rollLimit: 1 };
     expect(() => start(draft)).toThrow('設定');
   });
-  it('keeps Series START unsupported', () => {
-    expect(() => start({ ...initialSetup(), participants: setup().participants, mode: { type: 'series', gameCount: 2 } })).toThrow('まだ開始できません');
+  it('starts Series through its separate progress path', () => {
+    expect(start({ ...initialSetup(), participants: setup().participants, mode: { type: 'series', gameCount: 2 } })).toMatchObject({ phase: 'turn', game: { currentGameNumber: 1, mode: { type: 'series' } } });
   });
   it('waits for every player even when the first completion reaches target', () => {
     const state = roll(start(setup(1)), faces(1));

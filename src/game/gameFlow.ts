@@ -10,9 +10,13 @@ import { initialSetup } from './setup';
 import type { Setup } from './setup';
 import { modeConfiguration, sameGameMode } from './types';
 import type { TurnState } from './types';
+import { commitSeriesGame, createSeriesState, isSeriesState, nextSeriesGame, seriesTurnId } from './series';
+import type { SeriesState } from './series';
+import { calculateSeriesRanking } from './seriesRanking';
+import type { FinalRanking } from './ranking';
 
 type Base = Readonly<{ revision: number; gameNumber: number }>;
-type Round = Base & Readonly<{ game: SuddenDeathState }>;
+type Round = Base & Readonly<{ game: SuddenDeathState | SeriesState }>;
 export type SetupKind = 'initial' | 'newGame' | 'fullReset';
 export type ReplayPreparation = Setup;
 export type FlowState =
@@ -20,11 +24,14 @@ export type FlowState =
   | (Base & Readonly<{ phase: 'replayPreparation'; draft: ReplayPreparation; replaySource: ReplayPreparation }>)
   | (Round & Readonly<{ phase: 'turn'; turn: TurnState }>)
   | (Round & Readonly<{ phase: 'ranking' | 'suddenDeath' | 'loserReveal' }>)
-  | (Round & Readonly<{ phase: 'penalty' | 'finished'; penalty: PenaltyState; penaltyIndex: number }>);
+  | (Round & Readonly<{ phase: 'penalty' | 'finished'; penalty: PenaltyState; penaltyIndex: number }>)
+  | (Base & Readonly<{ phase: 'seriesIntermediate'; game: SeriesState }>)
+  | (Base & Readonly<{ phase: 'seriesRanking'; game: SeriesState; ranking: FinalRanking }>);
 export type FlowAction =
   | Readonly<{ type: 'start'; setup: Setup }>
   | Readonly<{ type: 'updateSetup'; draft: Setup }>
   | Readonly<{ type: 'reorderReplay'; participantIds: readonly string[] }>
+  | Readonly<{ type: 'nextSeriesGame'; currentGameNumber: number }>
   | Readonly<{ type: 'roll' | 'next' | 'ranking' | 'reveal' | 'suddenDeath' | 'startSuddenDeath'
     | 'penalty' | 'rollPenalty' | 'nextPenalty' | 'finish' | 'replay' | 'startReplay'
     | 'newGame' | 'exitGame' | 'fullReset' }>;
@@ -35,13 +42,11 @@ export const initialFlow = (): FlowState => ({
 
 function turnFor(game: SuddenDeathState, gameNumber: number): TurnState {
   const id = game.participants[game.currentPlayerIndex]!.id;
-  return createTurn({ turnId: `${gameNumber}/${game.suddenDeathCount}/${id}`, totalCompletionCount: game.totalCompletionCount, diceMode: game.diceMode }, game.throwStyle);
+  return createTurn({ turnId: isSeriesState(game) ? seriesTurnId(game, gameNumber) : `${gameNumber}/${game.suddenDeathCount}/${id}`, totalCompletionCount: game.totalCompletionCount, diceMode: game.diceMode }, game.throwStyle);
 }
 
 function start(state: Base, setup: Setup): FlowState {
   if (!validateSetup(setup)) throw new Error('プレイヤー設定を確認してください。');
-  // Series still requires its own progression and recovery before START.
-  if (setup.mode.type === 'series') throw new Error('このゲームモードはまだ開始できません。');
   const gameNumber = state.gameNumber + 1;
   const participants = setup.participants.map(({ id, name }) => ({ id, name: name.trim() }));
   const game: SuddenDeathState = {
@@ -49,7 +54,8 @@ function start(state: Base, setup: Setup): FlowState {
     currentPlayerIndex: 0, totalCompletionCount: 0, suddenDeathCount: 0,
     players: participants.map(({ id }) => ({ id, ...createTurn({ turnId: `${gameNumber}/0/${id}`, totalCompletionCount: 0, diceMode: setup.diceMode }, setup.throwStyle).player })),
   };
-  return { phase: 'turn', revision: state.revision, gameNumber, game, turn: turnFor(game, gameNumber) };
+  const running = setup.mode.type === 'series' ? createSeriesState(game, setup.mode) : game;
+  return { phase: 'turn', revision: state.revision, gameNumber, game: running, turn: turnFor(running, gameNumber) };
 }
 
 function preparationFromGame(game: SuddenDeathState): ReplayPreparation {
@@ -101,18 +107,26 @@ function apply(state: FlowState, action: FlowAction, random: RandomSource): Flow
     return state;
   }
   const { game, gameNumber, revision } = state;
-  if (action.type === 'replay' && state.phase === 'finished') {
+  if (action.type === 'replay' && (state.phase === 'finished' || state.phase === 'seriesRanking')) {
     // Replay retains the finished game's settings; its preparation phase permits only participant reordering.
     const replaySource = preparationFromGame(game);
     return { phase: 'replayPreparation', revision, gameNumber, draft: replaySource, replaySource };
   }
-  if (action.type === 'newGame' && state.phase === 'finished') {
+  if (action.type === 'newGame' && (state.phase === 'finished' || state.phase === 'seriesRanking')) {
     // New Game carries the same settings into an editable Setup draft.
     return { phase: 'setup', revision, gameNumber, draft: preparationFromGame(game), setupKind: 'newGame' };
   }
   if (action.type === 'exitGame' && state.phase !== 'finished') {
     return { phase: 'setup', revision, gameNumber, draft: initialSetup(), setupKind: 'initial' };
   }
+  if (state.phase === 'seriesIntermediate') {
+    if (action.type !== 'nextSeriesGame') return state;
+    const next = nextSeriesGame(state.game, action.currentGameNumber);
+    if (next === state.game) return state;
+    return { phase: 'turn', revision, gameNumber, game: next, turn: turnFor(next, gameNumber) };
+  }
+  // The final cumulative ranking is the stopping boundary until Series Penalty is implemented.
+  if (state.phase === 'seriesRanking') return state;
   if (state.phase === 'turn') {
     const { turn } = state;
     if (action.type === 'roll' && !turn.player.turnFinished) {
@@ -120,10 +134,12 @@ function apply(state: FlowState, action: FlowAction, random: RandomSource): Flow
       const next = rollTurn(ready, ready.nextRollNumber, random, turn.turnId, game.diceMode, game.rollLimit);
       if (next === ready) return state;
       const id = game.participants[game.currentPlayerIndex]!.id;
-      return { ...state, turn: next, game: { ...game,
+      const committed = { ...game,
         totalCompletionCount: next.totalCompletionCount,
         players: game.players.map((p) => p.id === id ? { id, ...next.player } : p),
-      } };
+      };
+      return { ...state, turn: next, game: isSeriesState(committed) && committed.players.every((p) => p.turnFinished)
+        ? commitSeriesGame(committed) : committed };
     }
     if (!turn.player.turnFinished) return state;
     if (action.type === 'next' && game.currentPlayerIndex < game.participants.length - 1) {
@@ -131,6 +147,9 @@ function apply(state: FlowState, action: FlowAction, random: RandomSource): Flow
       return { ...state, game: next, turn: turnFor(next, gameNumber) };
     }
     if (action.type === 'ranking' && game.players.every((p) => p.turnFinished)) {
+      if (isSeriesState(game)) return game.currentGameNumber < game.mode.gameCount
+        ? { phase: 'seriesIntermediate', game, gameNumber, revision }
+        : { phase: 'seriesRanking', game, gameNumber, revision, ranking: calculateSeriesRanking(game.cumulative) };
       // Keep the terminal roll until this explicit action, after the store's presentation acknowledgment.
       const phase = game.mode.type === 'completionTarget' && shouldStartNextRound(game) ? 'suddenDeath' : 'ranking';
       return { phase, game, gameNumber, revision };

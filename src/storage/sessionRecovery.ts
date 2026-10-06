@@ -7,6 +7,8 @@ import type { PenaltyEntry } from '../game/penalty';
 import { isDiceMode, isRollLimit, isModeConfiguration, sameGameMode } from '../game/types';
 import type { DiceMode, DieResult, PlayerTurn, RollResolution, ThrowStyle, TurnState } from '../game/types';
 import type { SuddenDeathState } from '../game/suddenDeath';
+import { isSeriesState, seriesTurnId } from '../game/series';
+import { calculateSeriesRanking } from '../game/seriesRanking';
 
 /**
  * Validates and restores persisted data as untrusted input.
@@ -58,14 +60,13 @@ function validPlayer(value: unknown, diceMode: DiceMode): value is PlayerTurn {
   }
 }
 
-function validRound(value: unknown): value is SuddenDeathState {
+function validRound(value: unknown, seriesRuntime = false): value is SuddenDeathState {
   // Dice Mode and rollLimit must be present and supported; recovery never supplies configuration defaults.
   if (!isRecord(value) || !Array.isArray(value.participants) || !Array.isArray(value.players)
     || !isSafeCount(value.totalCompletionCount) || !isSafeCount(value.suddenDeathCount)
     || !Number.isInteger(value.currentPlayerIndex) || !isDiceMode(value.diceMode) || !isRollLimit(value.rollLimit)) return false;
-  // Series still has no runtime. Completion Target history is validated separately below.
   const config = { mode: value.mode, rollLimit: value.rollLimit };
-  if (!isModeConfiguration(config) || config.mode.type === 'series') return false;
+  if (!isModeConfiguration(config) || (config.mode.type === 'series' && !seriesRuntime)) return false;
   const diceMode = value.diceMode;
   const participants = value.participants;
   const players = value.players;
@@ -77,6 +78,8 @@ function validRound(value: unknown): value is SuddenDeathState {
   const ids = participants.map((participant) => isRecord(participant) ? participant.id : undefined);
   if (players.some((player, index) => !isRecord(player) || player.id !== ids[index] || !validPlayer(player, diceMode))) return false;
   if (value.throwStyle === 'careful' && players.some((player) => player.strandedDice !== 0)) return false;
+  // Series history/cumulative bounds belong to its own phase-aware validator, never the Normal SD invariant.
+  if (config.mode.type === 'series') return value.suddenDeathCount === 0;
   const maximumCompletions = participants.length * (Number(value.suddenDeathCount) + 1);
   const currentCompletions = players.filter((player) => (player as unknown as PlayerTurn).completed).length;
   const previousCompletions = Number(value.totalCompletionCount) - currentCompletions;
@@ -116,7 +119,8 @@ function validTurn(value: unknown, game: SuddenDeathState, gameNumber: number, r
     turnFinished: roundPlayer.turnFinished,
   };
   if (!isRecord(value) || (value.phase !== 'ready' && value.phase !== 'result')
-    || typeof value.turnId !== 'string' || value.turnId !== `${gameNumber}/${game.suddenDeathCount}/${game.participants[game.currentPlayerIndex]!.id}`
+    || typeof value.turnId !== 'string' || value.turnId !== (isSeriesState(game) ? seriesTurnId(game, gameNumber)
+      : `${gameNumber}/${game.suddenDeathCount}/${game.participants[game.currentPlayerIndex]!.id}`)
     || value.throwStyle !== game.throwStyle || value.totalCompletionCount !== game.totalCompletionCount
     || !Number.isSafeInteger(value.nextRollNumber) || Number(value.nextRollNumber) < 1 || Number(value.nextRollNumber) > revision + 1
     || !validPlayer(value.player, game.diceMode) || !same(value.player, currentPlayer)) return false;
@@ -145,6 +149,42 @@ function validTurn(value: unknown, game: SuddenDeathState, gameNumber: number, r
   } catch {
     return false;
   }
+}
+
+/** Validate authoritative aggregates, not reconstructed history; completed terminal-turn snapshots already include this Game. */
+function validStoredSeries(value: Record<string, unknown>): boolean {
+  if (!validRound(value.game, true) || !isSeriesState(value.game)
+    || !['turn', 'seriesIntermediate', 'seriesRanking'].includes(String(value.phase))) return false;
+  const game = value.game;
+  if (!Number.isSafeInteger(game.currentGameNumber) || game.currentGameNumber < 1 || game.currentGameNumber > game.mode.gameCount
+    || !Array.isArray(game.cumulative) || game.cumulative.length !== game.participants.length) return false;
+  const current = game.currentPlayerIndex;
+  if (game.players.some((player, index) => index < current ? !player.turnFinished : index > current ? !isInitialPlayer(player, game.diceMode) : false)) return false;
+  const completed = game.players.every((player) => player.turnFinished);
+  // There is no independently mutable completedGameCount. Phase plus the current players defines the atomic commit boundary.
+  const committedGames = game.currentGameNumber - (completed ? 0 : 1);
+  const validAggregate = (score: unknown, remaining: unknown, count: number): boolean => {
+    if (!isSafeCount(score) || !isSafeCount(remaining) || remaining > count * game.diceMode || score % 50 !== 0) return false;
+    const removed = count * game.diceMode - remaining;
+    return score >= 50 * removed && score <= 100 * removed;
+  };
+  if (game.cumulative.some((entry: unknown, index: number) => {
+    if (!isRecord(entry) || entry.playerId !== game.participants[index]!.id
+      || !validAggregate(entry.cumulativeScore, entry.cumulativeRemainingDice, committedGames)) return true;
+    if (!completed) return false;
+    const player = game.players[index]!;
+    // For the current completed Game, subtract its known contribution only for validation. Never repair or re-add it.
+    return !validAggregate(Number(entry.cumulativeScore) - player.score,
+      Number(entry.cumulativeRemainingDice) - player.activeDice - player.strandedDice, committedGames - 1);
+  })) return false;
+  const currentCompletions = game.players.filter((player) => player.completed).length;
+  const previousCompletions = game.totalCompletionCount - currentCompletions;
+  if (previousCompletions < 0 || previousCompletions > game.participants.length * (game.currentGameNumber - 1)) return false;
+  if (value.phase === 'turn') return value.ranking === undefined
+    && validTurn(value.turn, game, Number(value.gameNumber), Number(value.revision));
+  if (!completed || value.turn !== undefined || value.penalty !== undefined) return false;
+  if (value.phase === 'seriesIntermediate') return game.currentGameNumber < game.mode.gameCount && value.ranking === undefined;
+  return game.currentGameNumber === game.mode.gameCount && same(value.ranking, calculateSeriesRanking(game.cumulative));
 }
 
 function validPenaltyEntry(value: unknown, expected: PenaltyEntry, totalCompletionCount: number, diceMode: DiceMode, throwStyle: ThrowStyle): value is PenaltyEntry {
@@ -207,6 +247,9 @@ export function validateStoredFlowState(value: unknown): value is FlowState {
     const sourceById = new Map(value.replaySource.participants.map((participant) => [participant.id, participant.name]));
     return value.draft.participants.length === sourceById.size
       && value.draft.participants.every((participant) => sourceById.get(participant.id) === participant.name);
+  }
+  if (isRecord(value.game) && isRecord(value.game.mode) && value.game.mode.type === 'series') {
+    return value.gameNumber >= 1 && value.gameNumber <= value.revision && validStoredSeries(value);
   }
   if (!['turn', 'ranking', 'suddenDeath', 'loserReveal', 'penalty', 'finished'].includes(value.phase)
     || value.gameNumber < 1 || value.gameNumber > value.revision || !validRound(value.game)) return false;

@@ -87,7 +87,7 @@ describe('v4 mode configuration', () => {
   });
   it.each(['completionTarget', 'series'] as const)('starts only supported %s gameplay without consuming random', (type) => {
     const start = () => act(initialFlow(), { type: 'start', setup: switchSetupMode(named(), type) });
-    if (type === 'series') expect(start).toThrow('まだ開始できません');
+    if (type === 'series') expect(start()).toMatchObject({ phase: 'turn', game: { mode: { type: 'series', gameCount: 2 }, currentGameNumber: 1 } });
     else expect(start()).toMatchObject({ phase: 'turn', game: { mode: { type: 'completionTarget', targetCompletions: 1 } } });
   });
 });
