@@ -7,6 +7,7 @@ import type { SuddenDeathState } from './suddenDeath';
 import { validateSetup, validateSetupDraft } from './setup';
 import { initialSetup } from './setup';
 import type { Setup } from './setup';
+import { modeConfiguration, sameGameMode } from './types';
 import type { TurnState } from './types';
 
 type Base = Readonly<{ revision: number; gameNumber: number }>;
@@ -38,10 +39,12 @@ function turnFor(game: SuddenDeathState, gameNumber: number): TurnState {
 
 function start(state: Base, setup: Setup): FlowState {
   if (!validateSetup(setup)) throw new Error('プレイヤー設定を確認してください。');
+  // Dedicated mode progression and recovery must exist before non-Normal START.
+  if (setup.mode.type !== 'normal') throw new Error('このゲームモードはまだ開始できません。');
   const gameNumber = state.gameNumber + 1;
   const participants = setup.participants.map(({ id, name }) => ({ id, name: name.trim() }));
   const game: SuddenDeathState = {
-    participants, throwStyle: setup.throwStyle, diceMode: setup.diceMode, rollLimit: setup.rollLimit,
+    participants, throwStyle: setup.throwStyle, diceMode: setup.diceMode, ...modeConfiguration(setup),
     currentPlayerIndex: 0, totalCompletionCount: 0, suddenDeathCount: 0,
     players: participants.map(({ id }) => ({ id, ...createTurn({ turnId: `${gameNumber}/0/${id}`, totalCompletionCount: 0, diceMode: setup.diceMode }, setup.throwStyle).player })),
   };
@@ -53,12 +56,12 @@ function preparationFromGame(game: SuddenDeathState): ReplayPreparation {
     participants: game.participants.map(({ id, name }) => ({ id, name })),
     diceMode: game.diceMode,
     throwStyle: game.throwStyle,
-    rollLimit: game.rollLimit,
+    ...modeConfiguration(game),
   };
 }
 
 function sameSetup(left: Setup, right: Setup): boolean {
-  return left.diceMode === right.diceMode && left.throwStyle === right.throwStyle && left.rollLimit === right.rollLimit
+  return sameGameMode(left.mode, right.mode) && left.diceMode === right.diceMode && left.throwStyle === right.throwStyle && left.rollLimit === right.rollLimit
     && left.participants.length === right.participants.length
     && left.participants.every((participant, index) => {
       const other = right.participants[index];

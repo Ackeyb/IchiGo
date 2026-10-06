@@ -24,7 +24,7 @@ class Sequence implements RandomSource {
 }
 
 const normal = (...faces: number[]) => faces.flatMap((face) => [0.9, (face - 0.5) / 6]);
-const setup = { rollLimit: null, participants: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], throwStyle: 'normal' as const, diceMode: 7 as const };
+const setup = { mode: { type: 'normal' as const }, rollLimit: null, participants: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], throwStyle: 'normal' as const, diceMode: 7 as const };
 const perform = (state: FlowState, action: FlowAction, random: RandomSource) => advanceFlow(state, state.revision, action, random);
 let frames = new Map<number, FrameRequestCallback>();
 let frameId = 0;

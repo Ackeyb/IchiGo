@@ -109,6 +109,7 @@ describe('Dice Mode initialization and invariants', () => {
 describe('Dice Mode round and penalty propagation', () => {
   it.each(modes)('carries %i DICE from setup to the next player turn', (diceMode) => {
     const setup = {
+      mode: { type: 'normal' as const },
       rollLimit: null,
       participants: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }],
       throwStyle: 'careful' as const,
@@ -135,6 +136,7 @@ describe('Dice Mode round and penalty propagation', () => {
       completed: true, turnFinished: true,
     });
     const state: SuddenDeathState = {
+      mode: { type: 'normal' as const },
       rollLimit: null,
       participants: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }],
       players: [complete('a'), complete('b')], currentPlayerIndex: 1,

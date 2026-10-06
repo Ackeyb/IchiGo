@@ -110,7 +110,8 @@ export function SetupScreen({ busy, onStart, onDraftChange, onFullReset, focusOn
         <div className="styles roll-limits">{rollLimits.map((limit) => <label key={limit ?? 'infinity'}>
           <input type="radio" name="roll-limit" value={limit ?? 'infinity'}
             aria-label={limit === null ? 'ROLL上限 無制限' : `ROLL上限 ${limit}回`}
-            checked={setup.rollLimit === limit} onChange={() => update({ ...setup, rollLimit: limit })} />
+            checked={setup.rollLimit === limit} onChange={() => update(setup.mode.type === 'completionTarget'
+              ? { ...setup, mode: setup.mode, rollLimit: null } : { ...setup, mode: setup.mode, rollLimit: limit })} />
           <span aria-hidden="true">{limit ?? '∞'}</span>
         </label>)}</div>
       </fieldset>

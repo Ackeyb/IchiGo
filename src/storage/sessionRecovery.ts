@@ -4,7 +4,7 @@ import { validateSetup, validateSetupDraft } from '../game/setup';
 import { shouldStartSuddenDeath } from '../game/suddenDeath';
 import type { FlowState } from '../game/gameFlow';
 import type { PenaltyEntry } from '../game/penalty';
-import { isDiceMode, isRollLimit } from '../game/types';
+import { isDiceMode, isRollLimit, isModeConfiguration, sameGameMode } from '../game/types';
 import type { DiceMode, DieResult, PlayerTurn, RollResolution, ThrowStyle, TurnState } from '../game/types';
 import type { SuddenDeathState } from '../game/suddenDeath';
 
@@ -15,7 +15,7 @@ import type { SuddenDeathState } from '../game/suddenDeath';
  */
 export const SESSION_GAME_KEY = 'ichi-go:game';
 export const SESSION_SOUND_KEY = 'ichi-go:sound';
-export const SESSION_SCHEMA_VERSION = 3 as const;
+export const SESSION_SCHEMA_VERSION = 4 as const;
 export const SOUND_SCHEMA_VERSION = 1 as const;
 
 export interface StorageAdapter {
@@ -63,11 +63,14 @@ function validRound(value: unknown): value is SuddenDeathState {
   if (!isRecord(value) || !Array.isArray(value.participants) || !Array.isArray(value.players)
     || !isSafeCount(value.totalCompletionCount) || !isSafeCount(value.suddenDeathCount)
     || !Number.isInteger(value.currentPlayerIndex) || !isDiceMode(value.diceMode) || !isRollLimit(value.rollLimit)) return false;
+  // Only Normal runtime exists; new modes require dedicated validators before START.
+  const config = { mode: value.mode, rollLimit: value.rollLimit };
+  if (!isModeConfiguration(config) || config.mode.type !== 'normal') return false;
   const diceMode = value.diceMode;
   const participants = value.participants;
   const players = value.players;
   if (participants.some((participant) => !isRecord(participant) || typeof participant.id !== 'string' || typeof participant.name !== 'string')
-    || !validateSetup({ participants: participants as never, throwStyle: value.throwStyle as never, diceMode, rollLimit: value.rollLimit })
+    || !validateSetup({ participants: participants as never, throwStyle: value.throwStyle as never, diceMode, mode: config.mode, rollLimit: value.rollLimit })
     || participants.some((participant) => (participant as { name: string }).name !== (participant as { name: string }).name.trim())
     || players.length !== participants.length || Number(value.currentPlayerIndex) < 0
     || Number(value.currentPlayerIndex) >= players.length) return false;
@@ -189,6 +192,7 @@ export function validateStoredFlowState(value: unknown): value is FlowState {
       || !validateSetupDraft(value.draft) || !validateSetupDraft(value.replaySource)) return false;
     // Replay may reorder participants, but names, identities and game settings stay locked to the source.
     if (!validateSetup(value.draft) || !validateSetup(value.replaySource)
+      || !sameGameMode(value.draft.mode, value.replaySource.mode)
       || value.draft.diceMode !== value.replaySource.diceMode
       || value.draft.throwStyle !== value.replaySource.throwStyle
       || value.draft.rollLimit !== value.replaySource.rollLimit

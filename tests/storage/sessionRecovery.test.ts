@@ -31,7 +31,7 @@ class Sequence implements RandomSource {
   next() { return this.values[this.calls++] ?? 0.9; }
 }
 
-const setup = { rollLimit: null, participants: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], throwStyle: 'normal' as const, diceMode: 7 as const };
+const setup = { mode: { type: 'normal' as const }, rollLimit: null, participants: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], throwStyle: 'normal' as const, diceMode: 7 as const };
 const normal = (...faces: number[]) => faces.flatMap((face) => [0.9, (face - 0.5) / 6]);
 const complete = normal(1, 1, 1, 1, 1, 1, 1);
 const allOut = Array<number>(7).fill(0);
@@ -100,7 +100,7 @@ describe('session recovery format and validation', () => {
     const recovery = new SessionRecovery(() => storage);
     const draft: FlowState = {
       phase: 'setup', revision: 4, gameNumber: 1, setupKind: 'newGame',
-      draft: { rollLimit: null, participants: [{ id: 'kept-b', name: '' }, { id: 'kept-a', name: '編集中 ' }], throwStyle: 'rough', diceMode },
+      draft: { mode: { type: 'normal' as const }, rollLimit: null, participants: [{ id: 'kept-b', name: '' }, { id: 'kept-a', name: '編集中 ' }], throwStyle: 'rough', diceMode },
     };
     expect(recovery.saveGame(draft)).toBeUndefined();
     expect(new SessionRecovery(() => storage).loadGame()).toEqual({ state: draft, recovered: true });
@@ -272,7 +272,7 @@ describe('session recovery format and validation', () => {
 });
 
 describe('independent sound persistence', () => {
-  it('keeps a version 1 Sound OFF setting when game schema 3 rejects version 2', () => {
+  it('keeps a version 1 Sound OFF setting when game schema 4 rejects version 2', () => {
     const storage = new MemoryStorage();
     storage.values.set(SESSION_SOUND_KEY, JSON.stringify({ version: SOUND_SCHEMA_VERSION, enabled: false }));
     storage.values.set(SESSION_GAME_KEY, JSON.stringify({ version: 2, state: activeState() }));
@@ -315,7 +315,7 @@ describe('authoritative save checkpoints', () => {
   it('persists setup edits without locking the editor and restores them after reload', () => {
     const storage = new MemoryStorage();
     const store = createGameStore(new Sequence([]), new SessionRecovery(() => storage));
-    const draft = { rollLimit: null, participants: [{ id: 'p0', name: '途中' }, { id: 'p1', name: '' }], throwStyle: 'careful' as const, diceMode: 10 as const };
+    const draft = { mode: { type: 'normal' as const }, rollLimit: null, participants: [{ id: 'p0', name: '途中' }, { id: 'p1', name: '' }], throwStyle: 'careful' as const, diceMode: 10 as const };
     store.dispatch(0, { type: 'updateSetup', draft });
     expect(store.getSnapshot()).toMatchObject({ busy: false, state: { phase: 'setup', revision: 1, draft } });
     const restored = createGameStore(new Sequence([]), new SessionRecovery(() => storage)).getSnapshot();
@@ -379,7 +379,7 @@ describe('authoritative save checkpoints', () => {
     expect(readSaved(storage)).toEqual(store.getSnapshot().state);
     expect(createGameStore(new Sequence([]), new SessionRecovery(() => storage)).getSnapshot().state).toEqual({
       phase: 'setup', revision: store.getSnapshot().state.revision, gameNumber: 1, setupKind: 'fullReset',
-      draft: { rollLimit: null, participants: [{ id: 'p0', name: '' }, { id: 'p1', name: '' }], throwStyle: 'normal', diceMode: 7 },
+      draft: { mode: { type: 'normal' as const }, rollLimit: null, participants: [{ id: 'p0', name: '' }, { id: 'p1', name: '' }], throwStyle: 'normal', diceMode: 7 },
     });
   });
 
@@ -404,7 +404,7 @@ describe('authoritative save checkpoints', () => {
 
   it('persists advancement to the next tied loser during penalties', () => {
     const storage = new MemoryStorage();
-    const threePlayerSetup = { rollLimit: null, participants: [...setup.participants, { id: 'c', name: 'C' }], throwStyle: 'normal' as const, diceMode: 7 as const };
+    const threePlayerSetup = { mode: { type: 'normal' as const }, rollLimit: null, participants: [...setup.participants, { id: 'c', name: 'C' }], throwStyle: 'normal' as const, diceMode: 7 as const };
     const random = new Sequence([...complete, ...allOut, ...allOut, ...Array<number>(14).fill(0)]);
     const store = createGameStore(random, new SessionRecovery(() => storage));
     const perform = (action: FlowAction) => {

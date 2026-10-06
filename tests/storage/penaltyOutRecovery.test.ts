@@ -33,7 +33,7 @@ function penaltyState(values: readonly number[], throwStyle: ThrowStyle = 'norma
 const mixed = () => penaltyState([0, ...normal(1, 2), ...normal(1, 5), 0, ...normal(1, 1), ...normal(1, 3), ...normal(1, 4)]);
 function restore(state: unknown) {
   const storage = new MemoryStorage();
-  storage.setItem(SESSION_GAME_KEY, JSON.stringify({ version: 3, state }));
+  storage.setItem(SESSION_GAME_KEY, JSON.stringify({ version: 4, state }));
   return new SessionRecovery(() => storage).loadGame();
 }
 function patchEntry(patch: Record<string, unknown>) {
@@ -78,15 +78,15 @@ describe('Penalty OUT recovery without new draws', () => {
     { penaltyRoll: Array<DieResult>(6).fill(out), basePenalty: 36, finalPenalty: 72 }])('rejects inconsistent saved counts/calculation %j', (patch) => {
     expect(restore(patchEntry(patch))).toEqual({ recovered: false, notice: 'corrupt' });
   });
-  it('rejects legacy numeric penalty results even inside a schema 3 envelope', () => {
+  it('rejects legacy numeric penalty results even inside a schema 4 envelope', () => {
     expect(restore(patchEntry({ penaltyRoll: [6, 2, 5, 6, 1, 3, 4] }))).toEqual({ recovered: false, notice: 'corrupt' });
   });
   it('rejects saved OUT under careful even when BASE and FINAL are correct', () => {
     const state = mixed();
     expect(restore({ ...state, game: { ...state.game, throwStyle: 'careful' } })).toEqual({ recovered: false, notice: 'corrupt' });
   });
-  it('keeps game schema 3 and Sound schema 1 / OFF unchanged', () => {
-    expect(SESSION_SCHEMA_VERSION).toBe(3);
+  it('keeps game schema 4 and Sound schema 1 / OFF unchanged', () => {
+    expect(SESSION_SCHEMA_VERSION).toBe(4);
     expect(SOUND_SCHEMA_VERSION).toBe(1);
     const storage = new MemoryStorage();
     storage.setItem(SESSION_SOUND_KEY, JSON.stringify({ version: 1, enabled: false }));

@@ -49,8 +49,8 @@ function replay() {
 }
 
 describe('ROLL limit Recovery v3', () => {
-  it('uses game schema 3 while Sound remains schema 1', () => {
-    expect(SESSION_SCHEMA_VERSION).toBe(3);
+  it('uses game schema 4 while Sound remains schema 1', () => {
+    expect(SESSION_SCHEMA_VERSION).toBe(4);
     expect(SOUND_SCHEMA_VERSION).toBe(1);
     const ready = act(initialFlow(), { type: 'start', setup });
     expect(load(ready)).toEqual({ state: ready, recovered: true });
@@ -65,7 +65,7 @@ describe('ROLL limit Recovery v3', () => {
     for (const state of [draft, game]) {
       const storage = new MemoryStorage();
       new SessionRecovery(() => storage).saveGame(state);
-      expect(JSON.parse(storage.getItem(SESSION_GAME_KEY)!)).toEqual({ version: 3, state });
+      expect(JSON.parse(storage.getItem(SESSION_GAME_KEY)!)).toEqual({ version: 4, state });
       expect(new SessionRecovery(() => storage).loadGame()).toEqual({ state, recovered: true });
     }
   });

@@ -1,7 +1,7 @@
 import { createTurn } from './gameEngine';
 import { assertPlayerTurn, getRemainingDice } from './rollResolver';
-import { DEFAULT_DICE_MODE, isDiceMode, isRollLimit } from './types';
-import type { DiceMode, PlayerTurn, RollLimit, ThrowStyle } from './types';
+import { DEFAULT_DICE_MODE, isDiceMode, isRollLimit, modeConfiguration } from './types';
+import type { DiceMode, PlayerTurn, ModeConfiguration, ThrowStyle } from './types';
 
 export type Participant = Readonly<{ id: string; name: string }>;
 export type RoundPlayer = PlayerTurn & Readonly<{ id: string }>;
@@ -13,10 +13,9 @@ export type SuddenDeathState = Readonly<{
   currentPlayerIndex: number;
   throwStyle: ThrowStyle;
   diceMode: DiceMode;
-  rollLimit: RollLimit;
   totalCompletionCount: number;
   suddenDeathCount: number;
-}>;
+}> & ModeConfiguration;
 
 /** SPEC §29–30, §65. Never evaluate an unfinished round as a tie. */
 export function shouldStartSuddenDeath(players: readonly PlayerTurn[], diceMode: DiceMode = DEFAULT_DICE_MODE): boolean {
@@ -74,7 +73,7 @@ export function startSuddenDeath(
     currentPlayerIndex: 0,
     throwStyle: state.throwStyle,
     diceMode: state.diceMode,
-    rollLimit: state.rollLimit,
+    ...modeConfiguration(state),
     totalCompletionCount: state.totalCompletionCount,
     suddenDeathCount: state.suddenDeathCount + 1,
   };

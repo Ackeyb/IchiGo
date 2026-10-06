@@ -29,7 +29,7 @@ function roll(state: FlowState, faces: readonly number[], type: 'roll' | 'rollPe
   expect(index).toBe(draws.length);
   return result;
 }
-function load(state: unknown, version: unknown = 3) {
+function load(state: unknown, version: unknown = 4) {
   const storage = new MemoryStorage();
   storage.setItem(SESSION_GAME_KEY, JSON.stringify({ version, state }));
   return new SessionRecovery(() => storage).loadGame();
