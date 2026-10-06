@@ -85,8 +85,10 @@ describe('v4 mode configuration', () => {
     expect(next.revision).toBe(first.revision + 1);
     expect(act(next, { type: 'fullReset' })).toMatchObject({ draft: initialSetup() });
   });
-  it.each(['completionTarget', 'series'] as const)('does not start placeholder %s gameplay or consume random', (type) => {
-    expect(() => act(initialFlow(), { type: 'start', setup: switchSetupMode(named(), type) })).toThrow('まだ開始できません');
+  it.each(['completionTarget', 'series'] as const)('starts only supported %s gameplay without consuming random', (type) => {
+    const start = () => act(initialFlow(), { type: 'start', setup: switchSetupMode(named(), type) });
+    if (type === 'series') expect(start).toThrow('まだ開始できません');
+    else expect(start()).toMatchObject({ phase: 'turn', game: { mode: { type: 'completionTarget', targetCompletions: 1 } } });
   });
 });
 
@@ -144,10 +146,10 @@ describe('v4 configuration recovery and carry', () => {
       expect(roundTrip(prep)).toEqual({ state: prep, recovered: true });
     }
   });
-  it('rejects non-Normal runtime instead of applying Normal round validation', () => {
+  it('dispatches runtime validation by supported mode without supplying defaults', () => {
     const state = act(initialFlow(), { type: 'start', setup: named() });
     if (state.phase !== 'turn') throw new Error('Turn expected');
-    for (const mode of modes.slice(1)) expect(validateStoredFlowState({ ...state, game: { ...state.game, mode } })).toBe(false);
+    for (const mode of modes.slice(1)) expect(validateStoredFlowState({ ...state, game: { ...state.game, mode } })).toBe(mode.type === 'completionTarget');
     const { mode: omitted, ...game } = state.game;
     expect(omitted).toEqual({ type: 'normal' });
     expect(validateStoredFlowState({ ...state, game })).toBe(false);

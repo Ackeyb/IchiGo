@@ -2,7 +2,8 @@ import { continueTurn, createTurn, rollTurn } from './gameEngine';
 import { createPenaltyState, rollPenalty } from './penalty';
 import type { PenaltyState } from './penalty';
 import type { RandomSource } from './randomSource';
-import { shouldStartSuddenDeath, startSuddenDeath } from './suddenDeath';
+import { resetFinishedRound, startSuddenDeath } from './suddenDeath';
+import { shouldStartNextRound } from './roundPolicy';
 import type { SuddenDeathState } from './suddenDeath';
 import { validateSetup, validateSetupDraft } from './setup';
 import { initialSetup } from './setup';
@@ -39,8 +40,8 @@ function turnFor(game: SuddenDeathState, gameNumber: number): TurnState {
 
 function start(state: Base, setup: Setup): FlowState {
   if (!validateSetup(setup)) throw new Error('プレイヤー設定を確認してください。');
-  // Dedicated mode progression and recovery must exist before non-Normal START.
-  if (setup.mode.type !== 'normal') throw new Error('このゲームモードはまだ開始できません。');
+  // Series still requires its own progression and recovery before START.
+  if (setup.mode.type === 'series') throw new Error('このゲームモードはまだ開始できません。');
   const gameNumber = state.gameNumber + 1;
   const participants = setup.participants.map(({ id, name }) => ({ id, name: name.trim() }));
   const game: SuddenDeathState = {
@@ -130,16 +131,20 @@ function apply(state: FlowState, action: FlowAction, random: RandomSource): Flow
       return { ...state, game: next, turn: turnFor(next, gameNumber) };
     }
     if (action.type === 'ranking' && game.players.every((p) => p.turnFinished)) {
-      return { phase: 'ranking', game, gameNumber, revision };
+      // Keep the terminal roll until this explicit action, after the store's presentation acknowledgment.
+      const phase = game.mode.type === 'completionTarget' && shouldStartNextRound(game) ? 'suddenDeath' : 'ranking';
+      return { phase, game, gameNumber, revision };
     }
   }
   if (state.phase === 'ranking') {
-    const tied = shouldStartSuddenDeath(game.players, game.diceMode);
+    const tied = shouldStartNextRound(game);
     if (action.type === 'suddenDeath' && tied) return { ...state, phase: 'suddenDeath' };
     if (action.type === 'reveal' && !tied) return { ...state, phase: 'loserReveal' };
   }
   if (state.phase === 'suddenDeath' && action.type === 'startSuddenDeath') {
-    const next = startSuddenDeath(game, game.suddenDeathCount);
+    if (!shouldStartNextRound(game)) return state;
+    const next = game.mode.type === 'completionTarget'
+      ? resetFinishedRound(game, game.suddenDeathCount) : startSuddenDeath(game, game.suddenDeathCount);
     if (next === game) return state;
     return { phase: 'turn', game: next, turn: turnFor(next, gameNumber), gameNumber, revision };
   }

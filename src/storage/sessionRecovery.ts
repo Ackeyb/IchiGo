@@ -1,7 +1,7 @@
 import { createPenaltyState, calculatePenalty } from '../game/penalty';
 import { resolveRoll, assertPlayerTurn } from '../game/rollResolver';
 import { validateSetup, validateSetupDraft } from '../game/setup';
-import { shouldStartSuddenDeath } from '../game/suddenDeath';
+import { shouldStartNextRound } from '../game/roundPolicy';
 import type { FlowState } from '../game/gameFlow';
 import type { PenaltyEntry } from '../game/penalty';
 import { isDiceMode, isRollLimit, isModeConfiguration, sameGameMode } from '../game/types';
@@ -63,14 +63,14 @@ function validRound(value: unknown): value is SuddenDeathState {
   if (!isRecord(value) || !Array.isArray(value.participants) || !Array.isArray(value.players)
     || !isSafeCount(value.totalCompletionCount) || !isSafeCount(value.suddenDeathCount)
     || !Number.isInteger(value.currentPlayerIndex) || !isDiceMode(value.diceMode) || !isRollLimit(value.rollLimit)) return false;
-  // Only Normal runtime exists; new modes require dedicated validators before START.
+  // Series still has no runtime. Completion Target history is validated separately below.
   const config = { mode: value.mode, rollLimit: value.rollLimit };
-  if (!isModeConfiguration(config) || config.mode.type !== 'normal') return false;
+  if (!isModeConfiguration(config) || config.mode.type === 'series') return false;
   const diceMode = value.diceMode;
   const participants = value.participants;
   const players = value.players;
   if (participants.some((participant) => !isRecord(participant) || typeof participant.id !== 'string' || typeof participant.name !== 'string')
-    || !validateSetup({ participants: participants as never, throwStyle: value.throwStyle as never, diceMode, mode: config.mode, rollLimit: value.rollLimit })
+    || !validateSetup({ participants: participants as never, throwStyle: value.throwStyle as never, diceMode, ...config })
     || participants.some((participant) => (participant as { name: string }).name !== (participant as { name: string }).name.trim())
     || players.length !== participants.length || Number(value.currentPlayerIndex) < 0
     || Number(value.currentPlayerIndex) >= players.length) return false;
@@ -80,8 +80,14 @@ function validRound(value: unknown): value is SuddenDeathState {
   const maximumCompletions = participants.length * (Number(value.suddenDeathCount) + 1);
   const currentCompletions = players.filter((player) => (player as unknown as PlayerTurn).completed).length;
   const previousCompletions = Number(value.totalCompletionCount) - currentCompletions;
-  return Number.isSafeInteger(maximumCompletions)
-    && previousCompletions >= 0 && previousCompletions % participants.length === 0
+  if (!Number.isSafeInteger(maximumCompletions) || previousCompletions < 0
+    || Number(value.totalCompletionCount) > maximumCompletions) return false;
+  if (config.mode.type === 'completionTarget') {
+    // Partial-completion prior rounds are legal. With no saved history, validate bounds, never infer events or clamp to target.
+    return previousCompletions <= participants.length * Number(value.suddenDeathCount);
+  }
+  // Normal can advance only through all-complete or zero-completion tied rounds; retain its stricter invariant.
+  return previousCompletions % participants.length === 0
     && previousCompletions / participants.length <= Number(value.suddenDeathCount)
     && Number(value.totalCompletionCount) <= maximumCompletions;
 }
@@ -209,9 +215,9 @@ export function validateStoredFlowState(value: unknown): value is FlowState {
   if (game.players.some((player, index) => index < current ? !player.turnFinished : index > current ? !isInitialPlayer(player, game.diceMode) : false)) return false;
   if (value.phase === 'turn') return validTurn(value.turn, game, value.gameNumber, value.revision);
   if (!game.players.every((player) => player.turnFinished)) return false;
-  const tied = shouldStartSuddenDeath(game.players, game.diceMode);
+  const tied = shouldStartNextRound(game);
   if (value.phase === 'suddenDeath') return tied;
-  if (value.phase === 'ranking') return true;
+  if (value.phase === 'ranking') return game.mode.type === 'normal' || !tied;
   if (value.phase === 'loserReveal') return !tied;
   if (value.phase !== 'penalty' && value.phase !== 'finished') return false;
   return !tied && validPenalty(value.penalty, game, value.gameNumber, value.phase, value.penaltyIndex);

@@ -59,6 +59,15 @@ export function startSuddenDeath(
   assertRound(state);
   if (expectedSuddenDeathCount !== state.suddenDeathCount
     || !shouldStartSuddenDeath(state.players, state.diceMode)) return state;
+  return resetFinishedRound(state, expectedSuddenDeathCount);
+}
+
+/** Reset construction is shared; the caller's mode policy owns eligibility. Never reset an unfinished round. */
+export function resetFinishedRound(state: SuddenDeathState, expectedSuddenDeathCount: number): SuddenDeathState {
+  assertRound(state);
+  state.players.forEach((player) => assertPlayerTurn(player, state.diceMode));
+  if (expectedSuddenDeathCount !== state.suddenDeathCount
+    || state.players.some((player) => !player.turnFinished)) return state;
   if (!Number.isSafeInteger(state.suddenDeathCount + 1)) {
     throw new RangeError('Sudden death counter exceeds exact numeric representation.');
   }
