@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
-import { initialSetup, nameError, validateSetup } from '../game/setup';
+import { initialSetup, nameError, switchSetupMode, validateSetup } from '../game/setup';
 import type { Setup } from '../game/setup';
-import type { DiceMode, RollLimit, ThrowStyle } from '../game/types';
+import type { CompletionTarget, DiceMode, GameMode, RollLimit, SeriesGameCount, ThrowStyle } from '../game/types';
 
 export const styleLabels: Record<ThrowStyle, string> = { rough: '乱暴', normal: '普通', careful: '丁寧' };
 const diceModes: readonly DiceMode[] = [5, 7, 10, 14];
 const rollLimits: readonly RollLimit[] = [null, 1, 2, 3, 4, 5];
+const gameModes: readonly Readonly<{ type: GameMode['type']; label: string }>[] = [
+  { type: 'normal', label: 'ノーマル' },
+  { type: 'completionTarget', label: '完走指定' },
+  { type: 'series', label: '連続試合' },
+];
 
 export function SetupScreen({ busy, onStart, onDraftChange, onFullReset, focusOnMount, initial = initialSetup() }: {
   busy: boolean;
@@ -94,6 +99,24 @@ export function SetupScreen({ busy, onStart, onDraftChange, onFullReset, focusOn
         プレイヤー追加{setup.participants.length >= 10 ? '（最大10人）' : ''}
       </button>
 
+      <fieldset disabled={busy}><legend>Game Mode</legend>
+        <div className="styles game-modes">{gameModes.map(({ type, label }) => <label key={type}>
+          <input type="radio" name="game-mode" value={type} aria-label={label} checked={setup.mode.type === type}
+            onChange={() => update(switchSetupMode(setup, type))} />{label}
+        </label>)}</div>
+      </fieldset>
+      {setup.mode.type === 'completionTarget' && <fieldset disabled={busy}><legend>最低完走者数</legend>
+        <div className="styles">{([1, 2, 3, 4, 5] as const satisfies readonly CompletionTarget[]).map((target) => <label key={target}>
+          <input type="radio" name="completion-target" value={target} aria-label={`最低完走者数 ${target}`}
+            checked={setup.mode.targetCompletions === target} onChange={() => update({ ...setup, mode: { type: 'completionTarget', targetCompletions: target }, rollLimit: null })} />{target}
+        </label>)}</div>
+      </fieldset>}
+      {setup.mode.type === 'series' && <fieldset disabled={busy}><legend>試合数</legend>
+        <div className="styles">{([2, 3, 4, 5] as const satisfies readonly SeriesGameCount[]).map((gameCount) => <label key={gameCount}>
+          <input type="radio" name="series-game-count" value={gameCount} aria-label={`試合数 ${gameCount}`}
+            checked={setup.mode.gameCount === gameCount} onChange={() => update({ ...setup, mode: { type: 'series', gameCount } })} />{gameCount}
+        </label>)}</div>
+      </fieldset>}
       <fieldset disabled={busy}><legend>Dice Mode</legend>
         <div className="styles dice-modes">{diceModes.map((mode) => <label key={mode}>
           <input type="radio" name="dice-mode" value={mode} checked={setup.diceMode === mode}
@@ -106,7 +129,7 @@ export function SetupScreen({ busy, onStart, onDraftChange, onFullReset, focusOn
             onChange={() => update({ ...setup, throwStyle: style })} />{styleLabels[style]}
         </label>)}</div>
       </fieldset>
-      <fieldset disabled={busy}><legend>ROLL上限</legend>
+      {setup.mode.type !== 'completionTarget' && <fieldset disabled={busy}><legend>ROLL上限</legend>
         <div className="styles roll-limits">{rollLimits.map((limit) => <label key={limit ?? 'infinity'}>
           <input type="radio" name="roll-limit" value={limit ?? 'infinity'}
             aria-label={limit === null ? 'ROLL上限 無制限' : `ROLL上限 ${limit}回`}
@@ -114,7 +137,7 @@ export function SetupScreen({ busy, onStart, onDraftChange, onFullReset, focusOn
               ? { ...setup, mode: setup.mode, rollLimit: null } : { ...setup, mode: setup.mode, rollLimit: limit })} />
           <span aria-hidden="true">{limit ?? '∞'}</span>
         </label>)}</div>
-      </fieldset>
+      </fieldset>}
       <button className="primary" type="submit" disabled={busy} onClick={(event) => { if (event.detail > 1) event.preventDefault(); }}
         onKeyDown={(event) => { if (event.repeat) event.preventDefault(); }}>ゲーム開始</button>
       <p className="subtle">開始後はメンバー・順番・Dice Mode・投げ方・ROLL上限を変更できません。</p>

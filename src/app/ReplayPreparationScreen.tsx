@@ -22,6 +22,9 @@ export function ReplayPreparationScreen({ draft, busy, onReorder, onStart }: {
     <h2 ref={heading} tabIndex={-1}>再戦の準備</h2>
     <p>名前と設定はそのまま。順番だけ変更できます。</p>
     <dl className="replay-settings" aria-label="再戦の設定">
+      <div><dt>ゲームモード</dt><dd>{draft.mode.type === 'normal' ? 'ノーマル' : draft.mode.type === 'completionTarget' ? '完走指定' : '連続試合'}</dd></div>
+      {draft.mode.type === 'completionTarget' && <div><dt>最低完走者数</dt><dd>{draft.mode.targetCompletions}</dd></div>}
+      {draft.mode.type === 'series' && <div><dt>試合数</dt><dd>{draft.mode.gameCount}</dd></div>}
       <div><dt>Dice Mode</dt><dd>{draft.diceMode} DICE</dd></div>
       <div><dt>投げ方</dt><dd>{styleLabels[draft.throwStyle]}</dd></div>
       <div><dt>ROLL上限</dt><dd>{draft.rollLimit === null ? 'ROLL ∞' : `ROLL ${draft.rollLimit}回`}</dd></div>

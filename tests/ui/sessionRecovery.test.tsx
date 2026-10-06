@@ -56,6 +56,8 @@ describe('session recovery UI', () => {
     fireEvent.click(screen.getByLabelText('14 DICE'));
     fireEvent.click(screen.getByLabelText('乱暴'));
     fireEvent.click(screen.getByLabelText('ROLL上限 3回'));
+    fireEvent.click(screen.getByLabelText('完走指定'));
+    fireEvent.click(screen.getByLabelText('最低完走者数 4'));
     first.unmount();
 
     render(<App recovery={new SessionRecovery(() => storage)} />);
@@ -63,7 +65,9 @@ describe('session recovery UI', () => {
     expect(screen.getAllByRole('textbox').map((input) => (input as HTMLInputElement).value)).toEqual(['編集中', '追加', '']);
     expect((screen.getByLabelText('14 DICE') as HTMLInputElement).checked).toBe(true);
     expect((screen.getByLabelText('乱暴') as HTMLInputElement).checked).toBe(true);
-    expect((screen.getByLabelText('ROLL上限 3回') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('完走指定') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('最低完走者数 4') as HTMLInputElement).checked).toBe(true);
+    expect(screen.queryByRole('group', { name: 'ROLL上限' })).toBeNull();
     expect(screen.getByText('ゲームを復旧しました。')).toBeTruthy();
     expect(screen.queryByText(/ゲームデータを復旧できませんでした/)).toBeNull();
   });
@@ -91,6 +95,22 @@ describe('session recovery UI', () => {
     expect(screen.getByRole('heading', { name: '現在プレイヤー：B' })).toBeTruthy();
   });
 
+  it('restores fixed Series settings in Replay Preparation without exposing controls', () => {
+    const storage = new MemoryStorage();
+    const draft = { ...setup, mode: { type: 'series' as const, gameCount: 4 as const }, rollLimit: 3 as const };
+    const replay: FlowState = { phase: 'replayPreparation', revision: 2, gameNumber: 1, draft, replaySource: draft };
+    new SessionRecovery(() => storage).saveGame(replay);
+
+    render(<App recovery={new SessionRecovery(() => storage)} />);
+    expect(screen.getByText('ゲームモード').nextElementSibling?.textContent).toBe('連続試合');
+    expect(screen.getByText('試合数').nextElementSibling?.textContent).toBe('4');
+    expect(screen.getByText('ROLL 3回')).toBeTruthy();
+    expect(screen.queryByRole('radio')).toBeNull();
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(screen.getByRole('button', { name: '1番 Aを上へ' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: '2番 Bを下へ' }).hasAttribute('disabled')).toBe(true);
+  });
+
   it('persists full reset defaults across reload while preserving Sound OFF', () => {
     const storage = new MemoryStorage();
     const first = render(<App recovery={new SessionRecovery(() => storage)} />);
@@ -107,6 +127,8 @@ describe('session recovery UI', () => {
     expect(screen.getAllByRole('textbox').map((input) => (input as HTMLInputElement).value)).toEqual(['', '']);
     expect((screen.getByLabelText('7 DICE') as HTMLInputElement).checked).toBe(true);
     expect((screen.getByLabelText('普通') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('ノーマル') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('ROLL上限 無制限') as HTMLInputElement).checked).toBe(true);
     expect(screen.getByRole('button', { name: 'サウンド OFF' })).toBeTruthy();
   });
 

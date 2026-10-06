@@ -8,6 +8,8 @@ import { SetupScreen } from '../../src/app/SetupScreen';
 import { ReplayPreparationScreen } from '../../src/app/ReplayPreparationScreen';
 import { createGameStore } from '../../src/app/gameStore';
 import { initialSetup } from '../../src/game/setup';
+import type { Setup } from '../../src/game/setup';
+import type { ReplayPreparation } from '../../src/game/gameFlow';
 import type { SoundCue, SoundPlayer } from '../../src/app/sound';
 import type { RandomSource } from '../../src/game/randomSource';
 
@@ -111,6 +113,88 @@ describe('Setup', () => {
     expect(screen.getAllByText('ONE ROLL AT A TIME').length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: '最後のダイスまで。' })).toBeTruthy();
     expect((screen.getByLabelText('ROLL上限 無制限') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('ノーマル') as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole('group', { name: 'Game Mode' })).toBeTruthy();
+  });
+
+  it('switches mode settings through the domain draft and discards values only after leaving a mode', () => {
+    const { store } = mount();
+    const readDraft = () => {
+      const state = store.getSnapshot().state;
+      if (state.phase !== 'setup') throw new Error('Expected setup');
+      return state.draft;
+    };
+    names(['同名', '同名']);
+    fireEvent.click(screen.getByLabelText('10 DICE'));
+    fireEvent.click(screen.getByLabelText('乱暴'));
+    fireEvent.click(screen.getByLabelText('ROLL上限 3回'));
+    fireEvent.click(screen.getByLabelText('完走指定'));
+    expect(screen.getByRole('group', { name: '最低完走者数' })).toBeTruthy();
+    expect(screen.queryByRole('group', { name: 'ROLL上限' })).toBeNull();
+    expect(readDraft()).toMatchObject({ mode: { type: 'completionTarget', targetCompletions: 1 }, rollLimit: null,
+      diceMode: 10, throwStyle: 'rough', participants: [{ id: 'p0', name: '同名' }, { id: 'p1', name: '同名' }] });
+    expect(within(screen.getByRole('group', { name: '最低完走者数' })).getAllByRole('radio').map((input) => (input as HTMLInputElement).value))
+      .toEqual(['1', '2', '3', '4', '5']);
+    fireEvent.click(screen.getByLabelText('最低完走者数 5'));
+    fireEvent.click(screen.getByLabelText('連続試合'));
+    expect(screen.getByRole('group', { name: '試合数' })).toBeTruthy();
+    expect(within(screen.getByRole('group', { name: '試合数' })).getAllByRole('radio').map((input) => (input as HTMLInputElement).value))
+      .toEqual(['2', '3', '4', '5']);
+    expect(readDraft()).toMatchObject({ mode: { type: 'series', gameCount: 2 }, rollLimit: null });
+    fireEvent.click(screen.getByLabelText('試合数 5'));
+    fireEvent.click(screen.getByLabelText('ROLL上限 4回'));
+    fireEvent.click(screen.getByLabelText('ノーマル'));
+    expect(readDraft()).toMatchObject({ mode: { type: 'normal' }, rollLimit: 4 });
+    fireEvent.click(screen.getByLabelText('連続試合'));
+    expect(readDraft()).toMatchObject({ mode: { type: 'series', gameCount: 2 }, rollLimit: 4 });
+    fireEvent.click(screen.getByLabelText('完走指定'));
+    expect(readDraft()).toMatchObject({ mode: { type: 'completionTarget', targetCompletions: 1 }, rollLimit: null,
+      diceMode: 10, throwStyle: 'rough', participants: [{ id: 'p0', name: '同名' }, { id: 'p1', name: '同名' }] });
+  });
+
+  it('supports keyboard mode selection and removes hidden RollLimit controls from navigation', async () => {
+    const user = userEvent.setup();
+    render(<SetupScreen busy={false} focusOnMount={false} initial={initialSetup()} onDraftChange={() => undefined}
+      onFullReset={() => undefined} onStart={() => undefined} />);
+    screen.getByLabelText('ノーマル').focus();
+    await user.keyboard('{ArrowRight}');
+    expect((screen.getByLabelText('完走指定') as HTMLInputElement).checked).toBe(true);
+    expect(screen.queryByRole('group', { name: 'ROLL上限' })).toBeNull();
+    expect(screen.queryByLabelText('ROLL上限 無制限')).toBeNull();
+  });
+
+  it.each([
+    { mode: { type: 'normal' as const }, rollLimit: 2 as const, expectedMode: 'ノーマル', extraLabel: undefined },
+    { mode: { type: 'completionTarget' as const, targetCompletions: 4 as const }, rollLimit: null, expectedMode: '完走指定', extraLabel: '最低完走者数' },
+    { mode: { type: 'series' as const, gameCount: 5 as const }, rollLimit: 3 as const, expectedMode: '連続試合', extraLabel: '試合数' },
+  ])('renders carried $expectedMode settings in Setup controls', ({ mode, rollLimit, expectedMode, extraLabel }) => {
+    render(<SetupScreen busy={false} focusOnMount={false} initial={{ ...initialSetup(), mode, rollLimit } as Setup}
+      onDraftChange={() => undefined} onFullReset={() => undefined} onStart={() => undefined} />);
+    expect((screen.getByLabelText(expectedMode) as HTMLInputElement).checked).toBe(true);
+    if (mode.type === 'completionTarget') {
+      expect((screen.getByLabelText('最低完走者数 4') as HTMLInputElement).checked).toBe(true);
+      expect(screen.queryByRole('group', { name: 'ROLL上限' })).toBeNull();
+    } else {
+      expect((screen.getByLabelText(`ROLL上限 ${rollLimit}回`) as HTMLInputElement).checked).toBe(true);
+    }
+    if (extraLabel) expect(screen.getByRole('group', { name: extraLabel })).toBeTruthy();
+  });
+
+  it.each([
+    { mode: { type: 'normal' as const }, rollLimit: 3 as const, expectedMode: 'ノーマル' },
+    { mode: { type: 'completionTarget' as const, targetCompletions: 4 as const }, rollLimit: null, expectedMode: '完走指定' },
+    { mode: { type: 'series' as const, gameCount: 5 as const }, rollLimit: 3 as const, expectedMode: '連続試合' },
+  ])('starts a $expectedMode configuration through the shared Start action', ({ mode, rollLimit }) => {
+    const { store } = mount();
+    names();
+    if (mode.type !== 'normal') fireEvent.click(screen.getByLabelText(mode.type === 'series' ? '連続試合' : '完走指定'));
+    if (mode.type === 'completionTarget') fireEvent.click(screen.getByLabelText('最低完走者数 4'));
+    if (mode.type === 'series') fireEvent.click(screen.getByLabelText('試合数 5'));
+    if (rollLimit !== null) fireEvent.click(screen.getByLabelText(`ROLL上限 ${rollLimit}回`));
+    click('ゲーム開始');
+    const state = store.getSnapshot().state;
+    if (state.phase !== 'turn' || state.game.mode.type !== mode.type) throw new Error('Expected the selected game mode to start');
+    expect(state.game).toMatchObject({ mode, rollLimit });
   });
 
   it('offers all Dice Modes and ROLL limits and starts 14 DICE with the selected finite limit', () => {
@@ -203,6 +287,21 @@ describe('Setup', () => {
     view.rerender(<ReplayPreparationScreen draft={{ ...draft, rollLimit: null }} busy={false} onReorder={onReorder} onStart={() => undefined} />);
     expect(screen.getByText('ROLL ∞')).toBeTruthy();
     expect(screen.queryByText(/ROLL (null|0回)/)).toBeNull();
+  });
+
+  it.each([
+    { mode: { type: 'normal' as const }, rollLimit: 5 as const, modeLabel: 'ノーマル', settingLabel: undefined },
+    { mode: { type: 'completionTarget' as const, targetCompletions: 3 as const }, rollLimit: null, modeLabel: '完走指定', settingLabel: '3' },
+    { mode: { type: 'series' as const, gameCount: 4 as const }, rollLimit: 2 as const, modeLabel: '連続試合', settingLabel: '4' },
+  ])('shows $modeLabel and its fixed setting in Replay Preparation', ({ mode, rollLimit, modeLabel, settingLabel }) => {
+    const draft = { ...initialSetup(), participants: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], mode, rollLimit };
+    render(<ReplayPreparationScreen draft={draft as ReplayPreparation} busy={false} onReorder={() => undefined} onStart={() => undefined} />);
+    expect(screen.getByText('ゲームモード').nextElementSibling?.textContent).toBe(modeLabel);
+    if (mode.type === 'completionTarget') expect(screen.getByText('最低完走者数').nextElementSibling?.textContent).toBe(settingLabel);
+    if (mode.type === 'series') expect(screen.getByText('試合数').nextElementSibling?.textContent).toBe(settingLabel);
+    expect(screen.getByText(rollLimit === null ? 'ROLL ∞' : `ROLL ${rollLimit}回`)).toBeTruthy();
+    expect(screen.queryByRole('radio')).toBeNull();
+    expect(screen.queryByRole('combobox')).toBeNull();
   });
 
   it('validates blank / trimmed / grapheme names, allows identical names and focuses the invalid field', () => {
