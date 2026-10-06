@@ -9,6 +9,8 @@ import type { DiceMode, DieResult, PlayerTurn, RollResolution, ThrowStyle, TurnS
 import type { SuddenDeathState } from '../game/suddenDeath';
 import { isSeriesState, seriesTurnId } from '../game/series';
 import { calculateSeriesRanking } from '../game/seriesRanking';
+import type { SeriesState } from '../game/series';
+import { createSeriesPenalty, partitionSeriesPenalty, seriesChunkBase } from '../game/seriesPenalty';
 
 /**
  * Validates and restores persisted data as untrusted input.
@@ -154,7 +156,7 @@ function validTurn(value: unknown, game: SuddenDeathState, gameNumber: number, r
 /** Validate authoritative aggregates, not reconstructed history; completed terminal-turn snapshots already include this Game. */
 function validStoredSeries(value: Record<string, unknown>): boolean {
   if (!validRound(value.game, true) || !isSeriesState(value.game)
-    || !['turn', 'seriesIntermediate', 'seriesRanking'].includes(String(value.phase))) return false;
+    || !['turn', 'seriesIntermediate', 'seriesRanking', 'seriesPenalty', 'seriesFinished'].includes(String(value.phase))) return false;
   const game = value.game;
   if (!Number.isSafeInteger(game.currentGameNumber) || game.currentGameNumber < 1 || game.currentGameNumber > game.mode.gameCount
     || !Array.isArray(game.cumulative) || game.cumulative.length !== game.participants.length) return false;
@@ -180,11 +182,50 @@ function validStoredSeries(value: Record<string, unknown>): boolean {
   const currentCompletions = game.players.filter((player) => player.completed).length;
   const previousCompletions = game.totalCompletionCount - currentCompletions;
   if (previousCompletions < 0 || previousCompletions > game.participants.length * (game.currentGameNumber - 1)) return false;
-  if (value.phase === 'turn') return value.ranking === undefined
+  if (value.phase === 'turn') return value.ranking === undefined && value.seriesPenalty === undefined
     && validTurn(value.turn, game, Number(value.gameNumber), Number(value.revision));
   if (!completed || value.turn !== undefined || value.penalty !== undefined) return false;
-  if (value.phase === 'seriesIntermediate') return game.currentGameNumber < game.mode.gameCount && value.ranking === undefined;
-  return game.currentGameNumber === game.mode.gameCount && same(value.ranking, calculateSeriesRanking(game.cumulative));
+  if (value.phase === 'seriesIntermediate') return game.currentGameNumber < game.mode.gameCount && value.ranking === undefined && value.seriesPenalty === undefined;
+  if (game.currentGameNumber !== game.mode.gameCount || !same(value.ranking, calculateSeriesRanking(game.cumulative))) return false;
+  if (value.phase === 'seriesRanking') return value.seriesPenalty === undefined;
+  return validSeriesPenalty(value.seriesPenalty, game, Number(value.gameNumber), value.phase === 'seriesFinished');
+}
+
+/** Validate the committed prefix without generation, repair, re-addition or inferred timer state. */
+function validSeriesPenalty(value: unknown, game: SeriesState, gameNumber: number, finished: boolean): boolean {
+  if (!isRecord(value) || value.penaltyId !== `${gameNumber}/seriesPenalty` || !Array.isArray(value.entries)
+    || !isSafeCount(value.currentLoserIndex)) return false;
+  const expected = createSeriesPenalty(game, `${gameNumber}/seriesPenalty`);
+  const index = value.currentLoserIndex;
+  if (value.entries.length !== expected.entries.length || index >= value.entries.length) return false;
+  for (let position = 0; position < value.entries.length; position++) {
+    const entry: unknown = value.entries[position];
+    const source = expected.entries[position]!;
+    if (!isRecord(entry) || entry.playerId !== source.playerId || entry.totalDice !== source.totalDice
+      || !Array.isArray(entry.committedChunks) || !isSafeCount(entry.basePenalty)
+      || entry.multiplier !== undefined || entry.finalPenalty !== undefined) return false;
+    const plan = partitionSeriesPenalty(source.totalDice);
+    if (entry.committedChunks.length > plan.length) return false;
+    let base = 0;
+    for (let chunkIndex = 0; chunkIndex < entry.committedChunks.length; chunkIndex++) {
+      const chunk: unknown = entry.committedChunks[chunkIndex];
+      if (!Array.isArray(chunk) || chunk.length !== plan[chunkIndex]) return false;
+      for (const die of chunk) {
+        if (!validDie(die) || (game.throwStyle === 'careful' && die.status === 'out')) return false;
+      }
+      base += seriesChunkBase(chunk);
+    }
+    if (base !== entry.basePenalty) return false;
+    const chunks = entry.committedChunks.length;
+    if (source.totalDice === 0 ? entry.status !== 'resolved' || chunks !== 0
+      : entry.status === 'pending' ? chunks !== 0
+        : entry.status === 'running' ? chunks === 0 || chunks >= plan.length
+          : entry.status !== 'resolved' || chunks !== plan.length) return false;
+    if (position < index && entry.status !== 'resolved') return false;
+    if (position > index && entry.status !== source.status) return false;
+    if (finished && entry.status !== 'resolved') return false;
+  }
+  return !finished || index === value.entries.length - 1;
 }
 
 function validPenaltyEntry(value: unknown, expected: PenaltyEntry, totalCompletionCount: number, diceMode: DiceMode, throwStyle: ThrowStyle): value is PenaltyEntry {

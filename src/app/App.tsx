@@ -74,7 +74,7 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
     else if (action.type === 'reveal') playCue('loser-reveal');
     store.dispatch(committedState.revision, action);
   };
-  const action = (label: string, type: Exclude<FlowAction['type'], 'start' | 'updateSetup' | 'reorderReplay' | 'nextSeriesGame'>) => <ActionButton disabled={busy || !!confirm}
+  const action = (label: string, type: Exclude<FlowAction['type'], 'start' | 'updateSetup' | 'reorderReplay' | 'nextSeriesGame' | 'startSeriesPenalty' | 'nextSeriesPenaltyChunk' | 'nextSeriesPenaltyLoser'>) => <ActionButton disabled={busy || !!confirm}
     onClick={() => send({ type })}>{label}</ActionButton>;
   const toggleSound = () => {
     const next = !soundEnabledRef.current;

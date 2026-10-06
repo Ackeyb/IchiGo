@@ -14,6 +14,8 @@ import { commitSeriesGame, createSeriesState, isSeriesState, nextSeriesGame, ser
 import type { SeriesState } from './series';
 import { calculateSeriesRanking } from './seriesRanking';
 import type { FinalRanking } from './ranking';
+import { createSeriesPenalty, commitSeriesPenaltyChunk, nextSeriesPenaltyLoser } from './seriesPenalty';
+import type { SeriesChunkRequest, SeriesPenaltyState } from './seriesPenalty';
 
 type Base = Readonly<{ revision: number; gameNumber: number }>;
 type Round = Base & Readonly<{ game: SuddenDeathState | SeriesState }>;
@@ -26,12 +28,15 @@ export type FlowState =
   | (Round & Readonly<{ phase: 'ranking' | 'suddenDeath' | 'loserReveal' }>)
   | (Round & Readonly<{ phase: 'penalty' | 'finished'; penalty: PenaltyState; penaltyIndex: number }>)
   | (Base & Readonly<{ phase: 'seriesIntermediate'; game: SeriesState }>)
-  | (Base & Readonly<{ phase: 'seriesRanking'; game: SeriesState; ranking: FinalRanking }>);
+  | (Base & Readonly<{ phase: 'seriesRanking'; game: SeriesState; ranking: FinalRanking }>)
+  | (Base & Readonly<{ phase: 'seriesPenalty' | 'seriesFinished'; game: SeriesState; ranking: FinalRanking; seriesPenalty: SeriesPenaltyState }>);
 export type FlowAction =
   | Readonly<{ type: 'start'; setup: Setup }>
   | Readonly<{ type: 'updateSetup'; draft: Setup }>
   | Readonly<{ type: 'reorderReplay'; participantIds: readonly string[] }>
   | Readonly<{ type: 'nextSeriesGame'; currentGameNumber: number }>
+  | (Readonly<{ type: 'startSeriesPenalty' | 'nextSeriesPenaltyChunk' }> & SeriesChunkRequest)
+  | Readonly<{ type: 'nextSeriesPenaltyLoser'; penaltyId: string; playerId: string }>
   | Readonly<{ type: 'roll' | 'next' | 'ranking' | 'reveal' | 'suddenDeath' | 'startSuddenDeath'
     | 'penalty' | 'rollPenalty' | 'nextPenalty' | 'finish' | 'replay' | 'startReplay'
     | 'newGame' | 'exitGame' | 'fullReset' }>;
@@ -107,12 +112,12 @@ function apply(state: FlowState, action: FlowAction, random: RandomSource): Flow
     return state;
   }
   const { game, gameNumber, revision } = state;
-  if (action.type === 'replay' && (state.phase === 'finished' || state.phase === 'seriesRanking')) {
+  if (action.type === 'replay' && (state.phase === 'finished' || state.phase === 'seriesRanking' || state.phase === 'seriesFinished')) {
     // Replay retains the finished game's settings; its preparation phase permits only participant reordering.
     const replaySource = preparationFromGame(game);
     return { phase: 'replayPreparation', revision, gameNumber, draft: replaySource, replaySource };
   }
-  if (action.type === 'newGame' && (state.phase === 'finished' || state.phase === 'seriesRanking')) {
+  if (action.type === 'newGame' && (state.phase === 'finished' || state.phase === 'seriesRanking' || state.phase === 'seriesFinished')) {
     // New Game carries the same settings into an editable Setup draft.
     return { phase: 'setup', revision, gameNumber, draft: preparationFromGame(game), setupKind: 'newGame' };
   }
@@ -125,8 +130,23 @@ function apply(state: FlowState, action: FlowAction, random: RandomSource): Flow
     if (next === state.game) return state;
     return { phase: 'turn', revision, gameNumber, game: next, turn: turnFor(next, gameNumber) };
   }
-  // The final cumulative ranking is the stopping boundary until Series Penalty is implemented.
-  if (state.phase === 'seriesRanking') return state;
+  if (state.phase === 'seriesRanking') {
+    return action.type === 'penalty' ? { ...state, phase: 'seriesPenalty', seriesPenalty: createSeriesPenalty(state.game, `${gameNumber}/seriesPenalty`) } : state;
+  }
+  if (state.phase === 'seriesFinished') return state;
+  if (state.phase === 'seriesPenalty') {
+    if (action.type === 'startSeriesPenalty' || action.type === 'nextSeriesPenaltyChunk') {
+      const next = commitSeriesPenaltyChunk(state.seriesPenalty, action, action.type === 'startSeriesPenalty', game.throwStyle, random);
+      return next === state.seriesPenalty ? state : { ...state, seriesPenalty: next };
+    }
+    if (action.type === 'nextSeriesPenaltyLoser') {
+      const next = nextSeriesPenaltyLoser(state.seriesPenalty, action.penaltyId, action.playerId);
+      return next === state.seriesPenalty ? state : { ...state, seriesPenalty: next };
+    }
+    if (action.type === 'finish' && state.seriesPenalty.currentLoserIndex === state.seriesPenalty.entries.length - 1
+      && state.seriesPenalty.entries.every((p) => p.status === 'resolved')) return { ...state, phase: 'seriesFinished' };
+    return state;
+  }
   if (state.phase === 'turn') {
     const { turn } = state;
     if (action.type === 'roll' && !turn.player.turnFinished) {

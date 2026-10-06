@@ -88,7 +88,8 @@ describe('Series progress and atomic contributions', () => {
       } else {
         if (settled.phase !== 'seriesRanking') throw new Error('Ranking expected');
         expect(settled.ranking).toEqual({ rankings: [{ playerId: 'p0', rank: 1 }, { playerId: 'p1', rank: 1 }], loserIds: ['p0', 'p1'] });
-        for (const type of ['penalty', 'rollPenalty', 'suddenDeath', 'ranking'] as const) expect(act(settled, { type })).toBe(settled);
+        for (const type of ['rollPenalty', 'suddenDeath', 'ranking'] as const) expect(act(settled, { type })).toBe(settled);
+        expect(act(settled, { type: 'penalty' }).phase).toBe('seriesPenalty');
       }
     }
   });

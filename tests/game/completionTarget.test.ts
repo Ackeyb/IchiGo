@@ -16,7 +16,8 @@ const setup = (targetCompletions: CompletionTarget = 2, count = 2, diceMode: Dic
   participants: Array.from({ length: count }, (_, i) => ({ id: `p${i}`, name: `P${i}` })),
 });
 const act = (state: FlowState, type: Extract<FlowAction, { type: string }>['type']) => {
-  if (type === 'start' || type === 'updateSetup' || type === 'reorderReplay' || type === 'nextSeriesGame') throw new Error('Use a complete action');
+  if (type === 'start' || type === 'updateSetup' || type === 'reorderReplay' || type === 'nextSeriesGame'
+    || type === 'startSeriesPenalty' || type === 'nextSeriesPenaltyChunk' || type === 'nextSeriesPenaltyLoser') throw new Error('Use a complete action');
   return advanceFlow(state, state.revision, { type }, noDraw);
 };
 const start = (draft = setup()) => advanceFlow(initialFlow(), 0, { type: 'start', setup: draft }, noDraw);
