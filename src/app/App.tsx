@@ -9,6 +9,7 @@ import type { RandomSource } from '../game/randomSource';
 import type { FlowAction } from '../game/gameFlow';
 import { createGameStore } from './gameStore';
 import type { GameStore } from './gameStore';
+import { createSeriesPenaltyAutoCoordinator } from './seriesPenaltyAutoCoordinator';
 import { SetupScreen, styleLabels } from './SetupScreen';
 import { ReplayPreparationScreen } from './ReplayPreparationScreen';
 import { ReadyDice } from './DiceView';
@@ -44,6 +45,28 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
   const [soundRecoveryNotice, setSoundRecoveryNotice] = useState<RecoveryNotice | undefined>(initialSound.notice);
   const { state: committedState, visibleState: state, busy, error, recovered, recoveryNotice } = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const [confirm, setConfirm] = useState<{ action: 'newGame' | 'replay' | 'exitGame' | 'fullReset'; revision: number; opener: HTMLElement } | null>(null);
+  const seriesAuto = useRef<ReturnType<typeof createSeriesPenaltyAutoCoordinator> | undefined>(undefined);
+  const confirmationOpen = useRef(false);
+  useEffect(() => {
+    const coordinator = createSeriesPenaltyAutoCoordinator(store);
+    seriesAuto.current = coordinator;
+    coordinator.setBlockingConfirmation(confirmationOpen.current);
+    return () => {
+      coordinator.dispose();
+      if (seriesAuto.current === coordinator) seriesAuto.current = undefined;
+    };
+  }, [store]);
+  const openConfirmation = (next: NonNullable<typeof confirm>) => {
+    // Pause synchronously with OPEN; a pending callback must not race a later React effect.
+    confirmationOpen.current = true;
+    seriesAuto.current?.setBlockingConfirmation(true);
+    setConfirm(next);
+  };
+  const closeConfirmation = () => {
+    confirmationOpen.current = false;
+    seriesAuto.current?.setBlockingConfirmation(false);
+    setConfirm(null);
+  };
   const heading = useRef<HTMLHeadingElement>(null);
   const focusedPhase = useRef(state.phase);
   const playCue = useCallback((cue: SoundCue) => {
@@ -86,7 +109,7 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
   let content: ReactNode;
   if (state.phase === 'setup') content = <SetupScreen key={`${state.gameNumber}/${state.setupKind}`} initial={state.draft} busy={busy}
     focusOnMount={state.gameNumber > 0 || state.setupKind !== 'initial'} onDraftChange={(draft) => send({ type: 'updateSetup', draft })}
-    onFullReset={(opener) => setConfirm({ action: 'fullReset', revision: state.revision, opener })}
+    onFullReset={(opener) => openConfirmation({ action: 'fullReset', revision: state.revision, opener })}
     onStart={(setup) => send({ type: 'start', setup })} />;
   else if (state.phase === 'replayPreparation') content = <ReplayPreparationScreen draft={state.draft} busy={busy || !!confirm}
     onReorder={(participantIds) => send({ type: 'reorderReplay', participantIds })} onStart={() => send({ type: 'startReplay' })} />;
@@ -182,8 +205,8 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
         <section className="panel"><h3>敗者とペナルティポイント</h3><ul className="losers">{state.penalty.penalties.map((entry) => <li key={entry.playerId}>
           <strong>{name(entry.playerId)}</strong><span>{entry.status === 'resolved' ? entry.finalPenalty : '—'} pt</span>
         </li>)}</ul></section>
-        <div className="final-actions"><ActionButton disabled={busy || !!confirm} onClick={(opener) => setConfirm({ action: 'replay', revision: state.revision, opener })}>同じメンバーでもう一度</ActionButton>
-          <ActionButton disabled={busy || !!confirm} onClick={(opener) => setConfirm({ action: 'newGame', revision: state.revision, opener })}>新しいゲーム</ActionButton></div>
+        <div className="final-actions"><ActionButton disabled={busy || !!confirm} onClick={(opener) => openConfirmation({ action: 'replay', revision: state.revision, opener })}>同じメンバーでもう一度</ActionButton>
+          <ActionButton disabled={busy || !!confirm} onClick={(opener) => openConfirmation({ action: 'newGame', revision: state.revision, opener })}>新しいゲーム</ActionButton></div>
       </section>;
     }
   }
@@ -201,7 +224,7 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
     </div>}
     {error && <p role="alert" className="field-error">{error}</p>}
     {content}
-    {state.phase !== 'setup' && state.phase !== 'replayPreparation' && state.phase !== 'finished' && <button className="exit-button" disabled={busy || !!confirm} onClick={(event) => setConfirm({ action: 'exitGame', revision: state.revision, opener: event.currentTarget })}>ゲームを終了する</button>}
+    {state.phase !== 'setup' && state.phase !== 'replayPreparation' && state.phase !== 'finished' && <button className="exit-button" disabled={busy || !!confirm} onClick={(event) => openConfirmation({ action: 'exitGame', revision: state.revision, opener: event.currentTarget })}>ゲームを終了する</button>}
     <footer>ONE ROLL AT A TIME · 最後のダイスまで。</footer>
     {confirm && <ConfirmDialog opener={confirm.opener} title={confirm.action === 'replay' ? '再戦の準備へ進みますか？'
       : confirm.action === 'newGame' ? '新しいゲームに戻りますか？'
@@ -210,6 +233,6 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
         description: 'プレイヤー名・順番・Dice Mode・投げ方・ROLL上限が初期状態に戻ります。Sound設定は維持されます。',
         confirmLabel: '初期状態に戻す',
       } : {})}
-      onCancel={() => setConfirm(null)} onConfirm={() => { store.dispatch(confirm.revision, { type: confirm.action }); setConfirm(null); }} />}
+      onCancel={closeConfirmation} onConfirm={() => { store.dispatch(confirm.revision, { type: confirm.action }); closeConfirmation(); }} />}
   </main>;
 }
