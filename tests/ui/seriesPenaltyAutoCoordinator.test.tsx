@@ -32,6 +32,8 @@ beforeEach(() => {
   // Keep App's paint callbacks pending. Series acknowledgment is explicit; no visual UI is introduced in this Batch.
   vi.stubGlobal('requestAnimationFrame', () => 1);
   vi.stubGlobal('cancelAnimationFrame', () => undefined);
+  // The new Ready heading focuses on phase entry. Exclude jsdom's focus timer from coordinator timer assertions.
+  vi.spyOn(HTMLElement.prototype, 'focus').mockImplementation(() => undefined);
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', ''); };
   HTMLDialogElement.prototype.close = function () { this.removeAttribute('open'); };
 });

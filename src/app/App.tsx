@@ -17,6 +17,8 @@ import { DicePresentation } from './DicePresentation';
 import type { DicePresentationConfig } from './DicePresentation';
 import type { DiceResultPresentation } from './DicePresentation';
 import { RankingBoard } from './RankingBoard';
+import { isSeriesState } from '../game/series';
+import { SeriesResults } from './SeriesResults';
 import { ConfirmDialog } from './ConfirmDialog';
 import { WebAudioSoundPlayer } from './sound';
 import type { SoundCue, SoundPlayer } from './sound';
@@ -137,6 +139,8 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
         ? committedState.turn.rollNumber : state.turn.nextRollNumber;
       content = <div className="game-layout"><section className="play panel">
         <p className="eyebrow player-roll-line"><span>PLAYER {game.currentPlayerIndex + 1} / {game.participants.length}</span>
+          {game.mode.type === 'completionTarget' && <span className="mode-progress">完走 {game.totalCompletionCount} / {game.mode.targetCompletions}</span>}
+          {isSeriesState(game) && <span className="mode-progress">試合 {game.currentGameNumber} / {game.mode.gameCount}</span>}
           {game.rollLimit !== null && (busy || !player.turnFinished) && <span className="roll-counter">ROLL {nextRollLabel}/{game.rollLimit}</span>}</p>
         <h2 className="current-player" ref={heading} tabIndex={-1}><span>現在プレイヤー：</span>{current.name}</h2>
         <div className="dice-field">
@@ -165,6 +169,19 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
             ? action('次へ', 'next') : action('結果を見る', 'ranking')}
         </div>
       </section><RankingBoard game={game} currentHasRolled={state.turn.nextRollNumber > 1} /></div>;
+    } else if (state.phase === 'seriesIntermediate') {
+      content = <section className="results"><h2 ref={heading} tabIndex={-1}>試合 {state.game.currentGameNumber} / {state.game.mode.gameCount} 終了</h2>
+        <SeriesResults game={state.game} />
+        <ActionButton disabled={busy || !!confirm} onClick={() => send({ type: 'nextSeriesGame', currentGameNumber: state.game.currentGameNumber })}>次の試合へ</ActionButton>
+      </section>;
+    } else if (state.phase === 'seriesRanking') {
+      content = <section className="results"><h2 ref={heading} tabIndex={-1}>連続試合 FINAL RANKING</h2>
+        <SeriesResults game={state.game} ranking={state.ranking} />
+        {action('ペナルティへ', 'penalty')}</section>;
+    } else if (state.phase === 'seriesPenalty') {
+      content = <section className="panel results"><h2 ref={heading} tabIndex={-1}>連続試合 ペナルティ準備</h2>
+        <p>敗者</p><ul className="losers">{state.seriesPenalty.entries.map((entry) => <li key={entry.playerId}><strong>{name(entry.playerId)}</strong></li>)}</ul>
+      </section>;
     } else if (state.phase === 'ranking') {
       const tied = shouldStartSuddenDeath(game.players, game.diceMode);
       content = <section className="results phase-reveal"><h2 ref={heading} tabIndex={-1}>FINAL RANKING</h2><RankingBoard game={game} final />
