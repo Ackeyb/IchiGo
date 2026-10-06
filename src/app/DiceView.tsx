@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { DiceMode, DieResult, DieValue } from '../game/types';
 import type { DicePresentationKind } from '../dice/types';
-import { getDiceGridLayout } from './diceLayout';
+import { getDiceGridLayout, getSeriesChunkGridLayout } from './diceLayout';
 
 const pipPositions: Readonly<Record<DieValue, readonly string[]>> = {
   1: ['center'],
@@ -20,13 +20,15 @@ function DiceFace({ value }: { value: DieValue }) {
 }
 
 /** Presentation only. A future renderer can consume these same committed results. */
-export function DiceView({ dice, diceMode, kind, removing = false }: {
+export function DiceView({ dice, diceMode, kind, removing = false, seriesChunk = false }: {
   dice: readonly DieResult[];
   diceMode: DiceMode;
   kind: DicePresentationKind;
   removing?: boolean;
+  seriesChunk?: boolean;
 }) {
-  const layout = getDiceGridLayout(diceMode, dice.length);
+  if (seriesChunk && kind !== 'penalty') throw new RangeError('Series chunk layout is Penalty-only');
+  const layout = seriesChunk ? getSeriesChunkGridLayout(dice.length) : getDiceGridLayout(diceMode, dice.length);
   const style = {
     '--dice-track-count': layout.trackColumns,
     '--dice-card-span': layout.cardSpan,

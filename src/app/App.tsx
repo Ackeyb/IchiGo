@@ -19,6 +19,8 @@ import type { DiceResultPresentation } from './DicePresentation';
 import { RankingBoard } from './RankingBoard';
 import { isSeriesState } from '../game/series';
 import { SeriesResults } from './SeriesResults';
+import { SeriesPenaltyPresentation } from './SeriesPenaltyPresentation';
+import { seriesPenaltyResult } from '../game/seriesPenalty';
 import { ConfirmDialog } from './ConfirmDialog';
 import { WebAudioSoundPlayer } from './sound';
 import type { SoundCue, SoundPlayer } from './sound';
@@ -80,7 +82,8 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
   useEffect(() => {
     if (!busy) return;
     const hasDicePresentation = (committedState.phase === 'turn' && committedState.turn.phase === 'result')
-      || (committedState.phase === 'penalty' && committedState.penalty.penalties[committedState.penaltyIndex]?.status === 'resolved');
+      || (committedState.phase === 'penalty' && committedState.penalty.penalties[committedState.penaltyIndex]?.status === 'resolved')
+      || (committedState.phase === 'seriesPenalty' && committedState.seriesPenalty.entries[committedState.seriesPenalty.currentLoserIndex]!.committedChunks.length > 0);
     if (hasDicePresentation) return;
     let second = 0;
     const first = requestAnimationFrame(() => { second = requestAnimationFrame(() => store.presented(committedState.revision)); });
@@ -89,12 +92,12 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
   // Keep focus on the current heading without browser scrolling during in-phase Play/Penalty updates.
   useEffect(() => {
     const preventRollScroll = focusedPhase.current === state.phase
-      && (state.phase === 'turn' || state.phase === 'penalty');
+      && (state.phase === 'turn' || state.phase === 'penalty' || state.phase === 'seriesPenalty');
     heading.current?.focus({ preventScroll: preventRollScroll });
     focusedPhase.current = state.phase;
   }, [state.phase, state.revision]);
   const send = (action: FlowAction) => {
-    if (action.type === 'roll' || action.type === 'rollPenalty') playCue('roll');
+    if (action.type === 'roll' || action.type === 'rollPenalty' || action.type === 'startSeriesPenalty') playCue('roll');
     else if (action.type === 'suddenDeath') playCue('sudden-death');
     else if (action.type === 'reveal') playCue('loser-reveal');
     store.dispatch(committedState.revision, action);
@@ -179,9 +182,16 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
         <SeriesResults game={state.game} ranking={state.ranking} />
         {action('ペナルティへ', 'penalty')}</section>;
     } else if (state.phase === 'seriesPenalty') {
-      content = <section className="panel results"><h2 ref={heading} tabIndex={-1}>連続試合 ペナルティ準備</h2>
-        <p>敗者</p><ul className="losers">{state.seriesPenalty.entries.map((entry) => <li key={entry.playerId}><strong>{name(entry.playerId)}</strong></li>)}</ul>
-      </section>;
+      content = <SeriesPenaltyPresentation key={`${state.seriesPenalty.penaltyId}/${state.seriesPenalty.currentLoserIndex}`} state={state}
+        committedState={committedState.phase === 'seriesPenalty' ? committedState : state} store={store} coordinator={seriesAuto}
+        busy={busy} blocked={!!confirm} heading={heading} send={send} config={dicePresentation} onCue={playCue} />;
+    } else if (state.phase === 'seriesFinished') {
+      content = <section className="results"><h2 ref={heading} tabIndex={-1}>連続試合 FINAL RESULT</h2>
+        <SeriesResults game={state.game} ranking={state.ranking} />
+        <section className="panel"><h3>敗者とペナルティポイント</h3><ul className="losers">{state.seriesPenalty.entries.map((entry) => <li key={entry.playerId}>
+          <strong>{name(entry.playerId)}</strong><span>{seriesPenaltyResult(entry, game.totalCompletionCount)!.finalPenalty} pt</span></li>)}</ul></section>
+        <div className="final-actions"><ActionButton disabled={busy || !!confirm} onClick={(opener) => openConfirmation({ action: 'replay', revision: state.revision, opener })}>同じメンバーでもう一度</ActionButton>
+          <ActionButton disabled={busy || !!confirm} onClick={(opener) => openConfirmation({ action: 'newGame', revision: state.revision, opener })}>新しいゲーム</ActionButton></div></section>;
     } else if (state.phase === 'ranking') {
       const tied = shouldStartSuddenDeath(game.players, game.diceMode);
       content = <section className="results phase-reveal"><h2 ref={heading} tabIndex={-1}>FINAL RANKING</h2><RankingBoard game={game} final />
@@ -241,7 +251,7 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
     </div>}
     {error && <p role="alert" className="field-error">{error}</p>}
     {content}
-    {state.phase !== 'setup' && state.phase !== 'replayPreparation' && state.phase !== 'finished' && <button className="exit-button" disabled={busy || !!confirm} onClick={(event) => openConfirmation({ action: 'exitGame', revision: state.revision, opener: event.currentTarget })}>ゲームを終了する</button>}
+    {state.phase !== 'setup' && state.phase !== 'replayPreparation' && state.phase !== 'finished' && state.phase !== 'seriesFinished' && <button className="exit-button" disabled={busy || !!confirm} onClick={(event) => openConfirmation({ action: 'exitGame', revision: state.revision, opener: event.currentTarget })}>ゲームを終了する</button>}
     <footer>ONE ROLL AT A TIME · 最後のダイスまで。</footer>
     {confirm && <ConfirmDialog opener={confirm.opener} title={confirm.action === 'replay' ? '再戦の準備へ進みますか？'
       : confirm.action === 'newGame' ? '新しいゲームに戻りますか？'

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/app/App';
 import { createGameStore } from '../../src/app/gameStore';
@@ -183,14 +183,16 @@ describe('Series results and explicit actions', () => {
     render(<App store={store} soundPlayer={quiet} />);
     expect(screen.getAllByText('敗者')).toHaveLength(state.ranking.loserIds.length);
     fireEvent.click(screen.getByRole('button', { name: 'ペナルティへ' })); paint();
-    expect(screen.getByRole('heading', { name: '連続試合 ペナルティ準備' })).toBeTruthy();
-    const list = screen.getByRole('list');
-    expect(within(list).getAllByRole('listitem').map((item) => item.textContent)).toEqual(state.ranking.loserIds.map((id) => state.game.participants.find((p) => p.id === id)!.name));
+    const currentName = state.game.participants.find((p) => p.id === state.ranking.loserIds[0])!.name;
+    expect(screen.getByRole('heading', { name: `ペナルティ：${currentName}` })).toBeTruthy();
     const saved = store.getSnapshot().state;
     expect(saved.phase).toBe('seriesPenalty');
-    expect(screen.queryByRole('button', { name: /ROLL/ })).toBeNull();
+    if (saved.phase !== 'seriesPenalty') throw new Error('Expected Penalty');
+    expect(saved.seriesPenalty.entries.map((entry) => entry.playerId)).toEqual(state.ranking.loserIds);
+    const needsRoll = saved.seriesPenalty.entries[0]!.status === 'pending';
+    expect(!!screen.queryByRole('button', { name: 'ペナルティROLL' })).toBe(needsRoll);
     cleanup(); show(saved);
-    expect(screen.getByRole('heading', { name: '連続試合 ペナルティ準備' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /ROLL/ })).toBeNull();
+    expect(screen.getByRole('heading', { name: `ペナルティ：${currentName}` })).toBeTruthy();
+    expect(!!screen.queryByRole('button', { name: 'ペナルティROLL' })).toBe(needsRoll);
   });
 });

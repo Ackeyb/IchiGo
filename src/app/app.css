@@ -71,6 +71,17 @@ input[type="radio"] { accent-color: #315e43; margin-right: 7px; }
 .series-results th, .series-results td { padding: 12px 4px; border-top: 1px solid #e6e9df; text-align: left; }
 .series-results tbody th { overflow-wrap: anywhere; }
 .series-results small { display: block; color: #9e431c; }
+.series-penalty-ready { min-height: 45px; display: grid; align-content: start; }
+.series-penalty-ready .ready-dice { gap: 3px; margin: 2px 0; }
+.series-penalty-ready .ready-dice span { width: 21px; height: 21px; line-height: 19px; }
+.series-penalty-action { min-height: 56px; display: grid; align-items: center; }
+.series-penalty-action p { margin: 0; text-align: center; }
+.series-penalty .penalty-equation { gap: 4px; }
+.series-penalty .penalty-equation .penalty-equation-value { min-width: 48px; padding-inline: 5px; font-size: 16px; }
+@media (min-width: 761px) {
+  /* Series has two BASE values; reserve their full reveal footprint without changing Normal/CT. */
+  .series-penalty .dice-presentation { min-height: 515px; }
+}
 .dice-field { min-width: 0; background: #244536; border-radius: 14px; padding: 18px 14px; color: #f0f6ec; text-align: center; overflow: hidden; }
 .dice-field > p { font-size: 12px; color: #d6e2d3; }
 .dice-field-intro { min-height: 1.6em; }

@@ -33,6 +33,12 @@ export type DicePresentationConfig = Readonly<{
 
 export type DiceResultPresentation =
   | Readonly<{
+    kind: 'seriesPenalty';
+    chunkBase: number;
+    totalBase: number;
+    result?: Readonly<{ multiplier: number; finalPenalty: number }> | undefined;
+  }>
+  | Readonly<{
     kind: 'normal';
     gainedScore: number;
     scoringCount: number;
@@ -146,7 +152,7 @@ export function DicePresentation({
           else if (presentation.outcome === 'turnEnd') onCue?.('turn-end');
         });
         at(4, reveal);
-      } else if (presentation?.kind === 'penalty') {
+      } else if (presentation?.kind === 'penalty' || presentation?.kind === 'seriesPenalty') {
         at(1, () => setStage(2));
         at(2, () => setStage(3));
         at(3, () => { setStage(4); onCue?.('penalty'); });
@@ -173,7 +179,7 @@ export function DicePresentation({
     <div ref={container} className="three-dice-stage" aria-hidden="true" />
     {currentOutcome?.mode === 'fallback' && <p className="renderer-status">{fallbackLabels[currentOutcome.reason]}</p>}
     {revealed && <div className="dice-result-details">
-      <DiceView dice={dice} diceMode={diceMode} kind={kind} removing={stage >= 3} />
+      <DiceView dice={dice} diceMode={diceMode} kind={kind} removing={stage >= 3} seriesChunk={presentation?.kind === 'seriesPenalty'} />
       {presentation?.kind === 'normal' && <div className="result-sequence" aria-live="polite">
         {stage >= 2 && <strong className={presentation.gainedScore > 0 ? 'score-pop' : 'no-score'}>
           {presentation.gainedScore > 0 ? `今回 +${presentation.gainedScore}点` : 'NO SCORE'}</strong>}
@@ -189,6 +195,15 @@ export function DicePresentation({
         {resultStage >= 2 && <span className="penalty-equation-value"><small>BASE</small>{presentation.basePenalty}</span>}
         {resultStage >= 3 && <><b>×</b><span className="penalty-equation-value"><small>MULTIPLIER</small>{presentation.multiplier}</span></>}
         {resultStage >= 4 && <><b>=</b><strong className="penalty-equation-value"><small>FINAL</small>{presentation.finalPenalty} pt</strong></>}
+      </div>}
+      {presentation?.kind === 'seriesPenalty' && <div className="penalty-equation" aria-live="polite">
+        {resultStage >= 2 && <p className="penalty-dice-expression">{dice.map((die, index) => <Fragment key={index}>
+          {index > 0 ? ' + ' : ''}<span>{die.status === 'out' ? 'OUT(6)' : die.value}</span>
+        </Fragment>)}{' = '}{presentation.chunkBase}</p>}
+        {resultStage >= 2 && <span className="penalty-equation-value"><small>CHUNK BASE</small>{presentation.chunkBase}</span>}
+        {resultStage >= 3 && <span className="penalty-equation-value"><small>TOTAL BASE</small>{presentation.totalBase}</span>}
+        {resultStage >= 4 && presentation.result && <><b>×</b><span className="penalty-equation-value"><small>MULTIPLIER</small>{presentation.result.multiplier}</span>
+          <b>=</b><strong className="penalty-equation-value"><small>FINAL</small>{presentation.result.finalPenalty} pt</strong></>}
       </div>}
     </div>}
   </div>;
