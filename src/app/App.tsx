@@ -12,6 +12,7 @@ import type { GameStore } from './gameStore';
 import { createSeriesPenaltyAutoCoordinator } from './seriesPenaltyAutoCoordinator';
 import { SetupScreen, styleLabels } from './SetupScreen';
 import { ReplayPreparationScreen } from './ReplayPreparationScreen';
+import { RulesScreen } from './RulesScreen';
 import { ReadyDice } from './DiceView';
 import { DicePresentation } from './DicePresentation';
 import type { DicePresentationConfig } from './DicePresentation';
@@ -49,6 +50,8 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
   const [soundRecoveryNotice, setSoundRecoveryNotice] = useState<RecoveryNotice | undefined>(initialSound.notice);
   const { state: committedState, visibleState: state, busy, error, recovered, recoveryNotice } = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const [confirm, setConfirm] = useState<{ action: 'newGame' | 'replay' | 'exitGame' | 'fullReset'; revision: number; opener: HTMLElement } | null>(null);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [returningFromRules, setReturningFromRules] = useState(false);
   const seriesAuto = useRef<ReturnType<typeof createSeriesPenaltyAutoCoordinator> | undefined>(undefined);
   const confirmationOpen = useRef(false);
   useEffect(() => {
@@ -112,8 +115,10 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
     if (next) { try { sound.play('ui'); } catch { /* sound is fail-open */ } }
   };
   let content: ReactNode;
-  if (state.phase === 'setup') content = <SetupScreen key={`${state.gameNumber}/${state.setupKind}`} initial={state.draft} busy={busy}
-    focusOnMount={state.gameNumber > 0 || state.setupKind !== 'initial'} onDraftChange={(draft) => send({ type: 'updateSetup', draft })}
+  if (state.phase === 'setup' && rulesOpen) content = <RulesScreen onBack={() => { setRulesOpen(false); setReturningFromRules(true); }} />;
+  else if (state.phase === 'setup') content = <SetupScreen key={`${state.gameNumber}/${state.setupKind}`} initial={state.draft} busy={busy}
+    focusOnMount={state.gameNumber > 0 || state.setupKind !== 'initial' || returningFromRules}
+    onDraftChange={(draft) => send({ type: 'updateSetup', draft })}
     onFullReset={(opener) => openConfirmation({ action: 'fullReset', revision: state.revision, opener })}
     onStart={(setup) => send({ type: 'start', setup })} />;
   else if (state.phase === 'replayPreparation') content = <ReplayPreparationScreen draft={state.draft} busy={busy || !!confirm}
@@ -239,6 +244,8 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
   }
   return <main>
     <header className="site-header"><div className="brand-mark" aria-hidden="true">⚄</div><h1>Ichi-Go Game</h1><span>ONE ROLL AT A TIME</span>
+      {state.phase === 'setup' && !rulesOpen && <button className="rules-button" type="button"
+        onClick={() => { setReturningFromRules(false); setRulesOpen(true); }}>ルール説明</button>}
       <button className="sound-toggle" data-sound={soundEnabled ? 'on' : 'off'} aria-pressed={soundEnabled} aria-label={`サウンド ${soundEnabled ? 'ON' : 'OFF'}`} onClick={toggleSound}>
         Sound {soundEnabled ? 'ON' : 'OFF'}</button></header>
     {recovered && <p className="recovery-status" role="status">ゲームを復旧しました。</p>}
