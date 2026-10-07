@@ -34,9 +34,6 @@ export type DicePresentationConfig = Readonly<{
 export type DiceResultPresentation =
   | Readonly<{
     kind: 'seriesPenalty';
-    chunkBase: number;
-    totalBase: number;
-    result?: Readonly<{ multiplier: number; finalPenalty: number }> | undefined;
   }>
   | Readonly<{
     kind: 'normal';
@@ -199,11 +196,7 @@ export function DicePresentation({
       {presentation?.kind === 'seriesPenalty' && <div className="penalty-equation" aria-live="polite">
         {resultStage >= 2 && <p className="penalty-dice-expression">{dice.map((die, index) => <Fragment key={index}>
           {index > 0 ? ' + ' : ''}<span>{die.status === 'out' ? 'OUT(6)' : die.value}</span>
-        </Fragment>)}{' = '}{presentation.chunkBase}</p>}
-        {resultStage >= 2 && <span className="penalty-equation-value"><small>CHUNK BASE</small>{presentation.chunkBase}</span>}
-        {resultStage >= 3 && <span className="penalty-equation-value"><small>TOTAL BASE</small>{presentation.totalBase}</span>}
-        {resultStage >= 4 && presentation.result && <><b>×</b><span className="penalty-equation-value"><small>MULTIPLIER</small>{presentation.result.multiplier}</span>
-          <b>=</b><strong className="penalty-equation-value"><small>FINAL</small>{presentation.result.finalPenalty} pt</strong></>}
+        </Fragment>)}</p>}
       </div>}
     </div>}
   </div>;

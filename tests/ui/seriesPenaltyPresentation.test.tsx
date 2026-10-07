@@ -93,27 +93,34 @@ describe('Series chunk layout context', () => {
 
 describe('production Series Penalty presentation and auto plumbing', () => {
   it('runs 24 dice as 10,10,4 only after each reveal/paint and fresh 1500ms', async () => {
-    const h = harness(ready(), [6, 5, 4, 3, 3, 2, 2, 2, 2, 2, 6, 4, 3, 3, 2, 2, 2, 2, 2, 2, 6, 4, 3, 2]);
+    const h = harness(ready(), [6, 4, 3, 3, 2, 2, 2, 2, 2, 2, 6, 5, 4, 3, 3, 2, 2, 2, 2, 4, 6, 4, 2, 1]);
     const button = screen.getByRole('button', { name: 'ペナルティROLL' });
     fireEvent.click(button); fireEvent.click(button); await flush();
     expect(h.requests.map((request) => request.dice.length)).toEqual([10]);
     expect(entry(h.store).committedChunks).toHaveLength(1);
     expect(h.random.next).toHaveBeenCalledTimes(20);
+    expect(screen.queryByText('CHUNK BASE')).toBeNull();
+    expect(screen.getByText('累計BASE').parentElement?.textContent).toBe('累計BASE0');
     await tick(10000); expect(entry(h.store).committedChunks).toHaveLength(1);
     await act(async () => h.finishes.shift()!()); await flush();
     expect(screen.getByRole('list').getAttribute('data-rows')).toBe('5,5');
     expect(screen.queryByText('FINAL')).toBeNull();
+    expect(screen.getByText('累計BASE').parentElement?.textContent).toBe('累計BASE28');
     await tick(10000); expect(entry(h.store).committedChunks).toHaveLength(1);
     paint(); await tick(1499); expect(entry(h.store).committedChunks).toHaveLength(1);
     await tick(1); await flush();
     expect(h.requests.map((request) => request.dice.length)).toEqual([10, 10]);
+    expect(screen.getByText('累計BASE').parentElement?.textContent).toBe('累計BASE28');
     await act(async () => h.finishes.shift()!()); await flush(); paint();
+    expect(screen.getByText('累計BASE').parentElement?.textContent).toBe('累計BASE61');
     await tick(1500); await flush(); expect(h.requests.map((request) => request.dice.length)).toEqual([10, 10, 4]);
+    expect(screen.getByText('累計BASE').parentElement?.textContent).toBe('累計BASE61');
     await act(async () => h.finishes.shift()!()); await flush(); paint();
     expect(entry(h.store).status).toBe('resolved');
     expect(entry(h.store).basePenalty).toBe(74);
+    expect(screen.getByText('累計BASE').parentElement?.textContent).toBe('累計BASE74');
     expect(screen.getAllByText('FINAL').length).toBeGreaterThan(0);
-    expect(screen.getByText('296 pt')).toBeTruthy();
+    expect(screen.getByText('FINAL').parentElement?.textContent).toBe('FINAL296pt');
     await tick(10000); expect(h.random.next).toHaveBeenCalledTimes(48);
     fireEvent.click(screen.getByRole('button', { name: '最終結果を見る' })); paint();
     expect(screen.getByRole('heading', { name: '連続試合 FINAL RESULT' })).toBeTruthy();
@@ -132,7 +139,8 @@ describe('production Series Penalty presentation and auto plumbing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'ペナルティROLL' })); await flush(); paint();
     expect(h.requests[0]!.dice).toBe(entry(h.store).committedChunks[0]);
     expect(h.requests[0]!.dice[0]).toEqual({ status: 'out', value: null });
-    expect(document.querySelector('.penalty-dice-expression')?.textContent).toBe('OUT(6) + 2 + 5 + OUT(6) + 1 + 2 + 3 + 4 + 5 + 6 = 40');
+    expect(document.querySelector('.penalty-dice-expression')?.textContent).toBe('OUT(6) + 2 + 5 + OUT(6) + 1 + 2 + 3 + 4 + 5 + 6');
+    expect(screen.queryByText('CHUNK BASE')).toBeNull();
     expect(screen.getAllByLabelText('OUT')).toHaveLength(2);
     expect(h.random.next).toHaveBeenCalledTimes(18);
     await tick(1500); await flush(); paint();
@@ -183,20 +191,25 @@ describe('production Series Penalty presentation and auto plumbing', () => {
     await tick(10000); expect(h.random.next).toHaveBeenCalledTimes(18);
     const saved = h.store.getSnapshot().state;
     cleanup(); const restored = harness(saved);
-    expect(screen.getByText('54 pt')).toBeTruthy();
+    expect(screen.getByText('FINAL').parentElement?.textContent).toBe('FINAL54pt');
     paint(); await tick(10000);
     expect(restored.factory).not.toHaveBeenCalled(); expect(restored.random.next).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
   });
-  it('reveals BASE, accumulated BASE, then FINAL before paint acknowledgment', async () => {
+  it('reveals dice before cumulative BASE and resolved FINAL before paint acknowledgment', async () => {
     const h = harness(ready(5, 'regular', 2), Array<number>(9).fill(2), false, false, 180);
     fireEvent.click(screen.getByRole('button', { name: 'ペナルティROLL' })); await flush();
     await act(async () => h.finishes.shift()!()); await flush();
     expect(screen.queryByText('CHUNK BASE')).toBeNull(); expect(screen.queryByText('FINAL')).toBeNull();
-    await tick(180); expect(screen.getByText('CHUNK BASE')).toBeTruthy(); expect(screen.queryByText('54 pt')).toBeNull();
-    await tick(180); expect(document.querySelector('.penalty-equation')?.textContent).toContain('TOTAL BASE18');
+    await tick(180); expect(screen.queryByText('CHUNK BASE')).toBeNull(); expect(screen.queryByText('54 pt')).toBeNull();
+    expect(document.querySelector('.penalty-dice-expression')?.textContent).toBe('2 + 2 + 2 + 2 + 2 + 2 + 2 + 2 + 2');
+    expect(screen.getByText('累計BASE').parentElement?.textContent).toBe('累計BASE0');
+    await tick(180); expect(screen.queryByText('CHUNK BASE')).toBeNull();
     expect(screen.queryByText('54 pt')).toBeNull();
-    await tick(180); expect(screen.getByText('54 pt')).toBeTruthy();
+    await tick(180); expect(screen.queryByText('54 pt')).toBeNull();
+    expect(screen.getByText('累計BASE').parentElement?.textContent).toBe('累計BASE0');
+    await tick(180); expect(screen.getByText('FINAL').parentElement?.textContent).toBe('FINAL54pt');
+    expect(screen.getByText('累計BASE').parentElement?.textContent).toBe('累計BASE18');
     expect(h.store.getSnapshot().busy).toBe(true);
     await tick(180); expect(h.store.getSnapshot().busy).toBe(true);
     paint(); expect(h.store.getSnapshot().busy).toBe(false);

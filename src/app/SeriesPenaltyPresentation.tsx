@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import type { RefObject, ReactNode } from 'react';
 import type { FlowAction, FlowState } from '../game/gameFlow';
-import { partitionSeriesPenalty, seriesChunkBase, seriesPenaltyResult } from '../game/seriesPenalty';
+import { partitionSeriesPenalty, seriesPenaltyResult } from '../game/seriesPenalty';
 import { DicePresentation } from './DicePresentation';
 import type { DicePresentationConfig } from './DicePresentation';
 import { ReadyDice } from './DiceView';
@@ -42,7 +42,6 @@ export function SeriesPenaltyPresentation({ state, committedState, store, coordi
     return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
   }, [busy, identity, entry.status, presented]);
   const result = seriesPenaltyResult(entry, game.totalCompletionCount);
-  const committedResult = seriesPenaltyResult(committed, committedState.game.totalCompletionCount);
   const button = (label: string, action: FlowAction): ReactNode => <button className="primary" disabled={busy || blocked}
     onClick={(event) => { if (event.detail <= 1) send(action); }} onKeyDown={(event) => { if (event.repeat) event.preventDefault(); }}>{label}</button>;
   return <section className="panel results series-penalty">
@@ -50,11 +49,11 @@ export function SeriesPenaltyPresentation({ state, committedState, store, coordi
     <h2 ref={heading} tabIndex={-1}>ペナルティ：{game.participants.find((p) => p.id === entry.playerId)!.name}</h2>
     <p>ペナルティダイス：{entry.totalDice}個 · {plan.length ? `分割ROLL ${chunkPosition} / ${plan.length} · 今回 ${plan[chunkPosition - 1]}個` : 'ROLL不要'}</p>
     {entry.totalDice > 0 && <DicePresentation dice={chunk} diceMode={game.diceMode} kind="penalty" revision={committedState.revision} busy={busy}
-      presentation={chunk ? { kind: 'seriesPenalty', chunkBase: seriesChunkBase(chunk), totalBase: committed.basePenalty, result: committedResult } : undefined}
+      presentation={chunk ? { kind: 'seriesPenalty' } : undefined}
       onReveal={store.reveal} onPresented={presented} config={config} onCue={onCue} />}
     <div className="series-penalty-ready">{entry.status === 'pending' && <ReadyDice count={plan[0]!} />}</div>
     <dl className="metrics penalty-metrics" aria-label="ペナルティ計算">
-      <div className="penalty-metric"><dt>TOTAL BASE</dt><dd>{entry.basePenalty}</dd></div>
+      <div className="penalty-metric"><dt>累計BASE</dt><dd>{entry.basePenalty}</dd></div>
       <div className="penalty-metric"><dt>{result ? 'MULTIPLIER' : '計算待ち'}</dt><dd>{result ? `×${result.multiplier}` : '—'}</dd></div>
       <div className="penalty-metric"><dt>{result ? 'FINAL' : '結果待ち'}</dt><dd>{result ? result.finalPenalty : '—'}<small>pt</small></dd></div>
     </dl>
