@@ -1,6 +1,10 @@
 import type { FinalRanking } from './ranking';
 import type { SeriesCumulativePlayer } from './series';
 
+export function compareSeriesCumulative(a: SeriesCumulativePlayer, b: SeriesCumulativePlayer): number {
+  return b.cumulativeScore - a.cumulativeScore || a.cumulativeRemainingDice - b.cumulativeRemainingDice;
+}
+
 /** v4 §22–23: cumulative values only, with no Complete priority or original-order tie-break. */
 export function calculateSeriesRanking(players: readonly SeriesCumulativePlayer[]): FinalRanking {
   if (players.length < 2 || players.length > 10 || new Set(players.map((p) => p.playerId)).size !== players.length
@@ -8,12 +12,10 @@ export function calculateSeriesRanking(players: readonly SeriesCumulativePlayer[
       || p.cumulativeScore % 50 !== 0 || !Number.isSafeInteger(p.cumulativeRemainingDice) || p.cumulativeRemainingDice < 0)) {
     throw new RangeError('Invalid Series cumulative players.');
   }
-  const compare = (a: SeriesCumulativePlayer, b: SeriesCumulativePlayer) =>
-    b.cumulativeScore - a.cumulativeScore || a.cumulativeRemainingDice - b.cumulativeRemainingDice;
-  const sorted = [...players].sort(compare);
+  const sorted = [...players].sort(compareSeriesCumulative);
   let rank = 0;
   const rankings = sorted.map((player, index) => {
-    if (index === 0 || compare(sorted[index - 1]!, player) !== 0) rank = index + 1;
+    if (index === 0 || compareSeriesCumulative(sorted[index - 1]!, player) !== 0) rank = index + 1;
     return { playerId: player.playerId, rank };
   });
   const lowestRank = rankings.at(-1)!.rank;

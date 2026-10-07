@@ -1,11 +1,14 @@
 import { calculateFinalRanking, calculateProvisionalRanking } from '../game/ranking';
 import { getRemainingDice } from '../game/rollResolver';
 import type { SuddenDeathState } from '../game/suddenDeath';
+import { isSeriesState } from '../game/series';
+import { calculateSeriesProvisional } from '../game/seriesProvisional';
 
 export function RankingBoard({ game, final = false, currentHasRolled = false }: { game: SuddenDeathState; final?: boolean; currentHasRolled?: boolean }) {
+  const series = !final && isSeriesState(game) ? calculateSeriesProvisional(game) : undefined;
   const result = final
     ? calculateFinalRanking(game.players, game.diceMode)
-    : calculateProvisionalRanking(game.players, game.diceMode);
+    : series ?? calculateProvisionalRanking(game.players, game.diceMode);
   const bottom = 'bottomIds' in result ? result.bottomIds : [];
   // Append unfinished players without a provisional rank; current-player emphasis remains presentation only.
   const ids = [...result.rankings.map((entry) => entry.playerId), ...game.players.filter((p) => !p.turnFinished).map((p) => p.id)];
@@ -17,14 +20,15 @@ export function RankingBoard({ game, final = false, currentHasRolled = false }: 
       const index = game.participants.findIndex((p) => p.id === id);
       const rank = result.rankings.find((entry) => entry.playerId === id)?.rank;
       const playing = !player.turnFinished && index === game.currentPlayerIndex;
-      const classes = [bottom.includes(id) ? 'bottom' : '', player.completed ? 'complete' : '', playing ? 'current' : '', !player.turnFinished ? 'unplayed' : ''].filter(Boolean).join(' ');
+      const cumulative = series?.values.find((entry) => entry.playerId === id);
+      const classes = [bottom.includes(id) ? 'bottom' : '', player.completed && !series ? 'complete' : '', playing ? 'current' : '', !player.turnFinished ? 'unplayed' : ''].filter(Boolean).join(' ');
       return <li key={id} className={classes}>
         <span className="rank">{rank ? `${rank}位` : '—'}</span>
         <div><strong>{game.participants[index]!.name}</strong><small>プレイヤー {index + 1} · {player.completed ? '完走' : player.turnFinished ? '終了' : playing ? currentHasRolled ? 'プレイ中' : '未プレイ・現在の手番' : '未プレイ'}</small>
           {!player.turnFinished && playing && <small>順位対象外・未終了</small>}
           {bottom.includes(id) && <small className="bottom-label">暫定最下位</small>}
         </div>
-        <div className="rank-score"><strong>{player.score}点</strong><small>残り {getRemainingDice(player)} · OUT {player.strandedDice}</small></div>
+        <div className="rank-score"><strong>{cumulative?.cumulativeScore ?? player.score}点</strong><small>残り {cumulative?.cumulativeRemainingDice ?? getRemainingDice(player)} · OUT {player.strandedDice}</small></div>
       </li>;
     })}</ol>
   </section>;
