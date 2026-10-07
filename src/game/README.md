@@ -1,9 +1,9 @@
 # Game engine
 
-Phase 1の1人分の通常ターンを扱う純粋なTypeScriptエンジンです。
+IchiGo v4のTurn、Round / Series進行、順位、Penaltyを扱う純粋なTypeScript domainです。
 
 この層はReact、DOM、3D描画、音声、ストレージに依存しません。
-ゲームルールの正本は `docs/SPEC.md` です。
+ゲームルールの正本は [docs/SPEC.md](../../docs/SPEC.md) です。v4 / v3変更仕様書と過去STEP / auditは履歴資料です。
 
 ## API
 
@@ -38,9 +38,9 @@ ROLL番号はターン内で1から増加します。ターンIDまたは受付�
 初回の累積完走数は0です。次プレイヤー・次ラウンドでは直前に確定した`totalCompletionCount`を
 `createTurn`へ渡し、ROLLが返した累積値をラウンド状態へ採用してください。
 完走数をUI側で再加算してはいけません。非完走・継続・拒否された要求では加算しません。
-UI接続はSTEP 8で追加しています。3D、演出、音、保存復旧は後続Phaseです。
+UI接続・3D / 2D presentation・音・保存復旧は実装済みで、このdomainの外側が担当します。
 
-## Ranking（STEP 4）
+## Ranking（ノーマル / 完走指定）
 
 `ranking.ts` は `PlayerTurn` に一意な `id` を加えた入力から純粋に計算します。
 
@@ -58,10 +58,11 @@ SPEC §29・30のサドンデス判定や敗者確定フェーズへの進行は
 
 `tests/game/ranking.test.ts` でSPEC §77の18〜22・30と、暫定順位、2人・10人、入力非変更を検証します。
 
-## Sudden Death（STEP 5）
+## Sudden Death / Round reset
 
 - `shouldStartSuddenDeath(players)`: 2〜10人の全ターン終了後、全員完走、または全員非完走で得点・残数が一致する場合にtrue。
-- `startSuddenDeath(state, expectedSuddenDeathCount)`: 条件を満たしたラウンドを明示的にリセットします。判定だけでは開始しません。
+- `startSuddenDeath(state, expectedSuddenDeathCount)`: ノーマルの条件を満たしたラウンドを明示的にリセットします。判定だけでは開始しません。
+- `resetFinishedRound(state, expectedSuddenDeathCount)`: 完走指定の次Roundにも使う全員reset。次Round eligibilityは`roundPolicy.ts`で判定し、Seriesには使いません。
 
 `SuddenDeathState.participants` はゲーム開始時に固定された全参加者のID・名前を元のプレイ順で保持する正本です。
 `players` はIDに対応する現在ラウンドの状態です。両者のID集合が一致しない入力は拒否します。
@@ -81,7 +82,7 @@ SPEC §29・30のサドンデス判定や敗者確定フェーズへの進行は
 `tests/game/suddenDeath.test.ts` はSPEC §77の23〜28を対象に、2人・10人、OUT内訳差、全員参加、
 順序、状態リセット、累積値保持、投げ方3種、連続開始、古い要求、入力非変更を検証します。
 
-## Penalty（STEP 6）
+## Penalty（ノーマル / 完走指定のsingle-roll）
 
 - `createPenaltyState(round, penaltyId)`: 最終ラウンドの終了状態、元の全参加者一覧、確定済み累積完走数からペナルティ状態を生成します。
 - `rollPenalty(state, playerId, random, expectedPenaltyId, diceMode?, throwStyle?)`: 固定順の次の未処理敗者だけを1回ROLLし、新しい確定状態を返します。
@@ -108,14 +109,14 @@ ID不一致・重複・順番違い・敗者以外のROLL要求は同じ状態�
 `tests/game/penalty.test.ts` はSPEC §77の31〜34、1〜7個の合計、倍率×1/×2/×10、1/5の通常加算、元の順序、個別結果、二重確定防止、入力非変更、乱数境界を検証します。
 `tests/game/penaltyOut.test.ts` と `tests/game/diceMode.test.ts` はthrowStyleごとのOUT、SAFEのみのD6生成、OUTの6換算とdie結果保持、14個の有効範囲および15個の拒否を検証します。
 
-## Core Logic Audit（STEP 7）
+## Core Logic回帰テスト
 
 `tests/game/audit.test.ts`でSPEC §77の29、2人・10人の複数ラウンドからペナルティまでの接続、
 ターン／ペナルティIDの違う古い要求、累積値の一度だけの更新、欠損出目の拒否、
 通常ROLLで到達する状態の不変条件を検証します。
-必須ケースの対応表と監査結果は `docs/CORE_LOGIC_AUDIT.md` を参照してください。
+過去の必須ケース対応表と監査結果は `docs/CORE_LOGIC_AUDIT.md` の履歴を参照してください。
 
-## Playable UI（STEP 8）
+## Flow / Setup / Recoveryとの境界
 
 `gameFlow.ts`は既存エンジンを呼び出す純粋な進行制御です。得点・順位などのルールは再実装しません。
 `advanceFlow(state, expectedRevision, action, random)`は古いリビジョンと不正なフェーズの要求を拒否します。
@@ -126,28 +127,56 @@ ID不一致・重複・順番違い・敗者以外のROLL要求は同じ状態�
 `setup.ts`は保存可能なdraftの構造検証と、開始時のtrim後1〜12 graphemeの名前検証を分離します。draftでは空欄を許可し、どちらも2〜10人・一意な空でないID・有効なDice Mode／throwStyleを要求します。同名を許可します。
 Reactとは独立してテスト可能です。UI側の操作ロックと描画完了通知は `src/app/gameStore.ts` が担当します。
 
-v2 STEP 2では準備系遷移を分離しています。
+準備系遷移は以下のように分離しています。
 
-- `replay` はFinal Resultから`replayPreparation`へ移り、人物・ID・名前・順番・Dice Mode・throwStyleだけをdraftへ抽出します。
+- `replay` はFinal Resultから`replayPreparation`へ移り、人物・ID・名前・順番・Game Modeと固有設定・Dice Mode・throwStyle・ROLL上限だけをdraftへ抽出します。
 - `reorderReplay` は既存IDの完全な順列だけを受け付け、`startReplay`が明示されるまでgameplay stateを作りません。
 - `newGame` はFinal Resultから設定を保持した通常Setup draftへ移ります。
 - `exitGame` は進行中ゲームを従来の初期Setupへ戻し、Final Resultの`newGame`とは区別します。
-- `fullReset` はSetup draftを2人空欄・7 DICE・normalへ戻します。
+- `fullReset` はSetup draftをノーマル・2人空欄・7 DICE・normal throw・ROLL ∞へ戻します。
 
-v2 STEP 3ではGame Recovery schemaをversion 2とし、進行中ゲームに加えてSetup／再戦準備draftを保存します。再戦準備は固定元構成も照合し、復旧データによる改名・設定変更を拒否します。v1 game snapshotは補完せずunsupportedとして拒否します。
+Game Recovery schemaはversion 4で、進行中ゲームに加えてSetup／再戦準備draftを保存します。再戦準備は固定元構成も照合し、復旧データによる改名・設定変更を拒否します。schema 3を含む旧game snapshotはmigration / mode補完せずunsupportedとして拒否します。Seriesの進行 / 累積 / Penalty chunkはmode別validatorで照合し、修復しません。
 
 SoundはFlow stateに含めず、game schemaとは独立したversion 1形式で保存します。Game Recoveryのschema更新や準備・reset遷移でSoundを初期化しません。
 
-v2 STEP 4では通常Setupをparticipant行ベースのUIにしています。人数は`participants.length`から派生し、追加・中間削除・上下移動・名前・Dice Mode・throwStyleの各変更を`updateSetup`経由でdraftへ即時反映します。Full Resetは確認Dialogを経て専用actionを送ります。
+通常Setupはparticipant行ベースのUIです。人数は`participants.length`から派生し、追加・中間削除・上下移動・名前・Game Modeと固有設定・Dice Mode・throwStyle・ROLL上限の各変更を`updateSetup`経由でdraftへ即時反映します。Full Resetは確認Dialogを経て専用actionを送ります。
 
-Replay Preparationは名前・Dice Mode・throwStyleを読み取り専用で表示し、既存IDの順序変更と明示的な`startReplay`だけを操作として公開します。
+Replay Preparationは名前・Game Modeと固有設定・Dice Mode・throwStyle・ROLL上限を読み取り専用で表示し、既存IDの順序変更と明示的な`startReplay`だけを操作として公開します。
 
-## v3 STEP 2 — ROLL上限とRecovery
+## ROLL上限とRecovery
 
-追加仕様は `docs/v3_変更仕様書.md` §4〜6です。`RollLimit = null | 1 | 2 | 3 | 4 | 5` とし、nullは無制限・初期値です。設定の正本は編集時の`Setup.rollLimit`と開始後の`game.rollLimit`だけです。Player／Turnへコピーせず、使用回数は既存の`rollNumber`／`nextRollNumber`から導出します。
+正式仕様は `docs/SPEC.md` のROLL上限 / Recovery契約です。`RollLimit = null | 1 | 2 | 3 | 4 | 5` とし、nullは無制限・初期値です。設定の正本は編集時の`Setup.rollLimit`と開始後の`game.rollLimit`だけです。Player／Turnへコピーせず、使用回数は既存の`rollNumber`／`nextRollNumber`から導出します。
 
 Flowは現在のROLL番号とゲームの上限をEngine／resolverへ明示的に渡します。上限超過の番号は抽選前に拒否し、結果確定後はCOMPLETE → no-score → ROLL上限 → activeDiceなし → 継続の順で判定します。`turnEnd`結果だけに`reason: noScore | rollLimit | noActiveDice`を保持します。上限に達してもそのROLLの得点・OUT・除外は確定します。Rankingは変更しません。
 
-Sudden Death、Replay preparation、New GameはrollLimitを引き継ぎ、Full Resetはnullへ戻します。Game Recoveryはschema 3でrollLimitを必須検証し、schema 2を補完・移行せず拒否します。保存結果は同じROLL番号・上限で再解決し、最終ROLL終了後の`nextRollNumber = rollLimit + 1`も正当な状態です。Soundは独立したschema 1を維持します。
+Sudden Death、Replay preparation、New GameはrollLimitを引き継ぎ、Full Resetはnullへ戻します。Game Recoveryはschema 4でmode / rollLimitを必須検証し、旧schemaを補完・移行せず拒否します。保存結果は同じROLL番号・上限で再解決し、最終ROLL終了後の`nextRollNumber = rollLimit + 1`も正当な状態です。Soundは独立したschema 1を維持します。
 
-このSTEPでは設定／表示UI・CSS・Three.js・Penalty OUTは変更しません。`tests/game/rollLimit.test.ts`と`tests/storage/rollLimitRecovery.test.ts`で上限、優先順位、引継ぎ、乱数非消費、保存境界を検証します。
+設定／表示UI・Three.js・Penalty OUTも実装済みで、上限とTurn進行の正本はdomainに置きます。`tests/game/rollLimit.test.ts`と`tests/storage/rollLimitRecovery.test.ts`で上限、優先順位、引継ぎ、乱数非消費、保存境界を検証します。
+
+## Game Mode / Completion Target
+
+`types.ts`の`GameMode`はnormal / completionTarget / seriesのdiscriminated unionです。`ModeConfiguration`はcompletionTargetとrollLimit=nullの相関を保証し、`isGameMode`はhidden mode設定を拒否します。`modeConfiguration`は設定だけを抽出し、進行stateをcarryしません。
+
+`setup.ts`の`switchSetupMode`は別モードへの変更時にtarget=1 / gameCount=2を作り、同一mode再選択は元のdraftを保持します。完走指定へ入ると∞を強制し、離れても古い有限上限を戻しません。UIだけでなくdraft validatorもmodeと上限の整合を検証します。
+
+`roundPolicy.ts`の`shouldStartNextRound`は全Turn終了後だけ、完走指定のtarget未達またはノーマルのSudden Death条件を判定します。途中到達は即終了ではありません。`totalCompletionCount`は同一playerの複数Round完走も数えるevent countで、targetを超えてよい。決着Roundだけを既存Ranking / single-roll Penaltyへ渡し、過去score / remainingを持ち越しません。
+
+## Series / cumulative ranking
+
+`series.ts`は`currentGameNumber`と元参加者順の`cumulative`を保持します。`commitSeriesGame`は最後のterminal ROLL遷移からだけ呼び、scoreとremaining（active+stranded）を一度だけ加算します。Completeのremaining寄与は0。`nextSeriesGame`は明示Intermediate actionで設定・累積値・completion countを保ち、current players / Turn / dice / ROLL番号をresetします。SeriesにSudden DeathやGame単位の勝敗 / Penaltyはありません。
+
+`seriesRanking.ts`はcumulativeScore降順 → cumulativeRemainingDice昇順 → exact tieのcompetition ranking。Complete優先はなく、stable input orderingをtie-breakにしません。lowest rank全員を元順序で返し、全員同順位でも全員Penaltyです。
+
+`seriesProvisional.ts`の`calculateSeriesProvisional`はvisible gameから、現Gameの終了済みTurnだけを順位対象にします。前Gameまでの累積 + 今回確定分を比較し、全員終了stateは既にatomic commit済みなので再加算しません。未終了playerは順位対象外。表示用derived値でありcumulative authorityを変更しません。
+
+## Series Penalty / presentation boundary
+
+`seriesPenalty.ts`は既存single-roll Penaltyと分離し、対象cumulativeRemainingDiceを0〜70で扱います。`partitionSeriesPenalty`は最大10個のplanを導出します。0個はresolved / BASE 0、ROLL・RNG・Renderer不要。`commitSeriesPenaltyChunk`はpenaltyId / playerId / chunkIndex / statusを抽選前に検証して1 requestで1 chunkをcommitし、OUT-check → SAFEのみface drawを維持します。OUT/nullは保存結果で、6換算は算術だけです。
+
+authorityはpenaltyId、entries（playerId / totalDice / status / committedChunks / basePenalty）、currentLoserIndex。plan / next indexはderivedです。`seriesChunkBase`は累計更新とRecovery照合に使い、UIにchunk小計を表示するための契約ではありません。`seriesPenaltyResult`はresolved時だけ全BASEへcompletion count+1を一度適用してFINALを導出します。
+
+domainはtimerを所有しません。`src/app/seriesPenaltyAutoCoordinator.ts`がreveal / paint acknowledgment後1500msで次chunk actionを送ります。Storeのrevisionとchunk identityを最新stateと照合し、stale requestはRNG前に拒否します。確認dialog中は停止し、取消後fresh wait。復旧runningも復元表示ack後fresh waitで自動再開し、pending次敗者は新たなuser tapが必要です。
+
+`src/storage/sessionRecovery.ts`はschema 4でmode別進行、累積の到達可能範囲、phase、chunk prefix / status、BASE一致を検証し、過去Gameの推測repair・committed chunk再抽選 / 再加算を行いません。timer / ack / 残りmsは保存しません。Sound schema 1は独立です。
+
+2D Series Penaltyは元Dice Modeと独立の最大5列chunk配置、Renderer入力は現在chunk最大10個です。通常PlayのDice Mode配置とThree.js stagingを変更しません。running UIは累計BASE、resolved後は倍率 / FINALを表示し、chunk BASE小計・式末尾小計は非表示。Rule PageはUI navigationでdomain phaseを追加せず、draft / RNG / Recoveryを変更しません。
