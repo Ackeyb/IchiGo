@@ -12,13 +12,13 @@ import type { SeriesState } from '../../src/game/series';
 import { calculateSeriesProvisional } from '../../src/game/seriesProvisional';
 import { calculateSeriesRanking } from '../../src/game/seriesRanking';
 import { SessionRecovery } from '../../src/storage/sessionRecovery';
-import type { GameMode } from '../../src/game/types';
+import type { GameMode, SeriesGameCount } from '../../src/game/types';
 
 const noDraw = { next: (): number => { throw new Error('Unexpected draw'); } };
 const quiet = { play: () => undefined, dispose: () => undefined };
 const encode = (faces: readonly number[]) => faces.flatMap((face) => face === 0 ? [0] : [0.9, (face - 0.5) / 6]);
 const step = (state: FlowState, action: FlowAction) => advanceFlow(state, state.revision, action, noDraw);
-function ready(count = 3, mode: GameMode = { type: 'series', gameCount: 2 }): FlowState {
+function ready(count = 3, mode: GameMode = { type: 'series', gameCount: 3 }): FlowState {
   const configuration = mode.type === 'completionTarget' ? { mode, rollLimit: null } : { mode, rollLimit: 1 as const };
   return step(initialFlow(), { type: 'start', setup: { ...initialSetup(), ...configuration, diceMode: 7,
     participants: Array.from({ length: count }, (_, i) => ({ id: `p${i}`, name: `P${i}` })) } });
@@ -31,8 +31,8 @@ function game(state: FlowState): SeriesState {
   if (state.phase === 'setup' || state.phase === 'replayPreparation' || !isSeriesState(state.game)) throw new Error('Series expected');
   return state.game;
 }
-function secondGame() {
-  let state = ready();
+function secondGame(gameCount: SeriesGameCount = 3) {
+  let state = ready(3, { type: 'series', gameCount });
   for (const faces of [[1, 2, 2, 2, 2, 2, 2], [1, 1, 1, 2, 2, 2, 2], [1, 1, 1, 1, 1, 1, 1]]) {
     state = roll(state, faces);
     if (game(state).currentPlayerIndex < 2) state = step(state, { type: 'next' });
@@ -40,8 +40,8 @@ function secondGame() {
   state = step(state, { type: 'ranking' });
   return step(state, { type: 'nextSeriesGame', currentGameNumber: 1 });
 }
-function partiallyFinished() {
-  let state = roll(secondGame(), [1, 1, 2, 2, 2, 2, 2]);
+function partiallyFinished(gameCount: SeriesGameCount = 3) {
+  let state = roll(secondGame(gameCount), [1, 1, 2, 2, 2, 2, 2]);
   state = step(state, { type: 'next' });
   return roll(state, [5, 2, 2, 2, 2, 2, 2]);
 }
@@ -154,7 +154,7 @@ describe('Series provisional Play, staged visibility and Recovery', () => {
     expect(game(state).cumulative[0]!.cumulativeScore).toBe(100);
   });
   it('does not double count the last terminal commit or expose it before reveal, and matches Final Ranking', async () => {
-    const prior = step(partiallyFinished(), { type: 'next' });
+    const prior = step(partiallyFinished(2), { type: 'next' });
     const draws = encode([5, 2, 2, 2, 2, 2, 2]);
     const store = storeFor(prior, { next: () => draws.shift()! });
     let finish: (() => void) | undefined;
@@ -165,12 +165,12 @@ describe('Series provisional Play, staged visibility and Recovery', () => {
     const committed = game(store.getSnapshot().state);
     expect(committed.players.every((player) => player.turnFinished)).toBe(true);
     expect(calculateSeriesProvisional(committed).values).toEqual(committed.cumulative);
-    expect(row('P2').querySelector('.rank')?.textContent).toBe('—');
-    expect(row('P0').querySelector('.rank-score')?.textContent).toBe('300点残り 11 · OUT 0');
+    expect(row('P2').querySelector('.rank')?.textContent).toBe('ヒミツ');
+    expect(row('P0').querySelector('.rank-score')?.textContent).toBe('ヒミツ残り 11 · OUT 0');
     await act(async () => { finish!(); await Promise.resolve(); }); paint();
-    expect(row('P0').querySelector('.rank-score')?.textContent).toBe('300点残り 11 · OUT 0');
-    expect(row('P1').querySelector('.rank-score')?.textContent).toBe('350点残り 10 · OUT 0');
-    expect(row('P2').querySelector('.rank-score')?.textContent).toBe('750点残り 6 · OUT 0');
+    expect(row('P0').querySelector('.rank-score')?.textContent).toBe('ヒミツ残り 11 · OUT 0');
+    expect(row('P1').querySelector('.rank-score')?.textContent).toBe('ヒミツ残り 10 · OUT 0');
+    expect(row('P2').querySelector('.rank-score')?.textContent).toBe('ヒミツ残り 6 · OUT 0');
     const provisional = calculateSeriesProvisional(game(store.getSnapshot().visibleState));
     expect(provisional.rankings).toEqual(calculateSeriesRanking(committed.cumulative).rankings);
     fireEvent.click(screen.getByRole('button', { name: '結果を見る' })); paint();
@@ -185,7 +185,7 @@ describe('Series provisional Play, staged visibility and Recovery', () => {
     const projected = calculateSeriesProvisional(game(state));
     expect(projected.values).toEqual(game(state).cumulative);
     const intermediate = step(state, { type: 'ranking' });
-    expect(intermediate.phase).toBe('seriesIntermediate');
+    expect(intermediate.phase).toBe('turn');
     expect(projected.values).toEqual(game(intermediate).cumulative);
     render(<App store={storeFor(state)} soundPlayer={quiet} />);
     expect(row('P0').querySelector('.rank-score')?.textContent).toBe('100点残り 6 · OUT 0');

@@ -1,7 +1,8 @@
 import { createPenaltyState, calculatePenalty } from '../game/penalty';
 import { resolveRoll, assertPlayerTurn } from '../game/rollResolver';
 import { validateSetup, validateSetupDraft } from '../game/setup';
-import { shouldStartNextRound } from '../game/roundPolicy';
+import { shouldStartNextRound, roundContinuation } from '../game/roundPolicy';
+import { isCompletionTargetState, completionTargetTurnId } from '../game/completionTarget';
 import type { FlowState } from '../game/gameFlow';
 import type { PenaltyEntry } from '../game/penalty';
 import { isDiceMode, isRollLimit, isModeConfiguration, sameGameMode } from '../game/types';
@@ -19,7 +20,7 @@ import { createSeriesPenalty, partitionSeriesPenalty, seriesChunkBase } from '..
  */
 export const SESSION_GAME_KEY = 'ichi-go:game';
 export const SESSION_SOUND_KEY = 'ichi-go:sound';
-export const SESSION_SCHEMA_VERSION = 4 as const;
+export const SESSION_SCHEMA_VERSION = 5 as const;
 export const SOUND_SCHEMA_VERSION = 1 as const;
 
 export interface StorageAdapter {
@@ -81,16 +82,23 @@ function validRound(value: unknown, seriesRuntime = false): value is SuddenDeath
   if (players.some((player, index) => !isRecord(player) || player.id !== ids[index] || !validPlayer(player, diceMode))) return false;
   if (value.throwStyle === 'careful' && players.some((player) => player.strandedDice !== 0)) return false;
   // Series history/cumulative bounds belong to its own phase-aware validator, never the Normal SD invariant.
-  if (config.mode.type === 'series') return value.suddenDeathCount === 0;
-  const maximumCompletions = participants.length * (Number(value.suddenDeathCount) + 1);
+  if (config.mode.type === 'series') return value.suddenDeathCount === 0 && value.completionTargetRound === undefined;
   const currentCompletions = players.filter((player) => (player as unknown as PlayerTurn).completed).length;
   const previousCompletions = Number(value.totalCompletionCount) - currentCompletions;
+  if (config.mode.type === 'completionTarget') {
+    const round = value.completionTargetRound;
+    if (!isRecord(round) || !isSafeCount(round.number) || round.number < 1
+      || (round.kind !== 'regular' && round.kind !== 'suddenDeath')
+      || Number(value.suddenDeathCount) >= round.number || previousCompletions < 0
+      || previousCompletions > participants.length * (round.number - 1)) return false;
+    // No inferred past games: validate the saved identity and event bounds only.
+    return round.kind === 'regular' ? value.suddenDeathCount === 0 && previousCompletions < config.mode.targetCompletions
+      : Number(value.suddenDeathCount) > 0 && previousCompletions >= config.mode.targetCompletions;
+  }
+  if (value.completionTargetRound !== undefined) return false;
+  const maximumCompletions = participants.length * (Number(value.suddenDeathCount) + 1);
   if (!Number.isSafeInteger(maximumCompletions) || previousCompletions < 0
     || Number(value.totalCompletionCount) > maximumCompletions) return false;
-  if (config.mode.type === 'completionTarget') {
-    // Partial-completion prior rounds are legal. With no saved history, validate bounds, never infer events or clamp to target.
-    return previousCompletions <= participants.length * Number(value.suddenDeathCount);
-  }
   // Normal can advance only through all-complete or zero-completion tied rounds; retain its stricter invariant.
   return previousCompletions % participants.length === 0
     && previousCompletions / participants.length <= Number(value.suddenDeathCount)
@@ -122,7 +130,8 @@ function validTurn(value: unknown, game: SuddenDeathState, gameNumber: number, r
   };
   if (!isRecord(value) || (value.phase !== 'ready' && value.phase !== 'result')
     || typeof value.turnId !== 'string' || value.turnId !== (isSeriesState(game) ? seriesTurnId(game, gameNumber)
-      : `${gameNumber}/${game.suddenDeathCount}/${game.participants[game.currentPlayerIndex]!.id}`)
+      : isCompletionTargetState(game) ? completionTargetTurnId(game, gameNumber)
+        : `${gameNumber}/${game.suddenDeathCount}/${game.participants[game.currentPlayerIndex]!.id}`)
     || value.throwStyle !== game.throwStyle || value.totalCompletionCount !== game.totalCompletionCount
     || !Number.isSafeInteger(value.nextRollNumber) || Number(value.nextRollNumber) < 1 || Number(value.nextRollNumber) > revision + 1
     || !validPlayer(value.player, game.diceMode) || !same(value.player, currentPlayer)) return false;
@@ -295,12 +304,13 @@ export function validateStoredFlowState(value: unknown): value is FlowState {
   if (!['turn', 'ranking', 'suddenDeath', 'loserReveal', 'penalty', 'finished'].includes(value.phase)
     || value.gameNumber < 1 || value.gameNumber > value.revision || !validRound(value.game)) return false;
   const game = value.game;
+  if (isCompletionTargetState(game) && game.completionTargetRound.number > value.revision) return false;
   const current = game.currentPlayerIndex;
   if (game.players.some((player, index) => index < current ? !player.turnFinished : index > current ? !isInitialPlayer(player, game.diceMode) : false)) return false;
   if (value.phase === 'turn') return validTurn(value.turn, game, value.gameNumber, value.revision);
   if (!game.players.every((player) => player.turnFinished)) return false;
   const tied = shouldStartNextRound(game);
-  if (value.phase === 'suddenDeath') return tied;
+  if (value.phase === 'suddenDeath') return game.mode.type === 'normal' && roundContinuation(game) === 'suddenDeath';
   if (value.phase === 'ranking') return game.mode.type === 'normal' || !tied;
   if (value.phase === 'loserReveal') return !tied;
   if (value.phase !== 'penalty' && value.phase !== 'finished') return false;

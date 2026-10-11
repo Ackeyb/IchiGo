@@ -4,6 +4,8 @@ import { getPenaltyMultiplier } from '../game/penalty';
 import { calculateFinalRanking } from '../game/ranking';
 import { getRemainingDice } from '../game/rollResolver';
 import { shouldStartSuddenDeath } from '../game/suddenDeath';
+import { roundContinuation } from '../game/roundPolicy';
+import { isCompletionTargetState } from '../game/completionTarget';
 import { mathRandomSource } from '../game/randomSource';
 import type { RandomSource } from '../game/randomSource';
 import type { FlowAction } from '../game/gameFlow';
@@ -141,6 +143,12 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
         multiplier: getPenaltyMultiplier(committedState.game.totalCompletionCount),
       } : undefined;
       const current = game.participants[game.currentPlayerIndex]!;
+      const continuation = roundContinuation(game);
+      const endAction = isSeriesState(game) && game.currentGameNumber < game.mode.gameCount
+        ? <ActionButton disabled={busy || !!confirm} onClick={() => send({ type: 'nextSeriesGame', currentGameNumber: game.currentGameNumber })}>次の試合へ</ActionButton>
+        : game.mode.type === 'completionTarget' && continuation === 'nextGame' ? action('次の試合へ', 'nextCompletionTargetGame')
+          : game.mode.type === 'completionTarget' && continuation === 'suddenDeath' ? action('サドンデスへ', 'startSuddenDeath')
+            : action('結果を見る', 'ranking');
       // The counter names the next roll to take; while busy, retain the committed result's number
       // and advance to nextRollNumber only when presentation unlocks continuation.
       const nextRollLabel = busy && committedState.phase === 'turn' && committedState.turn.phase === 'result'
@@ -174,7 +182,7 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
           <p className="turn-action-context">{player.turnFinished && game.currentPlayerIndex < game.participants.length - 1
             ? <>次のプレイヤー：<strong>{game.participants[game.currentPlayerIndex + 1]!.name}</strong></> : '\u00a0'}</p>
           {!player.turnFinished ? action(result ? '続けてROLL' : 'ROLL', 'roll') : game.currentPlayerIndex < game.participants.length - 1
-            ? action('次へ', 'next') : action('結果を見る', 'ranking')}
+            ? action('次へ', 'next') : endAction}
         </div>
       </section><RankingBoard game={game} currentHasRolled={state.turn.nextRollNumber > 1} /></div>;
     } else if (state.phase === 'seriesIntermediate') {
@@ -252,7 +260,8 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
     {(recoveryNotice ?? soundRecoveryNotice) && <p className="recovery-warning" role="status">
       {recoveryNoticeText((recoveryNotice ?? soundRecoveryNotice)!)}</p>}
     {state.phase !== 'setup' && state.phase !== 'replayPreparation' && <div className="game-summary" aria-label="ゲーム情報">
-      <span>{state.game.suddenDeathCount ? `サドンデス ${state.game.suddenDeathCount}` : '通常ラウンド'}</span>
+      <span>{isCompletionTargetState(state.game) && state.game.completionTargetRound.kind === 'regular' ? '通常ラウンド'
+        : state.game.suddenDeathCount ? `サドンデス ${state.game.suddenDeathCount}` : '通常ラウンド'}</span>
       <span>投げ方：{styleLabels[state.game.throwStyle]}</span><span>累積完走：{state.game.totalCompletionCount}</span>
       <strong>ペナルティ倍率 ×{getPenaltyMultiplier(state.game.totalCompletionCount)}</strong>
     </div>}

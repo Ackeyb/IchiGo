@@ -41,7 +41,7 @@ function endGame(state: FlowState, face = 2) {
 function nextGame(state: FlowState) {
   return act(act(state, { type: 'ranking' }), { type: 'nextSeriesGame', currentGameNumber: series(state).currentGameNumber });
 }
-function storageFor(state: FlowState, version = 4) {
+function storageFor(state: FlowState, version = 5) {
   const values = new Map([[SESSION_GAME_KEY, JSON.stringify({ version, state })]]);
   const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); },
     removeItem: (key: string) => { values.delete(key); } };
@@ -70,7 +70,7 @@ describe('Series progress and atomic contributions', () => {
   it.each([null, 1, 2, 3, 4, 5] as const)('accepts rollLimit %s', (rollLimit) => {
     expect(series(start(draft(2, rollLimit))).rollLimit).toBe(rollLimit);
   });
-  it.each([2, 3, 4, 5] as const)('plays exactly %i Games with explicit Intermediate boundaries and no SD or per-Game losers', (gameCount) => {
+  it.each([2, 3, 4, 5] as const)('plays exactly %i Games with direct explicit continuation and no SD or per-Game losers', (gameCount) => {
     let state = start(draft(gameCount));
     for (let number = 1; number <= gameCount; number++) {
       state = endGame(state);
@@ -78,7 +78,7 @@ describe('Series progress and atomic contributions', () => {
       for (const type of ['roll', 'reveal', 'suddenDeath', 'startSuddenDeath', 'penalty', 'rollPenalty', 'finish'] as const) expect(act(state, { type })).toBe(state);
       const settled = act(state, { type: 'ranking' });
       restored(settled);
-      expect(settled.phase).toBe(number === gameCount ? 'seriesRanking' : 'seriesIntermediate');
+      expect(settled.phase).toBe(number === gameCount ? 'seriesRanking' : 'turn');
       if (number < gameCount) {
         expect(settled).not.toHaveProperty('ranking');
         expect(settled).not.toHaveProperty('penalty');
@@ -167,15 +167,15 @@ describe('Series progress and atomic contributions', () => {
     expect(saved).toEqual([committed]);
     expect(series(committed).cumulative[0]!.cumulativeScore).toBe(500);
     expect(store.getSnapshot()).toMatchObject({ busy: true, visibleState: ready });
-    store.dispatch(committed.revision, { type: 'ranking' });
+    store.dispatch(committed.revision, { type: 'nextSeriesGame', currentGameNumber: 1 });
     expect(store.getSnapshot().state).toBe(committed);
     store.reveal(committed.revision);
     expect(store.getSnapshot().visibleState).toBe(committed);
-    store.dispatch(committed.revision, { type: 'ranking' });
+    store.dispatch(committed.revision, { type: 'nextSeriesGame', currentGameNumber: 1 });
     expect(store.getSnapshot().state).toBe(committed);
     store.presented(committed.revision);
-    store.dispatch(committed.revision, { type: 'ranking' });
-    expect(store.getSnapshot().state.phase).toBe('seriesIntermediate');
+    store.dispatch(committed.revision, { type: 'nextSeriesGame', currentGameNumber: 1 });
+    expect(store.getSnapshot().state).toMatchObject({ phase: 'turn', game: { currentGameNumber: 2 } });
     expect(series(store.getSnapshot().state).cumulative).toBe(series(committed).cumulative);
     expect(calls).toBe(10);
   });
@@ -239,7 +239,7 @@ describe('Series recovery without contribution replay', () => {
   it('rejects missing commit, unsupported phases and final/intermediate Game mismatch', () => {
     const terminal = endGame(start());
     expect(validateStoredFlowState({ ...terminal, game: { ...series(terminal), cumulative: series(start()).cumulative } })).toBe(false);
-    const intermediate = act(terminal, { type: 'ranking' });
+    const intermediate = { phase: 'seriesIntermediate' as const, revision: terminal.revision, gameNumber: terminal.gameNumber, game: series(terminal) };
     expect(validateStoredFlowState({ ...intermediate, game: { ...series(intermediate), currentGameNumber: 2 } })).toBe(false);
     for (const phase of ['ranking', 'penalty', 'suddenDeath', 'loserReveal', 'finished']) expect(validateStoredFlowState({ ...intermediate, phase })).toBe(false);
     const final = act(endGame(nextGame(terminal)), { type: 'ranking' });
@@ -247,11 +247,11 @@ describe('Series recovery without contribution replay', () => {
     expect(validateStoredFlowState({ ...final, phase: 'seriesIntermediate' })).toBe(false);
     expect(new SessionRecovery(() => storageFor(final, 3)).loadGame()).toEqual({ recovered: false, notice: 'corrupt' });
   });
-  it('rejects completion count contradictions and keeps Intermediate waiting after reload', () => {
+  it('rejects completion count contradictions and keeps direct continuation waiting after reload', () => {
     const terminal = endGame(start(), 1);
     const intermediate = act(terminal, { type: 'ranking' });
     const store = restored(intermediate);
-    expect(store.getSnapshot().state.phase).toBe('seriesIntermediate');
+    expect(store.getSnapshot().state.phase).toBe('turn');
     for (const totalCompletionCount of [0, 3, -1, 0.5]) {
       expect(validateStoredFlowState({ ...intermediate, game: { ...series(intermediate), totalCompletionCount } })).toBe(false);
     }

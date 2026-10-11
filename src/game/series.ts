@@ -31,7 +31,7 @@ export function commitSeriesGame(game: SeriesState): SeriesState {
   }) };
 }
 
-/** Explicit Intermediate action only. Preserve configuration/cumulative values and rebuild fresh current players. */
+/** Explicit Next Game action (Play or retained Intermediate). Never re-add committed contributions. */
 export function nextSeriesGame(game: SeriesState, expectedCurrentGameNumber: number): SeriesState {
   if (expectedCurrentGameNumber !== game.currentGameNumber || game.currentGameNumber >= game.mode.gameCount
     || !game.players.every((player) => player.turnFinished)) return game;

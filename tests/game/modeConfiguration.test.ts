@@ -17,7 +17,7 @@ function roundTrip(state: FlowState) {
   const storage = { getItem: (key: string) => values.get(key) ?? null,
     setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
   new SessionRecovery(() => storage).saveGame(state);
-  expect(JSON.parse(values.get(SESSION_GAME_KEY)!)).toEqual({ version: 4, state });
+  expect(JSON.parse(values.get(SESSION_GAME_KEY)!)).toEqual({ version: 5, state });
   return new SessionRecovery(() => storage).loadGame();
 }
 
@@ -98,10 +98,10 @@ describe('v4 configuration recovery and carry', () => {
     { type: 'completionTarget', targetCompletions: 6 },
     { type: 'series', gameCount: 1 },
     { type: 'series', gameCount: 6 },
-  ])('rejects invalid mode ranges in schema 4 drafts: %j', (mode) => {
+  ])('rejects invalid mode ranges in schema 5 drafts: %j', (mode) => {
     expect(validateStoredFlowState({ ...initialFlow(), draft: { ...initialSetup(), mode } })).toBe(false);
   });
-  it('rejects schema 4 drafts missing mode rather than supplying Normal', () => {
+  it('rejects schema 5 drafts missing mode rather than supplying Normal', () => {
     const { mode, ...draft } = initialSetup();
     expect(mode).toEqual({ type: 'normal' });
     expect(validateStoredFlowState({ ...initialFlow(), draft })).toBe(false);
@@ -149,13 +149,18 @@ describe('v4 configuration recovery and carry', () => {
   it('dispatches runtime validation by supported mode without supplying defaults', () => {
     const state = act(initialFlow(), { type: 'start', setup: named() });
     if (state.phase !== 'turn') throw new Error('Turn expected');
-    for (const mode of modes.slice(1)) expect(validateStoredFlowState({ ...state, game: { ...state.game, mode } })).toBe(mode.type === 'completionTarget');
+    for (const mode of modes.slice(1)) {
+      // Configuration alone cannot substitute for a mode's required runtime identity.
+      expect(validateStoredFlowState({ ...state, game: { ...state.game, mode } })).toBe(false);
+      const started = act(initialFlow(), { type: 'start', setup: { ...named(), mode } as Setup });
+      expect(validateStoredFlowState(started)).toBe(true);
+    }
     const { mode: omitted, ...game } = state.game;
     expect(omitted).toEqual({ type: 'normal' });
     expect(validateStoredFlowState({ ...state, game })).toBe(false);
   });
   it.each([true, false])('rejects schema 3 without inferring Normal and retains Sound %s', (enabled) => {
-    expect(SESSION_SCHEMA_VERSION).toBe(4);
+    expect(SESSION_SCHEMA_VERSION).toBe(5);
     expect(SOUND_SCHEMA_VERSION).toBe(1);
     const values = new Map([[SESSION_GAME_KEY, JSON.stringify({ version: 3, state: initialFlow() })],
       [SESSION_SOUND_KEY, JSON.stringify({ version: 1, enabled })]]);

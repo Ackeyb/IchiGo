@@ -4,7 +4,7 @@ import type { FlowAction, FlowState } from '../../src/game/gameFlow';
 import { initialSetup } from '../../src/game/setup';
 import type { Setup } from '../../src/game/setup';
 import type { CompletionTarget, DiceMode, ThrowStyle } from '../../src/game/types';
-import { shouldStartNextRound } from '../../src/game/roundPolicy';
+import { shouldStartNextRound, roundContinuation } from '../../src/game/roundPolicy';
 import { shouldStartSuddenDeath, resetFinishedRound } from '../../src/game/suddenDeath';
 import { calculateFinalRanking } from '../../src/game/ranking';
 import { createGameStore } from '../../src/app/gameStore';
@@ -45,16 +45,14 @@ function partialRound() {
   return roll(state, faces(2, 3));
 }
 function nextRound(state: FlowState) {
-  const decision = act(state, 'ranking');
-  expect(decision.phase).toBe('suddenDeath');
-  return act(decision, 'startSuddenDeath');
+  return act(state, roundContinuation(round(state)) === 'nextGame' ? 'nextCompletionTargetGame' : 'startSuddenDeath');
 }
 function restore(state: FlowState) {
   const values = new Map<string, string>();
   const storage = { getItem: (key: string) => values.get(key) ?? null,
     setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
   new SessionRecovery(() => storage).saveGame(state);
-  expect(JSON.parse(values.get(SESSION_GAME_KEY)!)).toEqual({ version: 4, state });
+  expect(JSON.parse(values.get(SESSION_GAME_KEY)!)).toEqual({ version: 5, state });
   const recovery = new SessionRecovery(() => storage);
   expect(recovery.loadGame()).toEqual({ recovered: true, state });
   const store = createGameStore(noDraw, recovery);
@@ -93,10 +91,11 @@ describe('Completion Target round policy and flow', () => {
     expect(shouldStartNextRound(round(state))).toBe(true);
     const before = structuredClone(state);
     const next = nextRound(state);
-    expect(round(next)).toMatchObject({ ...draft, totalCompletionCount: 1, currentPlayerIndex: 0, suddenDeathCount: 1 });
+    expect(round(next)).toMatchObject({ ...draft, totalCompletionCount: 1, currentPlayerIndex: 0, suddenDeathCount: 0,
+      completionTargetRound: { number: 2, kind: 'regular' } });
     expect(round(next).players).toEqual(draft.participants.map(({ id }) => ({ id, score: 0, activeDice: diceMode, strandedDice: 0,
       removedDice: 0, completed: false, turnFinished: false })));
-    expect(next).toMatchObject({ turn: { phase: 'ready', nextRollNumber: 1, turnId: '1/1/p0' } });
+    expect(next).toMatchObject({ turn: { phase: 'ready', nextRollNumber: 1, turnId: '1/completionTarget/2/regular/p0' } });
     expect(next).not.toHaveProperty('penalty');
     expect(state).toEqual(before);
   });
@@ -153,8 +152,8 @@ describe('Completion Target round policy and flow', () => {
     restore(state);
     state = roll(state, faces(2)); state = act(state, 'next'); state = roll(state, faces(2)); state = act(state, 'next'); state = roll(state, faces(2));
     expect(shouldStartSuddenDeath(round(state).players, 5)).toBe(true);
-    const tied = act(state, 'ranking');
-    expect(tied.phase).toBe('suddenDeath');
+    const tied = state;
+    expect(roundContinuation(round(tied))).toBe('suddenDeath');
     restore(tied);
     const next = act(tied, 'startSuddenDeath');
     expect(round(next).totalCompletionCount).toBe(3);
@@ -243,15 +242,15 @@ describe('Completion Target recovery and presentation boundaries', () => {
     expect(committed.phase).toBe('turn');
     expect(saved).toEqual([committed]);
     expect(store.getSnapshot()).toMatchObject({ visibleState: ready, busy: true });
-    store.dispatch(committed.revision, { type: 'ranking' });
+    store.dispatch(committed.revision, { type: 'nextCompletionTargetGame' });
     expect(store.getSnapshot().state).toBe(committed);
     store.reveal(committed.revision);
-    store.dispatch(committed.revision, { type: 'ranking' });
+    store.dispatch(committed.revision, { type: 'nextCompletionTargetGame' });
     expect(store.getSnapshot().state).toBe(committed);
     store.presented(committed.revision);
-    store.dispatch(committed.revision, { type: 'ranking' });
-    expect(store.getSnapshot().state.phase).toBe('suddenDeath');
-    expect(saved.at(-1)?.phase).toBe('suddenDeath');
+    store.dispatch(committed.revision, { type: 'nextCompletionTargetGame' });
+    expect(store.getSnapshot().state).toMatchObject({ phase: 'turn', game: { completionTargetRound: { number: 2, kind: 'regular' } } });
+    expect(saved.at(-1)).toBe(store.getSnapshot().state);
     expect(calls).toBe(10);
   });
 });

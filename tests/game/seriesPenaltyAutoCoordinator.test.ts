@@ -256,7 +256,7 @@ describe('Recovery checkpoints and independent losers', () => {
     vi.advanceTimersByTime(677);
     const state = saved.at(-1)!;
     expect(validateStoredFlowState(state)).toBe(true);
-    const raw = JSON.stringify({ version: 4, state });
+    const raw = JSON.stringify({ version: 5, state });
     for (const field of ['deadline', 'startedAt', 'remainingMs', 'timerId', 'acknowledged', 'paused']) expect(raw).not.toContain(field);
     auto.dispose();
     const storage = { getItem: (key: string) => key === SESSION_GAME_KEY ? raw : null, setItem: () => undefined, removeItem: () => undefined };

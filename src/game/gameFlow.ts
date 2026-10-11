@@ -2,8 +2,9 @@ import { continueTurn, createTurn, rollTurn } from './gameEngine';
 import { createPenaltyState, rollPenalty } from './penalty';
 import type { PenaltyState } from './penalty';
 import type { RandomSource } from './randomSource';
-import { resetFinishedRound, startSuddenDeath } from './suddenDeath';
-import { shouldStartNextRound } from './roundPolicy';
+import { startSuddenDeath } from './suddenDeath';
+import { shouldStartNextRound, roundContinuation } from './roundPolicy';
+import { isCompletionTargetState, completionTargetTurnId, nextCompletionTargetGame } from './completionTarget';
 import type { SuddenDeathState } from './suddenDeath';
 import { validateSetup, validateSetupDraft } from './setup';
 import { initialSetup } from './setup';
@@ -37,7 +38,7 @@ export type FlowAction =
   | Readonly<{ type: 'nextSeriesGame'; currentGameNumber: number }>
   | (Readonly<{ type: 'startSeriesPenalty' | 'nextSeriesPenaltyChunk' }> & SeriesChunkRequest)
   | Readonly<{ type: 'nextSeriesPenaltyLoser'; penaltyId: string; playerId: string }>
-  | Readonly<{ type: 'roll' | 'next' | 'ranking' | 'reveal' | 'suddenDeath' | 'startSuddenDeath'
+  | Readonly<{ type: 'roll' | 'next' | 'ranking' | 'reveal' | 'suddenDeath' | 'startSuddenDeath' | 'nextCompletionTargetGame'
     | 'penalty' | 'rollPenalty' | 'nextPenalty' | 'finish' | 'replay' | 'startReplay'
     | 'newGame' | 'exitGame' | 'fullReset' }>;
 
@@ -47,7 +48,8 @@ export const initialFlow = (): FlowState => ({
 
 function turnFor(game: SuddenDeathState, gameNumber: number): TurnState {
   const id = game.participants[game.currentPlayerIndex]!.id;
-  return createTurn({ turnId: isSeriesState(game) ? seriesTurnId(game, gameNumber) : `${gameNumber}/${game.suddenDeathCount}/${id}`, totalCompletionCount: game.totalCompletionCount, diceMode: game.diceMode }, game.throwStyle);
+  return createTurn({ turnId: isSeriesState(game) ? seriesTurnId(game, gameNumber) : isCompletionTargetState(game)
+    ? completionTargetTurnId(game, gameNumber) : `${gameNumber}/${game.suddenDeathCount}/${id}`, totalCompletionCount: game.totalCompletionCount, diceMode: game.diceMode }, game.throwStyle);
 }
 
 function start(state: Base, setup: Setup): FlowState {
@@ -59,7 +61,8 @@ function start(state: Base, setup: Setup): FlowState {
     currentPlayerIndex: 0, totalCompletionCount: 0, suddenDeathCount: 0,
     players: participants.map(({ id }) => ({ id, ...createTurn({ turnId: `${gameNumber}/0/${id}`, totalCompletionCount: 0, diceMode: setup.diceMode }, setup.throwStyle).player })),
   };
-  const running = setup.mode.type === 'series' ? createSeriesState(game, setup.mode) : game;
+  const running = setup.mode.type === 'series' ? createSeriesState(game, setup.mode)
+    : setup.mode.type === 'completionTarget' ? { ...game, completionTargetRound: { number: 1, kind: 'regular' as const } } : game;
   return { phase: 'turn', revision: state.revision, gameNumber, game: running, turn: turnFor(running, gameNumber) };
 }
 
@@ -162,17 +165,28 @@ function apply(state: FlowState, action: FlowAction, random: RandomSource): Flow
         ? commitSeriesGame(committed) : committed };
     }
     if (!turn.player.turnFinished) return state;
+    if (action.type === 'nextSeriesGame' && isSeriesState(game)) {
+      const next = nextSeriesGame(game, action.currentGameNumber);
+      return next === game ? state : { ...state, game: next, turn: turnFor(next, gameNumber) };
+    }
+    if (isCompletionTargetState(game)) {
+      const continuation = roundContinuation(game);
+      if ((action.type === 'nextCompletionTargetGame' && continuation === 'nextGame')
+        || (action.type === 'startSuddenDeath' && continuation === 'suddenDeath')) {
+        const next = nextCompletionTargetGame(game, continuation === 'nextGame' ? 'regular' : 'suddenDeath');
+        return { ...state, game: next, turn: turnFor(next, gameNumber) };
+      }
+    }
     if (action.type === 'next' && game.currentPlayerIndex < game.participants.length - 1) {
       const next = { ...game, currentPlayerIndex: game.currentPlayerIndex + 1 };
       return { ...state, game: next, turn: turnFor(next, gameNumber) };
     }
     if (action.type === 'ranking' && game.players.every((p) => p.turnFinished)) {
-      if (isSeriesState(game)) return game.currentGameNumber < game.mode.gameCount
-        ? { phase: 'seriesIntermediate', game, gameNumber, revision }
+      if (isSeriesState(game)) return game.currentGameNumber < game.mode.gameCount ? state
         : { phase: 'seriesRanking', game, gameNumber, revision, ranking: calculateSeriesRanking(game.cumulative) };
       // Keep the terminal roll until this explicit action, after the store's presentation acknowledgment.
-      const phase = game.mode.type === 'completionTarget' && shouldStartNextRound(game) ? 'suddenDeath' : 'ranking';
-      return { phase, game, gameNumber, revision };
+      if (game.mode.type === 'completionTarget' && roundContinuation(game) !== 'result') return state;
+      return { phase: 'ranking', game, gameNumber, revision };
     }
   }
   if (state.phase === 'ranking') {
@@ -181,9 +195,9 @@ function apply(state: FlowState, action: FlowAction, random: RandomSource): Flow
     if (action.type === 'reveal' && !tied) return { ...state, phase: 'loserReveal' };
   }
   if (state.phase === 'suddenDeath' && action.type === 'startSuddenDeath') {
-    if (!shouldStartNextRound(game)) return state;
-    const next = game.mode.type === 'completionTarget'
-      ? resetFinishedRound(game, game.suddenDeathCount) : startSuddenDeath(game, game.suddenDeathCount);
+    if (roundContinuation(game) !== 'suddenDeath') return state;
+    const next = isCompletionTargetState(game)
+      ? nextCompletionTargetGame(game, 'suddenDeath') : startSuddenDeath(game, game.suddenDeathCount);
     if (next === game) return state;
     return { phase: 'turn', game: next, turn: turnFor(next, gameNumber), gameNumber, revision };
   }

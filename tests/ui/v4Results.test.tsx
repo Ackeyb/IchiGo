@@ -84,7 +84,7 @@ describe('v4 Play progress', () => {
   });
   it('shows repeated completion by the same player in a later Round', () => {
     let state = endGame(ready({ type: 'completionTarget', targetCompletions: 5 }), [[1, 1, 1, 1, 1], [2, 2, 2, 2, 2]]);
-    state = step(state, { type: 'startSuddenDeath' });
+    state = step(state, { type: 'nextCompletionTargetGame' });
     show(roll(state, [1, 1, 1, 1, 1]));
     expect(screen.getByText('完走 2 / 5')).toBeTruthy();
   });
@@ -109,7 +109,7 @@ describe('v4 Play progress', () => {
     expect(screen.getByText('試合 2 / 5')).toBeTruthy();
     expect(screen.getByText('ROLL 1/3')).toBeTruthy();
   });
-  it('retains the last Series roll presentation before explicit Intermediate entry', async () => {
+  it('retains the last Series roll presentation before direct continuation', async () => {
     let state = roll(ready({ type: 'series', gameCount: 2 }, 1), [2, 2, 2, 2, 2]);
     state = step(state, { type: 'next' });
     const draws = encode([1, 2, 2, 2, 2]);
@@ -122,15 +122,21 @@ describe('v4 Play progress', () => {
     expect(screen.getByText('ROLL 1/1')).toBeTruthy();
     expect(screen.queryByRole('heading', { name: '試合 1 / 2 終了' })).toBeNull();
     await act(async () => { finish!(); await Promise.resolve(); });
-    expect(screen.getByRole('button', { name: '結果を見る' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByRole('button', { name: '次の試合へ' }).hasAttribute('disabled')).toBe(true);
     paint();
-    fireEvent.click(screen.getByRole('button', { name: '結果を見る' })); paint();
-    expect(screen.getByRole('heading', { name: '試合 1 / 2 終了' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: '次の試合へ' })); paint();
+    expect(screen.queryByRole('heading', { name: '試合 1 / 2 終了' })).toBeNull();
+    expect(screen.getByText('試合 2 / 2')).toBeTruthy();
   });
 });
 
 describe('Series results and explicit actions', () => {
-  const intermediate = () => endGame(ready({ type: 'series', gameCount: 3 }, 1), [[2, 2, 2, 2, 2], [1, 2, 2, 2, 2]]);
+  // Intentionally retained optional screen support, not a standard v5 transition.
+  const intermediate = (): FlowState => {
+    const state = endGame(ready({ type: 'series', gameCount: 3 }, 1), [[2, 2, 2, 2, 2], [1, 2, 2, 2, 2]]);
+    if (state.phase !== 'turn' || !('cumulative' in state.game)) throw new Error('Series expected');
+    return { phase: 'seriesIntermediate', game: state.game, revision: state.revision, gameNumber: state.gameNumber };
+  };
   it('restores Intermediate cumulative data in original order with no final outcome', () => {
     show(intermediate());
     expect(screen.getByRole('heading', { name: '試合 1 / 3 終了' })).toBeTruthy();
