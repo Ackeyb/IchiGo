@@ -18,9 +18,9 @@ Before making any implementation decision, read this file and `docs/SPEC.md`.
 
 ## 2. Source of Truth
 
-`docs/SPEC.md` is the **single source of truth for current v4 game behavior**.
+`docs/SPEC.md` is the **single source of truth for current v5 game behavior**.
 
-The current v4 implementation baseline is main / d7a5b3d. Final human play QA, visual OUT checks and the Human Push decision remain. `docs/v4_変更仕様書.md` and `docs/v3_変更仕様書.md` record design/change history; `docs/v2_変更仕様書.md`, past STEP records, and `docs/FINAL_AUDIT.md` are historical material, not a second authority.
+The current v5 implementation baseline is main / 62fe415. Real-device full play QA, actual Renderer visual checks (including OUT), the user's final play checks and the Human Push decision remain. `docs/v5_変更仕様書.md`, `docs/v4_変更仕様書.md` and `docs/v3_変更仕様書.md` record design/change history; `docs/v2_変更仕様書.md`, past STEP records, and `docs/FINAL_AUDIT.md` are historical material, not a second authority.
 
 If any of the following conflict with `docs/SPEC.md`:
 
@@ -82,7 +82,7 @@ Visual polish must never override game correctness.
 
 ## 5. Development Phases
 
-v4 implementation is complete; final human QA and the Human Push decision remain. Do not add a mandatory AI final audit. Consult `実装進行ガイド.md` for the current maintenance workflow and historical STEP records. Preserve the working application; do not rebuild it from scratch.
+v5 implementation is complete; final human QA and the Human Push decision remain. Do not add a mandatory AI final audit. Consult `実装進行ガイド.md` for the current maintenance workflow and historical STEP records. Preserve the working application; do not rebuild it from scratch.
 
 Work only on the requested scope. Documentation-only work must not modify implementation, tests, CSS, dependencies, configuration, or assets. Do not rewrite historical documents as current specifications.
 
@@ -269,11 +269,11 @@ For finite games, show the next ROLL number near PLAYER, keep the current number
 
 Game Mode is an exclusive discriminated configuration: Normal (default), Completion Target (target 1–5), or Series (2–5 Games). Do not retain hidden settings for inactive modes. Switching into Completion Target resets target to 1 and forces rollLimit=null; hide the ROLL limit control entirely. Leaving it keeps ∞, never restores an old finite limit. Switching into Series resets gameCount to 2. Reselecting the same mode retains its value.
 
-Completion Target counts completion events, including the same player in multiple rounds, and may exceed the target. Evaluate only after all players finish the round: unmet target or Normal Sudden Death conditions require the next round. Preserve completion count/configuration, reset round state, and rank only the decisive round. Reaching the target mid-round never ends it immediately.
+Completion Target counts completion events, including the same player in multiple Games, and may exceed the target. Evaluate only after all players finish: unmet target takes priority even over all-complete or exact-tie conditions, and uses “次の試合へ” for an ordinary next Game, never Sudden Death. Only after target attainment evaluate Normal Sudden Death conditions; use “サドンデスへ” for true SD, otherwise “結果を見る” for the decisive Game. Both continuations start a fresh Game directly from Play after presentation unlock. Preserve configuration/completion count, reset per-Game state, and rank only the decisive Game. Reaching the target mid-Game never ends it immediately.
 
-Series has no per-Game winner/loser/Penalty or Sudden Death. Commit each Game's score and active+stranded remaining once, atomically with the last terminal ROLL. Intermediate and Next Game must not re-add contributions. Next Game resets current players/Turn/ROLL while preserving cumulative values and completion count. Final ranking uses cumulative score/remaining only; all lowest-ranked players receive Penalty, even an all-player tie.
+Series has no per-Game winner/loser/Penalty or Sudden Death. Commit each Game's score and active+stranded remaining once, atomically with the last terminal ROLL. The standard non-final path uses “次の試合へ” directly from Play after the last presentation, bypassing Intermediate. Retain Intermediate components/helpers/phase/Recovery for potential reuse; no intermediate display option is currently implemented. Intermediate and Next Game must not re-add contributions. Next Game resets current players/Turn/ROLL while preserving cumulative values and completion count. Final ranking uses cumulative score/remaining only; all lowest-ranked players receive Penalty, even an all-player tie.
 
-Series provisional ranking uses previous cumulative values plus the current Game's finished turns, without Complete priority. Unfinished current turns remain outside ranking. An all-finished game already has its contribution committed: do not add it again. Derive displays from visibleState so results do not leak before staged reveal.
+Series provisional ranking uses previous cumulative values plus the current Game's finished turns, without Complete priority. Unfinished current turns remain outside ranking. An all-finished game already has its contribution committed: do not add it again. Derive displays from visibleState so results do not leak before staged reveal. From final Series Game start through its last ended Turn, Play masks rank/cumulative Score as “ヒミツ”, retains remaining dice, original row order and ordinary Turn information, and suppresses provisional bottom highlights. Keep internal provisional calculations unchanged; “結果を見る” reveals actual values in Final Ranking.
 
 ---
 
@@ -331,7 +331,7 @@ For session recovery:
 
 Treat persistence as a state transaction problem, not an animation restoration problem.
 
-Save initial setup, new-game setup, replay preparation (including edits/order changes), and full-reset setup. Separate draft validation from start validation: blank or unfinished names are not corrupt merely because START is invalid. Game recovery uses schema version 4; reject unsupported older game data, including schema 3, without migration or guessing missing Game Mode / ROLL ∞. Storage failures remain fail-open. Sound format/version management is independent; Sound schema remains version 1; a game schema bump must not reset valid Sound settings.
+Save initial setup, new-game setup, replay preparation (including edits/order changes), and full-reset setup. Separate draft validation from start validation: blank or unfinished names are not corrupt merely because START is invalid. Game recovery uses schema version 5; reject unsupported older game data, including schema 4, without migration or guessing missing Game Mode / ROLL ∞ / continuation identity. Completion Target requires completionTargetRound { number, kind: regular | suddenDeath }; ordinary target-unmet continuation must not increment suddenDeathCount. Restore terminal Play as next-Game / true-SD / result waiting according to the validated policy. Standard non-final Series recovery stays in Play, never auto-enters Intermediate or re-adds cumulative values. Storage failures remain fail-open. Sound format/version management is independent; Sound schema remains version 1; a game schema bump must not reset valid Sound settings.
 
 Validate saved rollLimit, nextRollNumber, rollNumber, result reason and the resolver-derived player/result together. A finite ended result may legitimately have `rollNumber = limit` and `nextRollNumber = limit + 1`; reject an over-limit ready/continuing turn, not this committed ended result. Restore Penalty OUT as status out/value null, validate BASE/MULTIPLIER/FINAL using 6 only for calculation, and never draw randomness to reconstruct committed results on recovery. Series Penalty may subsequently generate the next unexecuted chunk through its guarded auto action.
 
@@ -353,7 +353,7 @@ The ranking rules are defined exclusively in `docs/SPEC.md`.
 
 Sudden death must be handled by game logic, not UI shortcuts.
 
-Normal Sudden Death and Completion Target next rounds reset the same per-round state. Series never uses Sudden Death.
+Normal Sudden Death and Completion Target ordinary next Games / true Sudden Death reset the same per-round state, but retain distinct continuation identities. Never apply Completion Target continuation semantics to Normal. Series never uses Sudden Death.
 
 When starting sudden death:
 
@@ -657,7 +657,7 @@ Use one responsive application.
 
 Preserve Mobile Stable Layout at 320x568, 375x667, 390x844 and 430x932: Play from PLAYER n/n top to main Action bottom, and Penalty from PENALTY n/n top to main Action bottom, fit in one viewport. Normal ROLL, continued ROLL and Penalty ROLL must not move scroll position, substantially move the Action, or shift layout when animation/results change.
 
-Reserved presentation space, READY areas, animation areas and Action Slot are intentional stability mechanisms, not wasted whitespace. Do not gain height by deleting/merging/reordering elements, moving status or Action Slot, using sticky/fixed or absolute Action hacks, hiding content with overflow, or shortening animation duration. If the stable structure needs to change, stop and return the decision to the human; do not invent an alternative UI. Preserve reduced-motion behavior. Browser QA also covers 768x1024 and 1280x900.
+Reserved presentation space, READY areas, animation areas and Action Slot are intentional stability mechanisms, not wasted whitespace. Do not gain height by deleting/merging/reordering elements, moving status or Action Slot, using sticky/fixed or absolute Action hacks, hiding content with overflow, shortening animation duration, or shrinking touch targets. If the stable structure needs to change, stop and return the decision to the human; do not invent an alternative UI. Preserve reduced-motion behavior. Browser QA also covers 768x1024 and 1280x900.
 
 Prioritize visibility of:
 

@@ -1,8 +1,8 @@
-# Playable UI — v4 current implementation
+# Playable UI — v5 current implementation
 
-main / d7a5b3dのv4機能は実装済み。最終通しプレイQA・OUT実画面目視・Human Push判断は残件。本書は現行UIの接続契約を説明する。正式仕様は[SPEC](SPEC.md)、現在の保守フローと過去STEP記録は[実装進行ガイド](../実装進行ガイド.md)。
+main / 62fe415のv5機能は実装済み。実機通しプレイ・実Rendererの視覚確認・その他ユーザー自身の最終プレイ確認・Human Push判断は残件。本書は現行UIの接続契約を説明する。正式仕様は[SPEC](SPEC.md)、現在の保守フローと過去STEP記録は[実装進行ガイド](../実装進行ガイド.md)。
 
-## Current: v4
+## Current: v5
 
 ## フロー
 
@@ -19,9 +19,9 @@ main / d7a5b3dのv4機能は実装済み。最終通しプレイQA・OUT実画�
 
 ## 状態と接続契約
 
-完走指定はRound全員終了後の「結果を見る」で目標未達またはSudden Death条件ならSUDDEN DEATHへ直接進み、「開始」で全員の次Roundを始める。途中のtarget到達ではTurnを打ち切らない。決着時は現在RoundのFINAL RANKING以降をノーマルと共用する。
+完走指定は全員Turn終了と最後のROLL presentation完了後、target未達なら「次の試合へ」でPlayから通常次Gameへ直接進む。全員Complete / 全員non-complete完全同率でも未達を優先し、Sudden Deathとは呼ばない。target達成後だけ同条件を評価し、真のSudden Deathなら「サドンデスへ」でfresh Gameへ直接進む。どちらも途中結果 / SUDDEN DEATH開始画面を挟まない。target達成 + Sudden Death不要なら「結果を見る」で現在GameのFINAL RANKING以降をノーマルと共用する。途中到達では全員Turn終了まで続け、countはtargetを超えてよい。
 
-連続試合はSetup → Game 1 →「結果を見る」→「試合 x / y 終了」（Intermediate）→「次の試合へ」→次Game。Intermediateは元順序で累積スコア・残ダイスを表示し、勝敗を確定しない。最終Game後は連続試合 FINAL RANKING →「ペナルティへ」→ Series Penalty →「最終結果を見る」→連続試合 FINAL RESULT。Sudden Deathと個別GameのPenaltyはない。
+連続試合はSetup → Game 1 → 最後のROLL presentation完了 →「次の試合へ」→次Game。非最終GameはIntermediateを標準Flowでbypassする。Intermediate component / helper / phase / Recovery経路は将来の途中結果表示等への再利用余地として保持し、showIntermediateResults等のoptionは未実装。保持された画面は元順序で累積値を表示し、勝敗を確定しない。最終Gameは「結果を見る」→連続試合 FINAL RANKING →「ペナルティへ」→ Series Penalty →「最終結果を見る」→連続試合 FINAL RESULT。Sudden Deathと個別GameのPenaltyはない。
 
 - `src/game/gameFlow.ts`: フェーズの可否確認と既存Engine呼び出し。React・DOMに依存しない。
 - `src/app/gameStore.ts`: 最新のauthoritative stateを所有。Reactのrender、effect、state updater内では乱数を消費しない。
@@ -69,11 +69,11 @@ Three.jsはdynamic importし、RendererからEngineへ結果を返さない。�
 
 ## Session Recovery
 
-`src/storage/sessionRecovery.ts`が`sessionStorage`との境界、game/draft schema version 4の保存形式、復旧validationを担当する。`gameStore`はEngineまたはFlowが返した次のauthoritative state / draftをまずmemoryへcommitし、その直後に保存を試みてからsubscriberへ通知する。保存成否はゲームルール、Presentation、interaction unlockへ影響させない。
+`src/storage/sessionRecovery.ts`が`sessionStorage`との境界、game/draft schema version 5の保存形式、復旧validationを担当する。`gameStore`はEngineまたはFlowが返した次のauthoritative state / draftをまずmemoryへcommitし、その直後に保存を試みてからsubscriberへ通知する。保存成否はゲームルール、Presentation、interaction unlockへ影響させない。
 
 - ゲーム中はauthoritative `FlowState`、Setup / Replay Preparationでは現在のdraftを保存する。`visibleState`、busy、animation stage、Three.js resource、Promise、timer、RAF、AudioContextは保存しない。
-- reload時は保存済みstateを`visibleState`にも設定し、busy=falseで開始する。確定済みROLL／Penaltyを再抽選せず、次の有効な操作から再開する。Series Penaltyのrunningだけは復元表示のpaint acknowledgment後fresh 1500msで次未実行chunkを自動再開する。pending loserは自動開始しない。
-- プレイヤー数・ID・順序、Game Modeと固有設定・Dice Mode・ROLL上限、ダイス不変条件、得点・完走、手番、phase、累積完走数、turnId・roll番号、penaltyId・計算結果を検証する。不正値は補正せず破棄し、schema 3を含む旧game saveはmigrationなしで拒否し、mode / ROLL ∞を推測補完しない。
+- reload時は保存済みstateを`visibleState`にも設定し、busy=falseで開始する。確定済みROLL／Penaltyを再抽選せず、次の有効な操作から再開する。Series Penaltyのrunningだけは復元表示のpaint acknowledgment後fresh 1500msで次未実行chunkを自動再開する。pending loserは自動開始しない。完走指定の終端Playは未達の次Game / 達成後の真のSudden Death / 決着結果待ちを区別する。非最終SeriesはPlayの「次の試合へ」待ちを復元し、累積を再加算しない。最終SeriesはPlayのmaskを維持し、Final Rankingで実値を表示する。
+- プレイヤー数・ID・順序、Game Modeと固有設定・Dice Mode・ROLL上限、ダイス不変条件、得点・完走、手番、phase、累積完走数、turnId・roll番号、penaltyId・計算結果を検証する。不正値は補正せず破棄し、schema 4を含む旧game saveはmigrationなしで拒否し、mode / ROLL ∞ / continuation identityを推測補完しない。schema 4 → 5 migrationは行わない。
 - `newGame`は設定を引き継いだ編集可能なSetup draft、`replay`は順序だけ変更できるPreparation draft、`fullReset`はノーマル・2人・空欄・7 DICE・normal・ROLL ∞のSetup draftを保存する。
 - Sound設定はschema 1でゲームstateと別キーに保存し、reload後も同一タブ内で維持する。
 - access／read／write／remove失敗時は非侵襲的な警告を表示し、memory-onlyでゲームを継続する。
@@ -87,7 +87,7 @@ Three.jsはdynamic importし、RendererからEngineへ結果を返さない。�
 - ブラウザー確認用の生成物は`output/playwright/`に置き、コミットしない。
 
 振動・シェイク操作は対象外。
-v4の最終通しプレイQA・OUT実画面目視・最終Push判断は人間が行う。追加AI最終監査を必須工程にしない。v1当時の監査は履歴資料FINAL_AUDITを参照する。
+v5の最終通しプレイQA・OUT実画面目視・最終Push判断は人間が行う。追加AI最終監査を必須工程にしない。v1当時の監査は履歴資料FINAL_AUDITを参照する。
 
 ## Responsive / Final UI Polish
 
@@ -138,7 +138,7 @@ Recoveryは保存した上限・ターン進行・終了理由を復元し、rel
 
 通常ROLL・続けてROLL・Penalty ROLL前後でscroll positionを勝手に動かさず、Actionを大きく移動させず、animation/result切替でlayout shiftを起こさない。同じターン内の結果focusはpreventScrollを使用する。
 
-reserved presentation領域はidle時にも必要高を確保する安定性のための領域で、無駄な空白として消さない。READY・animation・status・Action Slotの構造を維持する。要素削除・統合・並べ替え、status/Action Slot移動、sticky/fixed/absolute Action hack、overflow隠蔽、animation短縮で高さを稼がない。構造変更が必要なら人間判断へ戻す。reduced motion・2D fallback・Sound OFFでも同じ情報と操作を維持する。
+reserved presentation領域はidle時にも必要高を確保する安定性のための領域で、無駄な空白として消さない。READY・animation・status・Action Slotの構造を維持する。要素削除・統合・並べ替え、status/Action Slot移動、sticky/fixed/absolute Action hack、overflow隠蔽、animation短縮・touch target縮小で高さを稼がない。構造変更が必要なら人間判断へ戻す。reduced motion・2D fallback・Sound OFFでも同じ情報と操作を維持する。
 
 ## Three.js 14 DICE契約
 
@@ -151,6 +151,8 @@ Rendererはpresentation-onlyでRandomSource非消費。SAFE face・OUT status・
 PLAYERと同じ`.player-roll-line`に完走指定は「完走 current / target」、連続試合は「試合 current / total」を表示する。有限ROLL counterは連続試合でも共存する。進捗はvisibleStateを正とし、staged reveal前に新しい完走数等を先行表示しない。READY / animation / resultでreserved領域・Action位置を維持する。
 
 ノーマル / 完走指定の暫定順位は現在Roundの終了済みTurnを従来どおり比較する。Seriesは現在Gameの終了済みTurnについて、過去Gameの累積値 + 現Gameの確定Turn分を比較する（累積score降順 → 累積remaining昇順 → exact tie、Complete優先なし）。未完了playerは未プレイ / プレイ中として順位対象外。最終playerのterminal ROLLで累積がatomic commitされた後は現Game分を二重加算しない。`RankingBoard`はvisibleStateを`calculateSeriesProvisional`へ渡す表示consumerであり、累積authorityを書き換えない。
+
+最終Series Game開始直後から最後のplayerのTurn終了後まで、暫定順位・累計Scoreは「ヒミツ」、cumulativeRemainingDiceは表示、暫定最下位highlight / labelは非表示。元参加者順を保ち、行順から順位を漏らさない。内部のprovisional score / remaining / rank / bottom rank計算とvisibleStateの契約は維持し、現在playerのSCORE等の通常Turn情報は秘匿対象にしない。「結果を見る」後のFinal Rankingで実値を公開する。
 
 ## Series Penalty / auto coordinator
 
@@ -168,6 +170,6 @@ Recoveryはmodeと固有設定、Seriesの試合番号・累積値・現Turn、S
 
 ## ルール説明 / Human QA
 
-SetupヘッダーのSound左隣に「ルール説明」を配置し、最下部には置かない。`RulesScreen`はユーザー向けゲーム説明で、「戻る」で同じSetup draftへ戻る。AppのUI navigation stateとして管理し、Flow phase・game / participant stateを変更せず、Recovery write・RNG消費なし。既存各画面の説明も維持する。
+SetupヘッダーのSound左隣に「ルール説明」を配置し、最下部には置かない。`RulesScreen`はユーザー向けゲーム説明で、「戻る」で同じSetup draftへ戻る。AppのUI navigation stateとして管理し、Flow phase・game / participant stateを変更せず、Recovery write・RNG消費なし。既存各画面の説明も維持する。説明は完走指定の未達通常次Game / 達成後の真のSudden Death、Series途中試合の直接次Game / 最終試合の「ヒミツ」 / Final Ranking公開に合わせる。
 
-Browser QAは320×568 / 375×667 / 390×844 / 430×932 / 768×1024 / 1280×900を対象とする。320×568の既存計測実績はPlay約567.81px、Normal Penalty約515.52px、Series Penalty約560.52pxで、確認環境での記録として扱い、全環境の寸法保証にはしない。最終通しプレイ・OUT実画面目視、progressの折り返し・Action / scroll安定、auto chunkの視認間隔、fallback / 途中reload、全員敗者、ルール説明からdraft復帰を人間が確認し、最終Pushを判断する。
+Browser QAは320×568 / 375×667 / 390×844 / 430×932 / 768×1024 / 1280×900を対象とする。既存320×568の計測はPlay約567.81px、Normal Penalty約515.52px、Series Penalty約560.52px。v5確認ではPlay範囲約567.8125px・Action高56px、測定したROLL / continuation操作のscroll差0・Action位置差0。確認環境での実績で、全環境の寸法保証ではない。実機通しプレイ・実Rendererの視覚確認（OUTを含む）・その他ユーザー自身の最終プレイ確認・最終Push判断は残件。progressの折り返し、直接次Game、最終Seriesのmaskと公開、Action / scroll安定、auto chunk、fallback / reload、Rule Pageからdraft復帰を人間が確認する。

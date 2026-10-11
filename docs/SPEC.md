@@ -1,6 +1,6 @@
 # Ichi-Go Game
 
-## Web Application Specification v4
+## Web Application Specification v5
 
 ### Codex Implementation Source of Truth
 
@@ -8,11 +8,11 @@
 
 # 0. この文書について
 
-本書は現在のIchiGo v4正式仕様であり、唯一のSource of Truthである。旧仕様・変更履歴・実装・テストと競合する場合は本書を優先する。
+本書は現在のIchiGo v5正式仕様であり、唯一のSource of Truthである。旧仕様・変更履歴・実装・テストと競合する場合は本書を優先する。
 
-現行実装の基準はmain / d7a5b3d。v4機能は実装済み。最終通しプレイQA・OUTを含む実画面目視確認・最終Push判断は人間の残件。
+現行実装の基準はmain / 62fe415。v5の継続・表示調整は実装済み。実機での通しプレイ、実Rendererの視覚確認（OUTを含む）、その他ユーザー自身の最終プレイ確認、最終Human Push判断は残件。
 
-[v4変更仕様書](v4_変更仕様書.md)と[v3変更仕様書](v3_変更仕様書.md)は設計・変更履歴、[v2変更仕様書](v2_変更仕様書.md)と[FINAL_AUDIT](FINAL_AUDIT.md)は過去の履歴資料であり、第二の正本ではない。
+[v5変更仕様書](v5_変更仕様書.md)・[v4変更仕様書](v4_変更仕様書.md)・[v3変更仕様書](v3_変更仕様書.md)は設計・変更履歴、[v2変更仕様書](v2_変更仕様書.md)と[FINAL_AUDIT](FINAL_AUDIT.md)は過去の履歴資料であり、第二の正本ではない。
 
 独自のゲームルールを追加しない。具体的な7個の例は、明記がない限り7 DICEの例であり、全Modeの初期個数を7に限定しない。
 
@@ -949,7 +949,7 @@ FINAL_RESULT
 
 ターン終了済みプレイヤーだけで暫定ランキングを表示。ノーマル / 完走指定は現在Roundの完走・score・remainingDiceを用いる。
 
-連続試合は過去Gameの累積値に現在GameでTurn終了済みの確定分を加えたprovisional cumulativeScore降順 → provisional cumulativeRemainingDice昇順で比較する。Complete優先はない。現在GameのTurn未完了playerは順位対象外。最終playerのterminal ROLLでは現在Game全員分を累積へatomic commitするため、その後は現在Game分を再加算しない。表示はvisibleState / staged presentationに従う（§114）。
+連続試合は過去Gameの累積値に現在GameでTurn終了済みの確定分を加えたprovisional cumulativeScore降順 → provisional cumulativeRemainingDice昇順で比較する。Complete優先はない。現在GameのTurn未完了playerは順位対象外。最終playerのterminal ROLLでは現在Game全員分を累積へatomic commitするため、その後は現在Game分を再加算しない。表示はvisibleState / staged presentationに従う。最終GameのPlayでは計算を維持したまま順位 / 累計Scoreを「ヒミツ」にし、暫定最下位強調を出さない（§114）。
 
 未プレイ：
 
@@ -1804,7 +1804,7 @@ completed === false
 
 確率テストは大量乱数による統計テストだけに依存せず、RandomSourceをモックして境界条件をテストすること。
 
-Game Modeの排他性・切替default・同一mode保持、完走指定の未達 / 途中到達 / 超過 / 到達後同率 / 決着Roundのみ、Seriesのatomic累積 / reset / 暫定累積順位（二重加算なし） / all tieを検証する。Series Penaltyは0 / 1 / 10 / 11 / 15 / 20 / 24 / 70、OUT保持、倍率1回、chunk layout、chunk小計非表示、FINAL表示境界、1500ms開始時点、stale / double tap / StrictMode、確認OPEN / CANCEL / ACCEPT、running復旧 / pending非自動開始を検証する。schema 4とmode別corrupt拒否、Replay固定 / New Game editable / Full Reset、Rule Pageの上部配置・draft保持・RNG / Recovery writeなしも対象。
+Game Modeの排他性・切替default・同一mode保持、完走指定の未達通常次Game / 未達優先（全員Complete・完全同率でもSudden Deathではない） / 途中到達 / 超過 / 到達後の真のSudden Death / 決着Gameのみ、Seriesのatomic累積 / reset / 暫定累積順位（二重加算なし） / Intermediate保持と標準bypass / 最終Gameの表示mask / all tieを検証する。Series Penaltyは0 / 1 / 10 / 11 / 15 / 20 / 24 / 70、OUT保持、倍率1回、chunk layout、chunk小計非表示、FINAL表示境界、1500ms開始時点、stale / double tap / StrictMode、確認OPEN / CANCEL / ACCEPT、running復旧 / pending非自動開始を検証する。schema 5とmode別corrupt拒否、Replay固定 / New Game editable / Full Reset、Rule Pageの上部配置・draft保持・RNG / Recovery writeなしも対象。
 
 ---
 
@@ -1862,7 +1862,7 @@ Game Modeの排他性・切替default・同一mode保持、完走指定の未達
 
 # 79. 実装・保守フロー
 
-v4機能は実装済み。最終通しプレイQA・OUT実画面目視・Push判断は人間の残件。追加のAI最終監査を必須工程にしない。今後の依頼ごとにAGENTS・該当SPEC・Git status/diff・関連実装とテストを確認し、狭いレビュー単位で作業する。詳細・過去STEP記録は[実装進行ガイド](../実装進行ガイド.md)を参照。
+v5の継続・表示調整は実装済み。実機通しプレイ・実Rendererの視覚確認・その他ユーザー自身の最終プレイ確認・Push判断は人間の残件。追加のAI最終監査を必須工程にしない。今後の依頼ごとにAGENTS・該当SPEC・Git status/diff・関連実装とテストを確認し、狭いレビュー単位で作業する。詳細・過去STEP記録は[実装進行ガイド](../実装進行ガイド.md)を参照。
 
 未依頼の機能・UI再設計・次段階を追加しない。関連検証・差分レビューを行い、commit・pushは明示許可に従う。文書のみの作業ではコードを変更しない。
 
@@ -1894,7 +1894,7 @@ v4機能は実装済み。最終通しプレイQA・OUT実画面目視・Push判
 
 # 81. Definition of Done
 
-現行v4の維持・変更検証では最低限以下を満たすこと。文書統合だけでは達成扱いにしない。
+現行v5の維持・変更検証では最低限以下を満たすこと。文書統合だけでは達成扱いにしない。
 
 ```text
 ✓ 2～10人
@@ -1936,8 +1936,8 @@ v4機能は実装済み。最終通しプレイQA・OUT実画面目視・Push判
 ✓ 同率最下位
 ✓ 複数敗者
 
-✓ ノーマル / 完走指定の全員完走サドンデス
-✓ ノーマル / 完走指定の全員完全同率サドンデス
+✓ ノーマルの全員完走サドンデス・完走指定はtarget達成後のみ
+✓ ノーマルの全員non-complete完全同率サドンデス・完走指定はtarget達成後のみ
 ✓ 無制限サドンデス
 ✓ 全員再参加
 ✓ 元のプレイ順維持
@@ -1948,7 +1948,7 @@ v4機能は実装済み。最終通しプレイQA・OUT実画面目視・Push判
 ✓ 段階的ペナルティ表示
 
 ✓ 暫定ランキング
-✓ 暫定最下位強調
+✓ 暫定最下位強調（最終Series GameのPlayは非表示）
 ✓ OUT表示
 ✓ COMPLETE演出
 ✓ TURN END演出
@@ -1962,7 +1962,7 @@ v4機能は実装済み。最終通しプレイQA・OUT実画面目視・Push判
 ✓ 操作ロック
 ✓ モーダル背面操作防止
 
-✓ schema 4でmode別game / setup / preparation draft復旧・旧schema拒否・Sound schema 1保持
+✓ schema 5でmode別game / setup / preparation draft復旧・旧schema拒否・Sound schema 1保持
 ✓ 過去ゲーム履歴なし
 ✓ SAME PLAYERS再戦準備・順番のみ編集・明示開始
 ✓ NEW GAME設定引き継ぎ
@@ -2208,9 +2208,9 @@ removedDice = 4
 
 # 89. 保存データのバージョン
 
-Game / Setup / Replay PreparationのSession Recovery schemaは4。Sound schemaは1で、別キー・独立validationを使用する。
+Game / Setup / Replay PreparationのSession Recovery schemaは5。Sound schemaは1で、別キー・独立validationを使用する。
 
-schema 3を含む旧Game Recoveryはmigrationせずunsupportedとして安全に拒否し、破棄を試み、初期Setupを利用可能にする。missing modeをノーマルへ、missing ROLL上限を∞へ推測補完しない。不正・unsupportedデータの推測修復は禁止。Game schema変更・拒否を理由に有効なSound ON/OFFを初期化しない。
+schema 4を含む旧Game Recoveryはmigrationせずunsupportedとして安全に拒否し、破棄を試み、初期Setupを利用可能にする。missing modeをノーマルへ、missing ROLL上限を∞へ推測補完しない。schema 4 → 5 migrationやmissing continuation typeの推測補完も行わない。不正・unsupportedデータの推測修復は禁止。Game schema変更・拒否を理由に有効なSound ON/OFFを初期化しない。
 
 ---
 
@@ -2931,9 +2931,22 @@ Presentation領域はDice→Result/Message→Action Slotを基本に、次へ・
 
 Game Modeはノーマル（default）、完走指定、連続試合の相互排他的設定。非選択モードの設定は保持しない。完走指定へ切り替えるとtarget=1・ROLL上限∞、連続試合へ切り替えるとgameCount=2。同じモードの再選択は現在値を保持し、別モードから戻るとdefaultから再開する。完走指定から離れても以前の有限ROLL上限は復活しない。
 
-完走指定の「最低完走者数」1〜5はcompletion eventの累計目標。ROLL上限は∞固定でSetupの上限UIを非表示にする。全員のTurnが終了してから、目標未達またはノーマルのSudden Death条件（全員Complete / 全員non-completeでscore・remaining完全一致）なら次Roundへ進む。目標に途中到達しても残りplayerは続行し、累計はtargetを超えてよい。
+完走指定の「最低完走者数」1〜5はcompletion eventの累計目標。ROLL上限は∞固定でSetupの上限UIを非表示にする。同一playerの別Gameでの完走も毎回+1し、targetでclampしない（target 3 / count 4も合法）。目標へ途中到達しても全員のTurn終了まで続行する。
 
-「結果を見る」で次Roundが必要ならSUDDEN DEATH画面へ直接進み、「開始」で全員を元の順序でresetする。Game Mode・target・Dice Mode・throwStyle・∞・totalCompletionCountを維持し、Roundのscore・dice・OUT・Turn / ROLL進行をresetする。目標達成済みでSudden Death不要になった決着RoundだけをノーマルRankingへ渡し、過去Roundのscore / remainingは用いない。Penaltyはノーマル同様のsingle-roll方式。
+全員終了後、まずtarget未達を判定する。未達なら全員Completeや全員non-completeの完全同率でも通常の次Gameへ進み、Sudden Deathとは呼ばない。目標達成済みの場合だけ、ノーマルのSudden Death条件を評価する。
+
+最後のROLL presentationが完了してから、以下のActionで進む。通常次Gameと真のSudden DeathはどちらもPlayからfresh Gameへ直接進み、中間結果画面を挟まない。ノーマルの既存画面遷移には適用しない。
+
+| 完走指定の状態 | Action |
+| --- | --- |
+| target未達 | 次の試合へ |
+| target達成 + 全員Complete | サドンデスへ |
+| target達成 + 全員non-completeでscore / remaining完全一致 | サドンデスへ |
+| target達成 + Sudden Death不要 | 結果を見る |
+
+次Game / 真のSudden Deathではparticipants・IDs・元順序・Game Mode・target・Dice Mode・throwStyle・rollLimit=null・totalCompletionCountを維持する。現Gameのscore・active / stranded / removed dice・Complete state・Turn・現在player・ROLL番号・結果・presentationをresetする。目標未達継続をSudden Death回数へ加算しない。
+
+決着GameだけをノーマルRankingへ渡し、過去Gameのscore / remaining / complete state / rankingは持ち越さない。Penaltyは決着GameのloserとremainingDiceを使うsingle-roll方式で、OUTを維持し、倍率はtotalCompletionCount + 1。Series chunkは使用しない。
 
 PlayのPLAYER付近に「完走 current / target」をvisibleStateに合わせて表示する。目標到達は即ゲーム終了を意味しない。Recoveryでも到達済みのRound途中なら残りTurnを続行する。
 
@@ -2943,7 +2956,18 @@ PlayのPLAYER付近に「完走 current / target」をvisibleStateに合わせ�
 
 最後のplayerのterminal ROLLと同じauthoritative遷移で、そのGame全員分のscoreとremaining（activeDice + strandedDice）を一度だけ累積commitする。Completeのremaining寄与は0、OUTはremainingへ含む。totalCompletionCountは全Gameで累積する。演出完了や「次の試合へ」で再加算しない。
 
-「結果を見る」→ Intermediate（「試合 x / y 終了」、累積スコア・残ダイスを元の参加者順で表示）→「次の試合へ」で次Gameへ進む。人物・順番・設定・累積値・totalCompletionCountを維持し、現GameのPlayer / dice / Turn / ROLL stateをresetする。最終Gameでは「結果を見る」→連続試合 FINAL RANKING→「ペナルティへ」→Series Penalty→「最終結果を見る」→連続試合 FINAL RESULT。
+非最終Gameでは、最後のROLL presentation完了後のPlay Action「次の試合へ」から直接次Gameへ進む。人物・IDs・順番・設定・累積値・totalCompletionCountを維持し、現GameのPlayer / dice / Turn / ROLL stateをresetする。
+
+| 連続試合の状態 | Action |
+| --- | --- |
+| 非最終試合終了 | 次の試合へ |
+| 最終試合終了 | 結果を見る |
+
+Intermediate component・helper・Flow phase・Recovery経路は意図的に保持する。累積値を元順序で表示する経路は標準Flowでbypassし、不要コード / 削除予定とは扱わない。将来の途中結果表示option・表示ON/OFF・観戦用途等への再利用余地を残すが、showIntermediateResults等のoptionは現行未実装。
+
+最終Game開始直後から全員Turn終了後まで、Playの暫定順位と累計Scoreを「ヒミツ」とし、cumulativeRemainingDiceは表示する。暫定最下位のhighlight / labelは表示せず、順位を行順から漏らさないよう元参加者順を維持する。通常の現在player / Turn状態・試合進捗・ROLL表示は維持する。内部のprovisional cumulativeScore / remaining / rank / bottom rank計算は停止せず、maskはpresentationだけに適用する。
+
+最後のpresentation後もPlayでは秘匿を維持し、「結果を見る」→連続試合 FINAL RANKINGで実値を公開する。その後は「ペナルティへ」→Series Penalty→「最終結果を見る」→連続試合 FINAL RESULT。
 
 最終順位はcumulativeScore降順 → cumulativeRemainingDice昇順 → exact tie。Complete優先・OUT内訳・ROLL回数による追加比較はない。competition rankingを用い、stable orderingはtie-breakにしない。lowest rank全員を元の参加者順でPenalty対象にし、全員同順位でもSudden Deathを行わず全員対象とする。暫定順位は§39の累積比較であり、現在Game単体の順位ではない。
 
@@ -2976,9 +3000,11 @@ blocking confirmationのOPENでpending timerをcancelする。dialog中はRNG消
 
 # 117. mode別Session Recovery
 
-schema 4でGame Mode / 固有設定と進行の整合性を検証する。completionTarget + finite limit、hidden mode設定、Series範囲外gameCount / currentGameNumber、phaseと累積値の不整合、chunkサイズ超過 / 順序 / status不整合、0個PenaltyのROLL結果を拒否する。推測repair / migrationはしない。
+schema 5でGame Mode / 固有設定と進行の整合性を検証する。completionTarget + finite limit、hidden mode設定、Series範囲外gameCount / currentGameNumber、phaseと累積値の不整合、chunkサイズ超過 / 順序 / status不整合、0個PenaltyのROLL結果を拒否する。推測repair / migrationはしない。
 
-SeriesはcurrentGameNumber・player別cumulativeScore / cumulativeRemainingDice・totalCompletionCount・現Game / Turn・確定resultを保存する。全員終了stateは既に現Game分を含む。保存済み累積値を検証するだけで、過去Gameを推測復元したり再加算したりしない。
+完走指定はGameの番号とregular / suddenDeathのidentityを保存・検証する。全員終了後のtarget未達「次の試合へ」待ち、target達成 + 同率「サドンデスへ」待ち、決着「結果を見る」待ちを区別して復元し、未達をSudden Deathへ変換しない。missing continuation identityを推測補完しない。具体的なstate契約は[src/game/README.md](../src/game/README.md)参照。
+
+SeriesはcurrentGameNumber・player別cumulativeScore / cumulativeRemainingDice・totalCompletionCount・現Game / Turn・確定resultを保存する。全員終了stateは既に現Game分を含む。保存済み累積値を検証するだけで、過去Gameを推測復元したり再加算したりしない。非最終Game終了の標準復旧はPlayの「次の試合へ」待ちで、Intermediateへ自動遷移しない。保持されたIntermediate phaseも整合性を検証して復旧する。最終GameのPlayは秘匿表示を復元し、Final Rankingでは実値を公開する。
 
 Series PenaltyはpenaltyId・元順序のentries（playerId、totalDice、pending / running / resolved、committedChunks、basePenalty）・currentLoserIndexを保存する。chunk plan / next chunk indexは対象数とcommittedChunksから導出する。BASEを保存chunkから再計算して照合するが、不一致を修復しない。FINAL / multiplierはresolved entryとtotalCompletionCountから派生する。
 
@@ -2986,10 +3012,10 @@ Series PenaltyはpenaltyId・元順序のentries（playerId、totalDice、pendin
 
 # 118. ルール説明と実画面確認
 
-SetupヘッダーのSound左隣に「ルール説明」を置き、最下部には置かない。Rule Pageは基本ルール・Game Mode・Penalty等をユーザー向けに説明し、「戻る」で同じSetup draftへ戻る。既存各画面の説明を維持する。内部state / revision / schema / RandomSourceの説明ページにはしない。
+SetupヘッダーのSound左隣に「ルール説明」を置き、最下部には置かない。Rule Pageは基本ルール・Game Mode・Penalty等をユーザー向けに説明し、「戻る」で同じSetup draftへ戻る。既存各画面の説明を維持する。内部state / revision / schema / RandomSourceの説明ページにはしない。完走指定の未達は通常次Game、達成後の完全同率はSudden Deathと説明する。連続試合は途中試合から直接次Gameへ、最終試合の順位 / 累計Scoreは「ヒミツ」でFinal Rankingにて公開すると説明する。
 
 Rule Pageは純粋なUI navigation state。閲覧と復帰でgame / participant / Setup draftを変更せず、Recovery writeとRNG消費を行わない。
 
-Browser QA対象は320×568 / 375×667 / 390×844 / 430×932 / 768×1024 / 1280×900。Play / Penaltyの主要DOM・順序・reserved regions・staged presentation・Action位置・scroll安定性を維持する。要素削除 / 統合 / 並べ替え、sticky / fixed / absolute Action hack、overflow hiddenやclipping、animation短縮で収容しない。構造変更が必要なら人間判断へ戻す。
+Browser QA対象は320×568 / 375×667 / 390×844 / 430×932 / 768×1024 / 1280×900。Play / Penaltyの主要DOM・順序・reserved regions・staged presentation・Action位置・scroll安定性を維持する。要素削除 / 統合 / 並べ替え、sticky / fixed / absolute Action hack、overflow hiddenやclipping、animation短縮、touch target縮小で収容しない。構造変更が必要なら人間判断へ戻す。
 
-320×568での既存計測実績はPlay約567.81px、Normal Penalty約515.52px、Series Penalty約560.52px。これは確認環境での実績であり、すべての環境での寸法保証ではない。最終通しプレイQA、OUTを含む実画面目視確認、最終Push判断は人間が行う。
+320×568での既存計測実績はPlay約567.81px、Normal Penalty約515.52px、Series Penalty約560.52px。v5確認ではPlay範囲約567.8125px・Action高56px、測定したROLL / continuation操作のscroll差0・Action位置差0。確認環境・操作での実績であり、すべての環境での寸法保証ではない。実機通しプレイ、実Rendererの視覚確認（OUTを含む）、その他ユーザー自身の最終プレイ確認、最終Push判断は人間の残件。
