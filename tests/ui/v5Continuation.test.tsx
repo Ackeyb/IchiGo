@@ -1,3 +1,4 @@
+import { isZeroOneFlow } from '../../src/game/zeroOneFlow';
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -21,10 +22,10 @@ const complete = [1, 1, 1, 1, 1];
 const noScore = [2, 2, 2, 2, 2];
 const step = (s: FlowState, action: FlowAction) => advanceFlow(s, s.revision, action, noDraw);
 function game(s: FlowState) {
-  if (s.phase === 'setup' || s.phase === 'replayPreparation') throw new Error('Game expected');
+  if (isZeroOneFlow(s) || s.phase === 'setup' || s.phase === 'replayPreparation') throw new Error('Game expected');
   return s.game;
 }
-function ready(mode: GameMode): FlowState {
+function ready(mode: Exclude<GameMode, { type: 'zeroOne' }>): FlowState {
   const configuration = mode.type === 'completionTarget' ? { mode, rollLimit: null } : { mode, rollLimit: 1 as const };
   return step(initialFlow(), { type: 'start', setup: { ...initialSetup(), ...configuration, diceMode: 5,
     participants: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }] } });
@@ -151,15 +152,15 @@ describe('v5 explicit continuation and Recovery', () => {
     expect(new SessionRecovery(() => memory(invalid as FlowState)).loadGame()).toMatchObject({ recovered: false, notice: 'corrupt' });
   });
 
-  it.each([true, false])('writes schema 5 and rejects schema 4 without losing Sound %s', (enabled) => {
-    expect(SESSION_SCHEMA_VERSION).toBe(5); expect(SOUND_SCHEMA_VERSION).toBe(1);
+  it.each([true, false])('writes schema 6 and rejects schema 4 without losing Sound %s', (enabled) => {
+    expect(SESSION_SCHEMA_VERSION).toBe(6); expect(SOUND_SCHEMA_VERSION).toBe(1);
     const s = ready({ type: 'normal' }); const storage = memory(s, 4);
     storage.setItem(SESSION_SOUND_KEY, JSON.stringify({ version: 1, enabled }));
     const recovery = new SessionRecovery(() => storage);
     expect(recovery.loadGame()).toMatchObject({ recovered: false, notice: 'corrupt' });
     expect(recovery.loadSound()).toEqual({ enabled });
     recovery.saveGame(s);
-    expect(JSON.parse(storage.getItem(SESSION_GAME_KEY)!)).toEqual({ version: 5, state: s });
+    expect(JSON.parse(storage.getItem(SESSION_GAME_KEY)!)).toEqual({ version: 6, state: s });
     expect(new SessionRecovery(() => storage).loadGame()).toEqual({ state: s, recovered: true });
   });
 });
@@ -212,7 +213,7 @@ describe('v5 final Series presentation mask', () => {
   it('updates the Rule Page continuation and secret-result explanations', () => {
     render(<RulesScreen onBack={() => undefined} />);
     expect(screen.getByText(/これはSudden Deathではありません/)).toBeTruthy();
-    expect(screen.getByText(/「サドンデスへ」/)).toBeTruthy();
+    expect(within(screen.getByRole('heading', { name: '完走指定' }).closest('section')!).getByText(/「サドンデスへ」/)).toBeTruthy();
     expect(screen.getByText(/最終試合以外は「次の試合へ」/)).toBeTruthy();
     expect(screen.getByText(/最終試合中の暫定順位と累計得点は「ヒミツ」/)).toBeTruthy();
   });

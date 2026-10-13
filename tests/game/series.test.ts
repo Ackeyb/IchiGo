@@ -1,3 +1,4 @@
+import { isZeroOneFlow } from '../../src/game/zeroOneFlow';
 import { describe, expect, it } from 'vitest';
 import { advanceFlow, initialFlow } from '../../src/game/gameFlow';
 import type { FlowAction, FlowState } from '../../src/game/gameFlow';
@@ -17,7 +18,7 @@ const draft = (gameCount: SeriesGameCount = 2, rollLimit: RollLimit = null, dice
 const start = (setup = draft()) => advanceFlow(initialFlow(), 0, { type: 'start', setup }, noDraw);
 const act = (state: FlowState, action: FlowAction) => advanceFlow(state, state.revision, action, noDraw);
 function series(state: FlowState) {
-  if (state.phase === 'setup' || state.phase === 'replayPreparation' || !isSeriesState(state.game)) throw new Error('Series expected');
+  if (isZeroOneFlow(state) || state.phase === 'setup' || state.phase === 'replayPreparation' || !isSeriesState(state.game)) throw new Error('Series expected');
   return state.game;
 }
 const all = (face: number, count = 5) => Array<number>(count).fill(face);
@@ -41,7 +42,7 @@ function endGame(state: FlowState, face = 2) {
 function nextGame(state: FlowState) {
   return act(act(state, { type: 'ranking' }), { type: 'nextSeriesGame', currentGameNumber: series(state).currentGameNumber });
 }
-function storageFor(state: FlowState, version = 5) {
+function storageFor(state: FlowState, version = 6) {
   const values = new Map([[SESSION_GAME_KEY, JSON.stringify({ version, state })]]);
   const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); },
     removeItem: (key: string) => { values.delete(key); } };

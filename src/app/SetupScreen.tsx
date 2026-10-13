@@ -1,3 +1,4 @@
+import { zeroOneDiceCount } from '../game/zeroOne';
 import { useEffect, useRef, useState } from 'react';
 import { initialSetup, nameError, switchSetupMode, validateSetup } from '../game/setup';
 import type { Setup } from '../game/setup';
@@ -10,6 +11,7 @@ const gameModes: readonly Readonly<{ type: GameMode['type']; label: string }>[] 
   { type: 'normal', label: 'ノーマル' },
   { type: 'completionTarget', label: '完走指定' },
   { type: 'series', label: '連続試合' },
+  { type: 'zeroOne', label: 'ゼロワン' },
 ];
 
 export function SetupScreen({ busy, onStart, onDraftChange, onFullReset, focusOnMount, initial = initialSetup() }: {
@@ -55,9 +57,9 @@ export function SetupScreen({ busy, onStart, onDraftChange, onFullReset, focusOn
     <div className="intro">
       <p className="eyebrow">ONE ROLL AT A TIME</p>
       <h2>最後のダイスまで。</h2>
-      <p>1と5を出してダイスを減らそう。<br />全て取り除けば、完走。</p>
+      <p>{setup.mode.type === 'zeroOne' ? <>1と5で残り点数を減らそう。<br />ちょうど0点でClear。</> : <>1と5を出してダイスを減らそう。<br />全て取り除けば、完走。</>}</p>
       <div className="rule-chips"><span>1 → 100点</span><span>5 → 50点</span><span>OUT</span></div>
-      <p className="subtle">1か5が出たら、残ったダイスで続行。<br />得点がなければ、そのターンは終了です。</p>
+      <p className="subtle">{setup.mode.type === 'zeroOne' ? <>1 ROLL = 1 Turn。<br />全員Clear後、少ないTurn数が上位です。</> : <>1か5が出たら、残ったダイスで続行。<br />得点がなければ、そのターンは終了です。</>}</p>
     </div>
     <form ref={form} className="panel setup-form" noValidate onSubmit={(event) => {
       event.preventDefault();
@@ -117,23 +119,29 @@ export function SetupScreen({ busy, onStart, onDraftChange, onFullReset, focusOn
             checked={setup.mode.gameCount === gameCount} onChange={() => update({ ...setup, mode: { type: 'series', gameCount } })} />{gameCount}
         </label>)}</div>
       </fieldset>}
-      <fieldset disabled={busy}><legend>Dice Mode</legend>
+      {setup.mode.type === 'zeroOne' && <fieldset disabled={busy}><legend>ゼロワン preset</legend>
+        <div className="styles">{([350, 500, 700, 1000] as const).map((preset) => <label key={preset}>
+          <input type="radio" name="zero-one-preset" aria-label={`ゼロワン ${preset}`} checked={setup.mode.type === 'zeroOne' && setup.mode.preset === preset}
+            onChange={() => update({ ...setup, mode: { type: 'zeroOne', preset }, diceMode: zeroOneDiceCount(preset), rollLimit: null })} />{preset}
+        </label>)}</div>
+      </fieldset>}
+      {setup.mode.type !== 'zeroOne' && <fieldset disabled={busy}><legend>Dice Mode</legend>
         <div className="styles dice-modes">{diceModes.map((mode) => <label key={mode}>
           <input type="radio" name="dice-mode" value={mode} checked={setup.diceMode === mode}
             onChange={() => update({ ...setup, diceMode: mode })} />{mode} DICE
         </label>)}</div>
-      </fieldset>
+      </fieldset>}
       <fieldset disabled={busy}><legend>投げ方</legend>
         <div className="styles">{(['rough', 'normal', 'careful'] as const).map((style) => <label key={style}>
           <input type="radio" name="throw-style" value={style} checked={setup.throwStyle === style}
             onChange={() => update({ ...setup, throwStyle: style })} />{styleLabels[style]}
         </label>)}</div>
       </fieldset>
-      {setup.mode.type !== 'completionTarget' && <fieldset disabled={busy}><legend>ROLL上限</legend>
+      {setup.mode.type !== 'completionTarget' && setup.mode.type !== 'zeroOne' && <fieldset disabled={busy}><legend>ROLL上限</legend>
         <div className="styles roll-limits">{rollLimits.map((limit) => <label key={limit ?? 'infinity'}>
           <input type="radio" name="roll-limit" value={limit ?? 'infinity'}
             aria-label={limit === null ? 'ROLL上限 無制限' : `ROLL上限 ${limit}回`}
-            checked={setup.rollLimit === limit} onChange={() => update(setup.mode.type === 'completionTarget'
+            checked={setup.rollLimit === limit} onChange={() => update((setup.mode.type === 'completionTarget' || setup.mode.type === 'zeroOne')
               ? { ...setup, mode: setup.mode, rollLimit: null } : { ...setup, mode: setup.mode, rollLimit: limit })} />
           <span aria-hidden="true">{limit ?? '∞'}</span>
         </label>)}</div>

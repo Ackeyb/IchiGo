@@ -1,3 +1,4 @@
+import { isZeroOneFlow } from '../../src/game/zeroOneFlow';
 import { describe, expect, it } from 'vitest';
 import { advanceFlow, initialFlow } from '../../src/game/gameFlow';
 import type { FlowAction, FlowState } from '../../src/game/gameFlow';
@@ -17,12 +18,12 @@ const setup = (targetCompletions: CompletionTarget = 2, count = 2, diceMode: Dic
 });
 const act = (state: FlowState, type: Extract<FlowAction, { type: string }>['type']) => {
   if (type === 'start' || type === 'updateSetup' || type === 'reorderReplay' || type === 'nextSeriesGame'
-    || type === 'startSeriesPenalty' || type === 'nextSeriesPenaltyChunk' || type === 'nextSeriesPenaltyLoser') throw new Error('Use a complete action');
+    || type === 'startSeriesPenalty' || type === 'nextSeriesPenaltyChunk' || type === 'nextSeriesPenaltyLoser' || type === 'startZeroOnePenalty' || type === 'nextZeroOnePenaltyChunk' || type === 'nextZeroOnePenaltyLoser') throw new Error('Use a complete action');
   return advanceFlow(state, state.revision, { type }, noDraw);
 };
 const start = (draft = setup()) => advanceFlow(initialFlow(), 0, { type: 'start', setup: draft }, noDraw);
 function round(state: FlowState) {
-  if (state.phase === 'setup' || state.phase === 'replayPreparation') throw new Error('Game expected');
+  if (isZeroOneFlow(state) || state.phase === 'setup' || state.phase === 'replayPreparation') throw new Error('Game expected');
   return state.game;
 }
 function roll(state: FlowState, faces: readonly number[], type: 'roll' | 'rollPenalty' = 'roll') {
@@ -52,7 +53,7 @@ function restore(state: FlowState) {
   const storage = { getItem: (key: string) => values.get(key) ?? null,
     setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
   new SessionRecovery(() => storage).saveGame(state);
-  expect(JSON.parse(values.get(SESSION_GAME_KEY)!)).toEqual({ version: 5, state });
+  expect(JSON.parse(values.get(SESSION_GAME_KEY)!)).toEqual({ version: 6, state });
   const recovery = new SessionRecovery(() => storage);
   expect(recovery.loadGame()).toEqual({ recovered: true, state });
   const store = createGameStore(noDraw, recovery);

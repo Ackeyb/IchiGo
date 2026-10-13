@@ -65,7 +65,7 @@ function chunk(state: FlowState, values?: readonly number[]) {
   expect(random.calls).toBe(size * 2);
   return next;
 }
-function memory(state: FlowState, version = 5) {
+function memory(state: FlowState, version = 6) {
   const values = new Map([[SESSION_GAME_KEY, JSON.stringify({ version, state })], [SESSION_SOUND_KEY, JSON.stringify({ version: 1, enabled: false })]]);
   return { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); },
     removeItem: (key: string) => { values.delete(key); } };
@@ -345,7 +345,7 @@ describe('Series Penalty Recovery rejects tampering without repair', () => {
     expect(validateStoredFlowState(badEntry(zero, { status: 'pending' }))).toBe(false);
     expect(validateStoredFlowState(badEntry(zero, { basePenalty: 1 }))).toBe(false);
   });
-  it('restores mixed and all OUT exactly, rejects careful OUT, and keeps schema 5 / Sound 1', () => {
+  it('restores mixed and all OUT exactly, rejects careful OUT, and keeps schema 6 / Sound 1', () => {
     for (const style of ['normal', 'rough', 'careful'] as const) {
       const initial = ready(11, 7, 2, 1, style);
       const entry = initial.seriesPenalty.entries[0]!;

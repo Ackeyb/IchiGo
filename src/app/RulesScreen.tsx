@@ -56,6 +56,15 @@ export function RulesScreen({ onBack }: { onBack: () => void }) {
         <p>Sudden Deathは行いません。最下位が全員同順位でも、全員がPenaltyの対象です。</p>
       </section>
 
+      <section className="rules-section" aria-labelledby="rules-zero-one">
+        <h3 id="rules-zero-one">ゼロワン</h3>
+        <p>350 / 5個、500 / 7個、700 / 10個、1000 / 14個から選びます。初期設定は500 / 7個。1 ROLL = 1 Turnで、1は100点、5は50点として残り点数から引き、得点したダイスとOUTは次の自分のTurnでも振りません。OUTは0点です。</p>
+        <p>ちょうど0点でClear。超えたらBustで、そのROLL前の点数・ダイスに戻ります。残り点数が残りダイス数 × 100を超えたらShortです。例：残り300点・ダイス2個では最大200点なのでShort。その人の点数・ダイスを初期化します。得点なし・Bust・ShortでもTurnを1回数え、次の未Clearプレイヤーへ進みます。</p>
+        <p>全員Clear後、累積Turn数が少ない方が上位、同数なら同順位。全員同数は「サドンデスへ」で全員やり直します。点数・ダイス・Clearはリセットし、Turn数は累積します。</p>
+        <p>そのRound開始からBust / Shortを一度もせずClearすればClean Clearです。一度でもBust / Shortした人は、Shortでやり直しても同Round中は資格が戻りません。Sudden Death開始時に全員の資格が復活し、獲得済みClean Clear累積数は維持します。</p>
+        <p>最下位のターン数 - トップのターン数だけPenaltyダイスを振ります。presetのダイス数は掛けません。10個を超えたら分割し、最初だけ操作、以後は自動です。OUTは表示上OUTのまま、計算時のみ6。全BASE合計にClean Clear累積数 + 1の倍率を一度掛け、ペナルティポイントを求めます。</p>
+      </section>
+
       <section className="rules-section" aria-labelledby="rules-penalty">
         <h3 id="rules-penalty">Penalty（ペナルティポイント）</h3>
         <p>ノーマルと完走指定では、決着したRoundの最下位全員が、それぞれ残りダイスを1回振ります。1や5の特別得点・取り除きはありません。PenaltyのOUTはOUTのまま表示され、計算するときだけ6として扱います。</p>

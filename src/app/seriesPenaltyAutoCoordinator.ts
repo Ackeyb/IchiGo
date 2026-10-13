@@ -1,5 +1,5 @@
 import type { GameStore } from './gameStore';
-import { partitionSeriesPenalty } from '../game/seriesPenalty';
+import { chunkPenaltyState } from '../game/gameFlow';
 
 export type SeriesPenaltyPresentationIdentity = Readonly<{
   /** The live Store instance distinguishes callbacks captured before reload/state ownership replacement. */
@@ -13,10 +13,11 @@ export type SeriesPenaltyPresentationIdentity = Readonly<{
 /** Capture when a committed chunk becomes the presentation target, never from visibleState alone. */
 export function captureSeriesPenaltyPresentation(store: GameStore): SeriesPenaltyPresentationIdentity | undefined {
   const { state } = store.getSnapshot();
-  if (state.phase !== 'seriesPenalty') return undefined;
-  const entry = state.seriesPenalty.entries[state.seriesPenalty.currentLoserIndex]!;
+  const penalty = chunkPenaltyState(state);
+  if (!penalty || (state.phase !== 'seriesPenalty' && state.phase !== 'zeroOnePenalty')) return undefined;
+  const entry = penalty.entries[penalty.currentLoserIndex]!;
   if (entry.committedChunks.length === 0) return undefined;
-  return { store, revision: state.revision, penaltyId: state.seriesPenalty.penaltyId,
+  return { store, revision: state.revision, penaltyId: penalty.penaltyId,
     playerId: entry.playerId, committedChunkCount: entry.committedChunks.length };
 }
 
@@ -41,9 +42,10 @@ export function createSeriesPenaltyAutoCoordinator(store: GameStore) {
   const canProceed = (identity: SeriesPenaltyPresentationIdentity) => {
     const snapshot = store.getSnapshot();
     if (!matchesCurrent(identity) || snapshot.busy || snapshot.visibleState !== snapshot.state
-      || snapshot.state.phase !== 'seriesPenalty') return false;
-    const entry = snapshot.state.seriesPenalty.entries[snapshot.state.seriesPenalty.currentLoserIndex]!;
-    return entry.status === 'running' && entry.committedChunks.length < partitionSeriesPenalty(entry.totalDice).length;
+      || (snapshot.state.phase !== 'seriesPenalty' && snapshot.state.phase !== 'zeroOnePenalty')) return false;
+    const penalty = chunkPenaltyState(snapshot.state)!;
+    const entry = penalty.entries[penalty.currentLoserIndex]!;
+    return entry.status === 'running' && entry.committedChunks.length < Math.ceil(entry.totalDice / 10);
   };
   const sync = () => {
     if (acknowledged && !matchesCurrent(acknowledged)) acknowledged = undefined;
@@ -56,7 +58,7 @@ export function createSeriesPenaltyAutoCoordinator(store: GameStore) {
       // Preserve the captured revision/loser/prefix; never rebind this request to the latest state.
       if (!acknowledged || !canProceed(identity)) { acknowledged = undefined; return; }
       acknowledged = undefined;
-      store.dispatch(identity.revision, { type: 'nextSeriesPenaltyChunk', penaltyId: identity.penaltyId,
+      store.dispatch(identity.revision, { type: store.getSnapshot().state.phase === 'zeroOnePenalty' ? 'nextZeroOnePenaltyChunk' : 'nextSeriesPenaltyChunk', penaltyId: identity.penaltyId,
         playerId: identity.playerId, chunkIndex: identity.committedChunkCount });
       // The commit clears acknowledgment. Only that next chunk's reveal/paint completion may schedule again.
     }, 1500) };

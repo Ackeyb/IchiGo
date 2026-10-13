@@ -1,3 +1,4 @@
+import { isZeroOneFlow } from '../../src/game/zeroOneFlow';
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -18,7 +19,7 @@ const noDraw = { next: (): number => { throw new Error('Unexpected draw'); } };
 const quiet = { play: () => undefined, dispose: () => undefined };
 const encode = (faces: readonly number[]) => faces.flatMap((face) => face === 0 ? [0] : [0.9, (face - 0.5) / 6]);
 const step = (state: FlowState, action: FlowAction) => advanceFlow(state, state.revision, action, noDraw);
-function ready(count = 3, mode: GameMode = { type: 'series', gameCount: 3 }): FlowState {
+function ready(count = 3, mode: Exclude<GameMode, { type: 'zeroOne' }> = { type: 'series', gameCount: 3 }): FlowState {
   const configuration = mode.type === 'completionTarget' ? { mode, rollLimit: null } : { mode, rollLimit: 1 as const };
   return step(initialFlow(), { type: 'start', setup: { ...initialSetup(), ...configuration, diceMode: 7,
     participants: Array.from({ length: count }, (_, i) => ({ id: `p${i}`, name: `P${i}` })) } });
@@ -28,7 +29,7 @@ function roll(state: FlowState, faces: readonly number[]) {
   return advanceFlow(state, state.revision, { type: 'roll' }, { next: () => draws.shift()! });
 }
 function game(state: FlowState): SeriesState {
-  if (state.phase === 'setup' || state.phase === 'replayPreparation' || !isSeriesState(state.game)) throw new Error('Series expected');
+  if (isZeroOneFlow(state) || state.phase === 'setup' || state.phase === 'replayPreparation' || !isSeriesState(state.game)) throw new Error('Series expected');
   return state.game;
 }
 function secondGame(gameCount: SeriesGameCount = 3) {

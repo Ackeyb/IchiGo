@@ -1,3 +1,4 @@
+import { zeroOneDiceCount } from './zeroOne';
 import { DEFAULT_THROW_STYLE, OUT_PROBABILITIES } from './rollGenerator';
 import type { Participant } from './suddenDeath';
 import { DEFAULT_DICE_MODE, DEFAULT_ROLL_LIMIT, isDiceMode, isModeConfiguration } from './types';
@@ -29,6 +30,8 @@ export function validateSetupDraft(value: unknown): value is Setup {
   if (!Array.isArray(setup.participants) || setup.participants.length < 2 || setup.participants.length > 10
     || !Object.hasOwn(OUT_PROBABILITIES, setup.throwStyle as PropertyKey) || !isDiceMode(setup.diceMode)
     || !isModeConfiguration({ mode: setup.mode, rollLimit: setup.rollLimit })) return false;
+  if (typeof setup.mode === 'object' && setup.mode !== null && 'type' in setup.mode && setup.mode.type === 'zeroOne'
+    && setup.diceMode !== zeroOneDiceCount((setup.mode as Extract<GameMode, { type: 'zeroOne' }>).preset)) return false;
   const participants = setup.participants;
   if (participants.some((participant) => typeof participant !== 'object' || participant === null || Array.isArray(participant)
     || typeof (participant as Record<string, unknown>).id !== 'string'
@@ -41,6 +44,7 @@ export function validateSetupDraft(value: unknown): value is Setup {
 export function switchSetupMode(setup: Setup, type: GameMode['type']): Setup {
   if (setup.mode.type === type) return setup;
   const common = { participants: setup.participants, diceMode: setup.diceMode, throwStyle: setup.throwStyle };
+  if (type === 'zeroOne') return { ...common, diceMode: 7, mode: { type, preset: 500 }, rollLimit: null };
   if (type === 'completionTarget') return { ...common, mode: { type, targetCompletions: 1 }, rollLimit: null };
   if (type === 'series') return { ...common, mode: { type, gameCount: 2 }, rollLimit: setup.rollLimit };
   return { ...common, mode: { type }, rollLimit: setup.rollLimit };

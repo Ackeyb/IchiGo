@@ -1,3 +1,5 @@
+import { isZeroOnePreset } from './zeroOne';
+import type { ZeroOnePreset } from './zeroOne';
 export type DieValue = 1 | 2 | 3 | 4 | 5 | 6;
 export type DieResult =
   | Readonly<{ status: 'safe'; value: DieValue }>
@@ -13,12 +15,13 @@ export const DEFAULT_ROLL_LIMIT: RollLimit = null;
 export type CompletionTarget = 1 | 2 | 3 | 4 | 5;
 export type SeriesGameCount = 2 | 3 | 4 | 5;
 export type GameMode =
-  | Readonly<{ type: 'normal'; targetCompletions?: never; gameCount?: never }>
-  | Readonly<{ type: 'completionTarget'; targetCompletions: CompletionTarget; gameCount?: never }>
-  | Readonly<{ type: 'series'; gameCount: SeriesGameCount; targetCompletions?: never }>;
+  | Readonly<{ type: 'normal'; targetCompletions?: never; gameCount?: never; preset?: never }>
+  | Readonly<{ type: 'completionTarget'; targetCompletions: CompletionTarget; gameCount?: never; preset?: never }>
+  | Readonly<{ type: 'series'; gameCount: SeriesGameCount; targetCompletions?: never; preset?: never }>
+  | Readonly<{ type: 'zeroOne'; preset: ZeroOnePreset; targetCompletions?: never; gameCount?: never }>;
 export type ModeConfiguration =
   | Readonly<{ mode: Extract<GameMode, { type: 'normal' | 'series' }>; rollLimit: RollLimit }>
-  | Readonly<{ mode: Extract<GameMode, { type: 'completionTarget' }>; rollLimit: null }>;
+  | Readonly<{ mode: Extract<GameMode, { type: 'completionTarget' | 'zeroOne' }>; rollLimit: null }>;
 
 export function isCompletionTarget(value: unknown): value is CompletionTarget {
   return value === 1 || value === 2 || value === 3 || value === 4 || value === 5;
@@ -34,6 +37,7 @@ export function isGameMode(value: unknown): value is GameMode {
   const keys = Object.keys(mode);
   if (mode.type === 'normal') return keys.length === 1;
   if (mode.type === 'completionTarget') return keys.length === 2 && isCompletionTarget(mode.targetCompletions);
+  if (mode.type === 'zeroOne') return keys.length === 2 && isZeroOnePreset(mode.preset);
   return mode.type === 'series' && keys.length === 2 && isSeriesGameCount(mode.gameCount);
 }
 
@@ -41,18 +45,18 @@ export function isModeConfiguration(value: unknown): value is ModeConfiguration 
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
   const config = value as Record<string, unknown>;
   return isGameMode(config.mode) && isRollLimit(config.rollLimit)
-    && (config.mode.type !== 'completionTarget' || config.rollLimit === null);
+    && ((config.mode.type !== 'completionTarget' && config.mode.type !== 'zeroOne') || config.rollLimit === null);
 }
 
 /** Copy only configuration; preserve the mode/limit correlation without carrying progress. */
 export function modeConfiguration(config: ModeConfiguration): ModeConfiguration {
-  return config.mode.type === 'completionTarget'
+  return config.mode.type === 'completionTarget' || config.mode.type === 'zeroOne'
     ? { mode: config.mode, rollLimit: null }
     : { mode: config.mode, rollLimit: config.rollLimit };
 }
 
 export function sameGameMode(left: GameMode, right: GameMode): boolean {
-  return left.type === right.type && left.targetCompletions === right.targetCompletions && left.gameCount === right.gameCount;
+  return left.type === right.type && left.targetCompletions === right.targetCompletions && left.gameCount === right.gameCount && left.preset === right.preset;
 }
 
 export function isRollLimit(value: unknown): value is RollLimit {

@@ -39,6 +39,7 @@ export function createGameStore(random: RandomSource, recovery?: Pick<SessionRec
       try {
         const state = advanceFlow(before, revision, action, random);
         const waitsForDice = state !== before && (action.type === 'roll' || action.type === 'rollPenalty'
+          || action.type === 'startZeroOnePenalty' || action.type === 'nextZeroOnePenaltyChunk'
           || action.type === 'startSeriesPenalty' || action.type === 'nextSeriesPenaltyChunk');
         const isDraftEdit = action.type === 'updateSetup' || action.type === 'reorderReplay';
         // Commit authoritative memory first; keep visibleState staged until presentation reveals a dice result.

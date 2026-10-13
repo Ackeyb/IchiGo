@@ -62,18 +62,19 @@ export function rollSeriesPenaltyChunk(count: number, throwStyle: ThrowStyle, ra
 
 /** Exactly one chunk per request. All captured identities/progress are checked before any random draw. */
 export function commitSeriesPenaltyChunk(
-  state: SeriesPenaltyState, request: SeriesChunkRequest, first: boolean, throwStyle: ThrowStyle, random: RandomSource,
+  state: SeriesPenaltyState, request: SeriesChunkRequest, first: boolean, throwStyle: ThrowStyle, random: RandomSource, maximumDice = 70,
 ): SeriesPenaltyState {
   const entry = state.entries[state.currentLoserIndex];
   if (request.penaltyId !== state.penaltyId || !entry || request.playerId !== entry.playerId
     || request.chunkIndex !== entry.committedChunks.length || entry.status !== (first ? 'pending' : 'running')) return state;
-  const plan = partitionSeriesPenalty(entry.totalDice);
-  const size = plan[request.chunkIndex];
-  if (size === undefined) return state;
+  if (!Number.isSafeInteger(entry.totalDice) || entry.totalDice < 0 || entry.totalDice > maximumDice) throw new RangeError('Invalid penalty dice count.');
+  const chunkCount = Math.ceil(entry.totalDice / 10);
+  const size = Math.min(10, entry.totalDice - request.chunkIndex * 10);
+  if (request.chunkIndex >= chunkCount || size <= 0) return state;
   const dice = rollSeriesPenaltyChunk(size, throwStyle, random);
   const committedChunks = [...entry.committedChunks, dice];
   const next: SeriesPenaltyEntry = { ...entry, committedChunks, basePenalty: entry.basePenalty + seriesChunkBase(dice),
-    status: committedChunks.length === plan.length ? 'resolved' : 'running' };
+    status: committedChunks.length === chunkCount ? 'resolved' : 'running' };
   return { ...state, entries: state.entries.map((p, i) => i === state.currentLoserIndex ? next : p) };
 }
 

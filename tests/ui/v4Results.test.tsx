@@ -13,7 +13,7 @@ const noDraw = { next: (): number => { throw new Error('Unexpected draw'); } };
 const quiet = { play: () => undefined, dispose: () => undefined };
 const encode = (faces: readonly number[]) => faces.flatMap((face) => [0.9, (face - 0.5) / 6]);
 const step = (state: FlowState, action: FlowAction) => advanceFlow(state, state.revision, action, noDraw);
-function ready(mode: GameMode, limit: RollLimit = null, count = 2): FlowState {
+function ready(mode: Exclude<GameMode, { type: 'zeroOne' }>, limit: RollLimit = null, count = 2): FlowState {
   const configuration = mode.type === 'completionTarget' ? { mode, rollLimit: null } : { mode, rollLimit: limit };
   return step(initialFlow(), { type: 'start', setup: { ...initialSetup(), ...configuration, diceMode: 5,
     participants: Array.from({ length: count }, (_, i) => ({ id: `p${i}`, name: `名前${i}` })) } });

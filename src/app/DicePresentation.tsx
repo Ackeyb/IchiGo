@@ -32,6 +32,7 @@ export type DicePresentationConfig = Readonly<{
 }>;
 
 export type DiceResultPresentation =
+  | Readonly<{ kind: 'zeroOne'; rollScore: number; outcome: 'clear' | 'bust' | 'short' | 'turnEnd' }>
   | Readonly<{
     kind: 'seriesPenalty';
   }>
@@ -149,6 +150,11 @@ export function DicePresentation({
           else if (presentation.outcome === 'turnEnd') onCue?.('turn-end');
         });
         at(4, reveal);
+      } else if (presentation?.kind === 'zeroOne') {
+        at(1, () => setStage(2));
+        at(2, () => setStage(3));
+        at(3, () => { setStage(4); onCue?.(presentation.outcome === 'clear' ? 'complete' : 'turn-end'); });
+        at(4, reveal);
       } else if (presentation?.kind === 'penalty' || presentation?.kind === 'seriesPenalty') {
         at(1, () => setStage(2));
         at(2, () => setStage(3));
@@ -177,6 +183,10 @@ export function DicePresentation({
     {currentOutcome?.mode === 'fallback' && <p className="renderer-status">{fallbackLabels[currentOutcome.reason]}</p>}
     {revealed && <div className="dice-result-details">
       <DiceView dice={dice} diceMode={diceMode} kind={kind} removing={stage >= 3} seriesChunk={presentation?.kind === 'seriesPenalty'} />
+      {presentation?.kind === 'zeroOne' && <div className="result-sequence" aria-live="polite">
+        {stage >= 2 && <strong>今回 {presentation.rollScore}点</strong>}
+        {resultStage >= 4 && <strong>{({ clear: 'CLEAR', bust: 'BUST', short: 'SHORT', turnEnd: 'TURN END' } as const)[presentation.outcome]}</strong>}
+      </div>}
       {presentation?.kind === 'normal' && <div className="result-sequence" aria-live="polite">
         {stage >= 2 && <strong className={presentation.gainedScore > 0 ? 'score-pop' : 'no-score'}>
           {presentation.gainedScore > 0 ? `今回 +${presentation.gainedScore}点` : 'NO SCORE'}</strong>}

@@ -1,3 +1,4 @@
+import { validateZeroOneRecovery } from './zeroOneRecovery';
 import { createPenaltyState, calculatePenalty } from '../game/penalty';
 import { resolveRoll, assertPlayerTurn } from '../game/rollResolver';
 import { validateSetup, validateSetupDraft } from '../game/setup';
@@ -20,7 +21,7 @@ import { createSeriesPenalty, partitionSeriesPenalty, seriesChunkBase } from '..
  */
 export const SESSION_GAME_KEY = 'ichi-go:game';
 export const SESSION_SOUND_KEY = 'ichi-go:sound';
-export const SESSION_SCHEMA_VERSION = 5 as const;
+export const SESSION_SCHEMA_VERSION = 6 as const;
 export const SOUND_SCHEMA_VERSION = 1 as const;
 
 export interface StorageAdapter {
@@ -69,7 +70,7 @@ function validRound(value: unknown, seriesRuntime = false): value is SuddenDeath
     || !isSafeCount(value.totalCompletionCount) || !isSafeCount(value.suddenDeathCount)
     || !Number.isInteger(value.currentPlayerIndex) || !isDiceMode(value.diceMode) || !isRollLimit(value.rollLimit)) return false;
   const config = { mode: value.mode, rollLimit: value.rollLimit };
-  if (!isModeConfiguration(config) || (config.mode.type === 'series' && !seriesRuntime)) return false;
+  if (!isModeConfiguration(config) || config.mode.type === 'zeroOne' || (config.mode.type === 'series' && !seriesRuntime)) return false;
   const diceMode = value.diceMode;
   const participants = value.participants;
   const players = value.players;
@@ -297,6 +298,9 @@ export function validateStoredFlowState(value: unknown): value is FlowState {
     const sourceById = new Map(value.replaySource.participants.map((participant) => [participant.id, participant.name]));
     return value.draft.participants.length === sourceById.size
       && value.draft.participants.every((participant) => sourceById.get(participant.id) === participant.name);
+  }
+  if (isRecord(value.game) && isRecord(value.game.mode) && value.game.mode.type === 'zeroOne') {
+    return value.gameNumber >= 1 && value.gameNumber <= value.revision && validateZeroOneRecovery(value);
   }
   if (isRecord(value.game) && isRecord(value.game.mode) && value.game.mode.type === 'series') {
     return value.gameNumber >= 1 && value.gameNumber <= value.revision && validStoredSeries(value);

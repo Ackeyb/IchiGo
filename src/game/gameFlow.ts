@@ -1,3 +1,7 @@
+import { advanceZeroOne, isZeroOneFlow, startZeroOne } from './zeroOneFlow';
+import type { ZeroOneFlowState } from './zeroOneFlow';
+import type { ZeroOneGame } from './zeroOne';
+import { zeroOneDiceCount } from './zeroOne';
 import { continueTurn, createTurn, rollTurn } from './gameEngine';
 import { createPenaltyState, rollPenalty } from './penalty';
 import type { PenaltyState } from './penalty';
@@ -23,6 +27,7 @@ type Round = Base & Readonly<{ game: SuddenDeathState | SeriesState }>;
 export type SetupKind = 'initial' | 'newGame' | 'fullReset';
 export type ReplayPreparation = Setup;
 export type FlowState =
+  | ZeroOneFlowState
   | (Base & Readonly<{ phase: 'setup'; draft: Setup; setupKind: SetupKind }>)
   | (Base & Readonly<{ phase: 'replayPreparation'; draft: ReplayPreparation; replaySource: ReplayPreparation }>)
   | (Round & Readonly<{ phase: 'turn'; turn: TurnState }>)
@@ -36,8 +41,8 @@ export type FlowAction =
   | Readonly<{ type: 'updateSetup'; draft: Setup }>
   | Readonly<{ type: 'reorderReplay'; participantIds: readonly string[] }>
   | Readonly<{ type: 'nextSeriesGame'; currentGameNumber: number }>
-  | (Readonly<{ type: 'startSeriesPenalty' | 'nextSeriesPenaltyChunk' }> & SeriesChunkRequest)
-  | Readonly<{ type: 'nextSeriesPenaltyLoser'; penaltyId: string; playerId: string }>
+  | (Readonly<{ type: 'startSeriesPenalty' | 'nextSeriesPenaltyChunk' | 'startZeroOnePenalty' | 'nextZeroOnePenaltyChunk' }> & SeriesChunkRequest)
+  | Readonly<{ type: 'nextSeriesPenaltyLoser' | 'nextZeroOnePenaltyLoser'; penaltyId: string; playerId: string }>
   | Readonly<{ type: 'roll' | 'next' | 'ranking' | 'reveal' | 'suddenDeath' | 'startSuddenDeath' | 'nextCompletionTargetGame'
     | 'penalty' | 'rollPenalty' | 'nextPenalty' | 'finish' | 'replay' | 'startReplay'
     | 'newGame' | 'exitGame' | 'fullReset' }>;
@@ -55,6 +60,7 @@ function turnFor(game: SuddenDeathState, gameNumber: number): TurnState {
 function start(state: Base, setup: Setup): FlowState {
   if (!validateSetup(setup)) throw new Error('プレイヤー設定を確認してください。');
   const gameNumber = state.gameNumber + 1;
+  if (setup.mode.type === 'zeroOne') return startZeroOne(setup, state.revision, gameNumber);
   const participants = setup.participants.map(({ id, name }) => ({ id, name: name.trim() }));
   const game: SuddenDeathState = {
     participants, throwStyle: setup.throwStyle, diceMode: setup.diceMode, ...modeConfiguration(setup),
@@ -66,12 +72,15 @@ function start(state: Base, setup: Setup): FlowState {
   return { phase: 'turn', revision: state.revision, gameNumber, game: running, turn: turnFor(running, gameNumber) };
 }
 
-function preparationFromGame(game: SuddenDeathState): ReplayPreparation {
+function preparationFromGame(game: SuddenDeathState | ZeroOneGame): ReplayPreparation {
+  if (game.mode.type === 'zeroOne') return { participants: game.participants.map((p) => ({ ...p })),
+    diceMode: zeroOneDiceCount(game.mode.preset), throwStyle: game.throwStyle, mode: game.mode, rollLimit: null };
+  const normal = game as SuddenDeathState;
   return {
     participants: game.participants.map(({ id, name }) => ({ id, name })),
-    diceMode: game.diceMode,
+    diceMode: normal.diceMode,
     throwStyle: game.throwStyle,
-    ...modeConfiguration(game),
+    ...modeConfiguration(normal),
   };
 }
 
@@ -114,19 +123,21 @@ function apply(state: FlowState, action: FlowAction, random: RandomSource): Flow
     if (action.type === 'startReplay') return start(state, state.draft);
     return state;
   }
-  const { game, gameNumber, revision } = state;
-  if (action.type === 'replay' && (state.phase === 'finished' || state.phase === 'seriesRanking' || state.phase === 'seriesFinished')) {
+  const { gameNumber, revision } = state;
+  if (action.type === 'replay' && (state.phase === 'finished' || state.phase === 'seriesRanking' || state.phase === 'seriesFinished' || state.phase === 'zeroOneFinished')) {
     // Replay retains the finished game's settings; its preparation phase permits only participant reordering.
-    const replaySource = preparationFromGame(game);
+    const replaySource = preparationFromGame(state.game);
     return { phase: 'replayPreparation', revision, gameNumber, draft: replaySource, replaySource };
   }
-  if (action.type === 'newGame' && (state.phase === 'finished' || state.phase === 'seriesRanking' || state.phase === 'seriesFinished')) {
+  if (action.type === 'newGame' && (state.phase === 'finished' || state.phase === 'seriesRanking' || state.phase === 'seriesFinished' || state.phase === 'zeroOneFinished')) {
     // New Game carries the same settings into an editable Setup draft.
-    return { phase: 'setup', revision, gameNumber, draft: preparationFromGame(game), setupKind: 'newGame' };
+    return { phase: 'setup', revision, gameNumber, draft: preparationFromGame(state.game), setupKind: 'newGame' };
   }
   if (action.type === 'exitGame' && state.phase !== 'finished') {
     return { phase: 'setup', revision, gameNumber, draft: initialSetup(), setupKind: 'initial' };
   }
+  if (isZeroOneFlow(state)) return advanceZeroOne(state, action, random);
+  const { game } = state;
   if (state.phase === 'seriesIntermediate') {
     if (action.type !== 'nextSeriesGame') return state;
     const next = nextSeriesGame(state.game, action.currentGameNumber);
@@ -226,4 +237,11 @@ export function advanceFlow(state: FlowState, expectedRevision: number, action: 
   if (expectedRevision !== state.revision) return state;
   const next = apply(state, action, random);
   return next === state ? state : { ...next, revision: state.revision + 1 };
+}
+
+/** Shared chunk consumer boundary; the mode owns how totalDice and multiplier are established. */
+export function chunkPenaltyState(state: FlowState): SeriesPenaltyState | undefined {
+  if (state.phase === 'seriesPenalty' || state.phase === 'seriesFinished') return state.seriesPenalty;
+  if (state.phase === 'zeroOnePenalty' || state.phase === 'zeroOneFinished') return state.zeroOnePenalty;
+  return undefined;
 }

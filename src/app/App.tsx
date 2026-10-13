@@ -1,3 +1,5 @@
+import { isZeroOneFlow } from '../game/zeroOneFlow';
+import { ZeroOneScreen } from './ZeroOneScreen';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { getPenaltyMultiplier } from '../game/penalty';
@@ -87,6 +89,8 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
   useEffect(() => {
     if (!busy) return;
     const hasDicePresentation = (committedState.phase === 'turn' && committedState.turn.phase === 'result')
+      || (committedState.phase === 'zeroOneTurn' && !!committedState.result)
+      || (committedState.phase === 'zeroOnePenalty' && committedState.zeroOnePenalty.entries[committedState.zeroOnePenalty.currentLoserIndex]!.committedChunks.length > 0)
       || (committedState.phase === 'penalty' && committedState.penalty.penalties[committedState.penaltyIndex]?.status === 'resolved')
       || (committedState.phase === 'seriesPenalty' && committedState.seriesPenalty.entries[committedState.seriesPenalty.currentLoserIndex]!.committedChunks.length > 0);
     if (hasDicePresentation) return;
@@ -97,17 +101,17 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
   // Keep focus on the current heading without browser scrolling during in-phase Play/Penalty updates.
   useEffect(() => {
     const preventRollScroll = focusedPhase.current === state.phase
-      && (state.phase === 'turn' || state.phase === 'penalty' || state.phase === 'seriesPenalty');
+      && (state.phase === 'turn' || state.phase === 'penalty' || state.phase === 'seriesPenalty' || state.phase === 'zeroOneTurn' || state.phase === 'zeroOnePenalty');
     heading.current?.focus({ preventScroll: preventRollScroll });
     focusedPhase.current = state.phase;
   }, [state.phase, state.revision]);
   const send = (action: FlowAction) => {
-    if (action.type === 'roll' || action.type === 'rollPenalty' || action.type === 'startSeriesPenalty') playCue('roll');
+    if (action.type === 'roll' || action.type === 'rollPenalty' || action.type === 'startSeriesPenalty' || action.type === 'startZeroOnePenalty') playCue('roll');
     else if (action.type === 'suddenDeath') playCue('sudden-death');
     else if (action.type === 'reveal') playCue('loser-reveal');
     store.dispatch(committedState.revision, action);
   };
-  const action = (label: string, type: Exclude<FlowAction['type'], 'start' | 'updateSetup' | 'reorderReplay' | 'nextSeriesGame' | 'startSeriesPenalty' | 'nextSeriesPenaltyChunk' | 'nextSeriesPenaltyLoser'>) => <ActionButton disabled={busy || !!confirm}
+  const action = (label: string, type: Exclude<FlowAction['type'], 'start' | 'updateSetup' | 'reorderReplay' | 'nextSeriesGame' | 'startSeriesPenalty' | 'nextSeriesPenaltyChunk' | 'nextSeriesPenaltyLoser' | 'startZeroOnePenalty' | 'nextZeroOnePenaltyChunk' | 'nextZeroOnePenaltyLoser'>) => <ActionButton disabled={busy || !!confirm}
     onClick={() => send({ type })}>{label}</ActionButton>;
   const toggleSound = () => {
     const next = !soundEnabledRef.current;
@@ -125,6 +129,16 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
     onStart={(setup) => send({ type: 'start', setup })} />;
   else if (state.phase === 'replayPreparation') content = <ReplayPreparationScreen draft={state.draft} busy={busy || !!confirm}
     onReorder={(participantIds) => send({ type: 'reorderReplay', participantIds })} onStart={() => send({ type: 'startReplay' })} />;
+  else if (isZeroOneFlow(state)) {
+    const committed = isZeroOneFlow(committedState) ? committedState : state;
+    if (state.phase === 'zeroOnePenalty') content = <SeriesPenaltyPresentation state={state}
+      committedState={committed.phase === 'zeroOnePenalty' ? committed : state} store={store} coordinator={seriesAuto}
+      busy={busy} blocked={!!confirm} heading={heading} send={send} config={dicePresentation} onCue={playCue} />;
+    else content = <ZeroOneScreen state={state} committedState={committed} busy={busy} blocked={!!confirm}
+      heading={heading} store={store} send={send} config={dicePresentation} onCue={playCue}
+      finalActions={<div className="final-actions"><ActionButton disabled={busy || !!confirm} onClick={(opener) => openConfirmation({ action: 'replay', revision: state.revision, opener })}>同じメンバーでもう一度</ActionButton>
+        <ActionButton disabled={busy || !!confirm} onClick={(opener) => openConfirmation({ action: 'newGame', revision: state.revision, opener })}>新しいゲーム</ActionButton></div>} />;
+  }
   else {
     const { game } = state;
     const name = (id: string) => game.participants.find((p) => p.id === id)!.name;
@@ -259,15 +273,19 @@ export function App({ random = mathRandomSource, store: suppliedStore, dicePrese
     {recovered && <p className="recovery-status" role="status">ゲームを復旧しました。</p>}
     {(recoveryNotice ?? soundRecoveryNotice) && <p className="recovery-warning" role="status">
       {recoveryNoticeText((recoveryNotice ?? soundRecoveryNotice)!)}</p>}
-    {state.phase !== 'setup' && state.phase !== 'replayPreparation' && <div className="game-summary" aria-label="ゲーム情報">
+    {state.phase !== 'setup' && state.phase !== 'replayPreparation' && !isZeroOneFlow(state) && <div className="game-summary" aria-label="ゲーム情報">
       <span>{isCompletionTargetState(state.game) && state.game.completionTargetRound.kind === 'regular' ? '通常ラウンド'
         : state.game.suddenDeathCount ? `サドンデス ${state.game.suddenDeathCount}` : '通常ラウンド'}</span>
       <span>投げ方：{styleLabels[state.game.throwStyle]}</span><span>累積完走：{state.game.totalCompletionCount}</span>
       <strong>ペナルティ倍率 ×{getPenaltyMultiplier(state.game.totalCompletionCount)}</strong>
     </div>}
+    {isZeroOneFlow(state) && <div className="game-summary" aria-label="ゲーム情報"><span>ゼロワン {state.game.mode.preset}</span>
+      <span>{state.game.suddenDeathCount ? `サドンデス ${state.game.suddenDeathCount}` : '通常ラウンド'}</span>
+      <span>投げ方：{styleLabels[state.game.throwStyle]}</span><span>Clean Clear：{state.game.totalCleanClearCount}</span>
+      <strong>ペナルティ倍率 ×{getPenaltyMultiplier(state.game.totalCleanClearCount)}</strong></div>}
     {error && <p role="alert" className="field-error">{error}</p>}
     {content}
-    {state.phase !== 'setup' && state.phase !== 'replayPreparation' && state.phase !== 'finished' && state.phase !== 'seriesFinished' && <button className="exit-button" disabled={busy || !!confirm} onClick={(event) => openConfirmation({ action: 'exitGame', revision: state.revision, opener: event.currentTarget })}>ゲームを終了する</button>}
+    {state.phase !== 'setup' && state.phase !== 'replayPreparation' && state.phase !== 'finished' && state.phase !== 'seriesFinished' && state.phase !== 'zeroOneFinished' && <button className="exit-button" disabled={busy || !!confirm} onClick={(event) => openConfirmation({ action: 'exitGame', revision: state.revision, opener: event.currentTarget })}>ゲームを終了する</button>}
     <footer>ONE ROLL AT A TIME · 最後のダイスまで。</footer>
     {confirm && <ConfirmDialog opener={confirm.opener} title={confirm.action === 'replay' ? '再戦の準備へ進みますか？'
       : confirm.action === 'newGame' ? '新しいゲームに戻りますか？'

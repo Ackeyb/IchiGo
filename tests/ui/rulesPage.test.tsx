@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../src/app/App';
@@ -105,7 +105,7 @@ describe('Rules Page', () => {
     for (const heading of ['基本ルール', 'ゲーム設定', 'ノーマル', '完走指定', '連続試合', 'Penalty（ペナルティポイント）']) {
       expect(screen.getByRole('heading', { name: heading, level: 3 })).toBeTruthy();
     }
-    expect(screen.getByText(/1は100点、5は50点/)).toBeTruthy();
+    expect(within(screen.getByRole('heading', { name: '基本ルール' }).closest('section')!).getByText(/1は100点、5は50点/)).toBeTruthy();
     expect(screen.getByText(/目標に達した瞬間には終了しません/)).toBeTruthy();
     expect(screen.getByText(/完走回数はRoundをまたいで累積/)).toBeTruthy();
     expect(screen.getByText(/最大70個/)).toBeTruthy();
