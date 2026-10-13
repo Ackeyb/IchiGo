@@ -1,11 +1,11 @@
 # Game engine
 
-IchiGo v5のTurn、Round / Series進行、順位、Penaltyを扱う純粋なTypeScript domainです。
+IchiGo v6のTurn、Round / Series進行、順位、Penaltyを扱う純粋なTypeScript domainです。
 
 この層はReact、DOM、3D描画、音声、ストレージに依存しません。
-ゲームルールの正本は [docs/SPEC.md](../../docs/SPEC.md) です。v5 / v4 / v3変更仕様書と過去STEP / auditは履歴資料です。
+ゲームルールの正本は [docs/SPEC.md](../../docs/SPEC.md) です。v6 / v5 / v4 / v3変更仕様書と過去STEP / auditは履歴資料です。
 
-## API
+## API（ノーマル / 完走指定 / 連続試合のTurn）
 
 - `createTurn({ turnId, totalCompletionCount, diceMode }, throwStyle?)`: 選択Modeの個数・0点で開始。Mode省略時は7、投げ方省略時は普通（1%）。
 - `rollTurn(state, rollNumber, random, expectedTurnId, diceMode?, rollLimit?)`: 最新状態にROLL要求を適用し、新しい確定状態を返します。完走時は累積完走数も同時に1加算します。
@@ -135,7 +135,7 @@ Reactとは独立してテスト可能です。UI側の操作ロックと描画�
 - `exitGame` は進行中ゲームを従来の初期Setupへ戻し、Final Resultの`newGame`とは区別します。
 - `fullReset` はSetup draftをノーマル・2人空欄・7 DICE・normal throw・ROLL ∞へ戻します。
 
-Game Recovery schemaはversion 5で、進行中ゲームに加えてSetup／再戦準備draftを保存します。再戦準備は固定元構成も照合し、復旧データによる改名・設定変更を拒否します。schema 4を含む旧game snapshotはmigration / mode・continuation identity補完せずunsupportedとして拒否します。Seriesの進行 / 累積 / Penalty chunkはmode別validatorで照合し、修復しません。
+Game Recovery schemaはversion 6で、進行中ゲームに加えてSetup／再戦準備draftを保存します。再戦準備は固定元構成も照合し、復旧データによる改名・設定変更を拒否します。schema 5以下の旧game snapshotはmigration / mode・continuation identity補完せずunsupportedとして拒否します。Seriesの進行 / 累積 / Penalty chunkはmode別validatorで照合し、修復しません。
 
 SoundはFlow stateに含めず、game schemaとは独立したversion 1形式で保存します。Game Recoveryのschema更新や準備・reset遷移でSoundを初期化しません。
 
@@ -143,19 +143,19 @@ SoundはFlow stateに含めず、game schemaとは独立したversion 1形式で
 
 Replay Preparationは名前・Game Modeと固有設定・Dice Mode・throwStyle・ROLL上限を読み取り専用で表示し、既存IDの順序変更と明示的な`startReplay`だけを操作として公開します。
 
-## ROLL上限とRecovery
+## ROLL上限とRecovery（既存3モード）
 
 正式仕様は `docs/SPEC.md` のROLL上限 / Recovery契約です。`RollLimit = null | 1 | 2 | 3 | 4 | 5` とし、nullは無制限・初期値です。設定の正本は編集時の`Setup.rollLimit`と開始後の`game.rollLimit`だけです。Player／Turnへコピーせず、使用回数は既存の`rollNumber`／`nextRollNumber`から導出します。
 
 Flowは現在のROLL番号とゲームの上限をEngine／resolverへ明示的に渡します。上限超過の番号は抽選前に拒否し、結果確定後はCOMPLETE → no-score → ROLL上限 → activeDiceなし → 継続の順で判定します。`turnEnd`結果だけに`reason: noScore | rollLimit | noActiveDice`を保持します。上限に達してもそのROLLの得点・OUT・除外は確定します。Rankingは変更しません。
 
-Sudden Death、Replay preparation、New GameはrollLimitを引き継ぎ、Full Resetはnullへ戻します。Game Recoveryはschema 5でmode / rollLimitを必須検証し、旧schemaを補完・移行せず拒否します。保存結果は同じROLL番号・上限で再解決し、最終ROLL終了後の`nextRollNumber = rollLimit + 1`も正当な状態です。Soundは独立したschema 1を維持します。
+Sudden Death、Replay preparation、New GameはrollLimitを引き継ぎ、Full Resetはnullへ戻します。Game Recoveryはschema 6でmode / rollLimitを必須検証し、旧schemaを補完・移行せず拒否します。保存結果は同じROLL番号・上限で再解決し、最終ROLL終了後の`nextRollNumber = rollLimit + 1`も正当な状態です。Soundは独立したschema 1を維持します。
 
 設定／表示UI・Three.js・Penalty OUTも実装済みで、上限とTurn進行の正本はdomainに置きます。`tests/game/rollLimit.test.ts`と`tests/storage/rollLimitRecovery.test.ts`で上限、優先順位、引継ぎ、乱数非消費、保存境界を検証します。
 
 ## Game Mode / Completion Target
 
-`types.ts`の`GameMode`はnormal / completionTarget / seriesのdiscriminated unionです。`ModeConfiguration`はcompletionTargetとrollLimit=nullの相関を保証し、`isGameMode`はhidden mode設定を拒否します。`modeConfiguration`は設定だけを抽出し、進行stateをcarryしません。
+`types.ts`の`GameMode`はnormal / completionTarget / series / zeroOneのdiscriminated unionです。`ModeConfiguration`はcompletionTarget / zeroOneとrollLimit=nullの相関を保証し、`isGameMode`はhidden mode設定を拒否します。`modeConfiguration`は設定だけを抽出し、進行stateをcarryしません。
 
 `setup.ts`の`switchSetupMode`は別モードへの変更時にtarget=1 / gameCount=2を作り、同一mode再選択は元のdraftを保持します。完走指定へ入ると∞を強制し、離れても古い有限上限を戻しません。UIだけでなくdraft validatorもmodeと上限の整合を検証します。
 
@@ -183,6 +183,29 @@ authorityはpenaltyId、entries（playerId / totalDice / status / committedChunk
 
 domainはtimerを所有しません。`src/app/seriesPenaltyAutoCoordinator.ts`がreveal / paint acknowledgment後1500msで次chunk actionを送ります。Storeのrevisionとchunk identityを最新stateと照合し、stale requestはRNG前に拒否します。確認dialog中は停止し、取消後fresh wait。復旧runningも復元表示ack後fresh waitで自動再開し、pending次敗者は新たなuser tapが必要です。
 
-`src/storage/sessionRecovery.ts`はschema 5でmode別進行、累積の到達可能範囲、phase、chunk prefix / status、BASE一致を検証し、過去Gameの推測repair・committed chunk再抽選 / 再加算を行いません。timer / ack / 残りmsは保存しません。Sound schema 1は独立です。
+`src/storage/sessionRecovery.ts`はschema 6でmode別進行、累積の到達可能範囲、phase、chunk prefix / status、BASE一致を検証し、過去Gameの推測repair・committed chunk再抽選 / 再加算を行いません。timer / ack / 残りmsは保存しません。Sound schema 1は独立です。
 
 2D Series Penaltyは元Dice Modeと独立の最大5列chunk配置、Renderer入力は現在chunk最大10個です。通常PlayのDice Mode配置とThree.js stagingを変更しません。running UIは累計BASE、resolved後は倍率 / FINALを表示し、chunk BASE小計・式末尾小計は非表示。Rule PageはUI navigationでdomain phaseを追加せず、draft / RNG / Recoveryを変更しません。
+
+## Zero-One domain / shared infrastructure
+
+- `zeroOne.ts`: authoritative preset mapping（350→5 / 500→7 / 700→10 / 1000→14）、player初期化 / invariant、確定diceからのpure resolver、1 ROLL = 1 Turn、未Clear順巡回、同率Sudden Death reset。
+- `zeroOneFlow.ts`: zeroOneTurn / zeroOneRanking / zeroOnePenalty / zeroOneFinishedを分離。`gameFlow.advanceFlow`のrevision guard後にdelegateし、ROLL result / player / Clean Clear countをatomicにcommitする。resultなしが受付中、resultありはそのTurn終了・次Action待ち。NormalのcontinueTurnを使わない。
+- `zeroOneRanking.ts`: 全員Clearを要求し、累積Turn数昇順だけでcompetition ranking。実時間順はtie-breakではなく、lowest rank全員をoriginal orderで返す。
+- `zeroOnePenalty.ts`: 全員同率を拒否し、loserTurnCount - topTurnCountからpending entriesを作る。preset diceを掛けず、Seriesの最大70を適用しない。
+
+running ZeroOneGameはmode / preset、participants、Throw Style、players、currentPlayerIndex、suddenDeathCount、totalCleanClearCountを持ち、diceMode / rollLimit / totalCompletionCountは持たない。個数はpresetから導出し、Setup / Replay draftのdiceMode projectionは対応表と照合する。`switchSetupMode`は別modeから入ると500 / 7とnull、同一modeなら現在値、離れるとpresetを破棄する。独立Dice Mode / ROLL上限UIは非表示。
+
+playerはremainingScore、active / stranded / removed dice、accumulatedTurnCount、isCleared、cleanClearEligibleを持つ。`resolveZeroOneRoll`はbefore snapshotとdiceを保持し、Clear > Bust > Short > ordinary endを解決する。Bustはbefore score / diceへrollbackし、Turn+1 / eligibility=falseだけ維持する。Shortは更新後remainingScore > activeDice*100でpreset初期score / full diceへresetし、Turn count / eligibility=falseを維持する。SAFE 1/5=100/50、OUT/null=0、dice invariantはpreset countとの一致。
+
+Clean ClearはRound開始からBust / ShortなしのClearで、Short resetは新Roundではない。initial / fresh GameとSD startだけ全員eligibility=true。`advanceZeroOne`がqualifying eventを1回だけglobal countへ加算し、SD resetはTurn countとglobal clean countを保持する。全員同Turn数は最終Clear確認後の明示SDへ、差があれば明示Rankingへ進む。
+
+`seriesPenalty.ts`のshared commit / loser advance / BASE算術を再利用する。`partitionSeriesPenalty`とSeries側commitのdefault最大70は維持し、Zero-One側はTurn差を正確な数値表現の範囲で受け付ける。巨大planを保存せず、chunk count=ceil(totalDice/10)、next index=committedChunks.length、今回size=min(10,残数)を導出する。各requestのidentity / prefix / statusをRNG前に検証する。
+
+`seriesPenaltyResult`はZero-OneではtotalCleanClearCountを渡し、resolved時だけfull BASE × (clean count+1)を導出する。OUTはPenalty算術だけ6で、DieResultはout/nullのまま。SeriesのcumulativeRemainingDice / totalCompletionCount契約をZero-Oneへ混用しない。
+
+`SeriesPenaltyPresentation` / `seriesPenaltyAutoCoordinator` / `chunkPenaltyState`は両modeのconsumer境界。各loser first tap、reveal / paint ack後1500msで1 guarded chunk、stale revision / Store / penalty / loser / prefixはRNG前に拒否する。dialog OPENで同期停止、CANCEL fresh wait、ACCEPT no resume。timerはdomainに置かず、running Recoveryはrestored paint ack後fresh wait、pending loserは自動開始しない。
+
+`src/storage/zeroOneRecovery.ts`はschema 6の専用validator。preset / scoreとdice / Turn / SD / eligibility / global count / phase / player identity、saved beforeからresolverで再計算した結果、ranking、Turn差Penalty対象数・ordered chunk prefix・status・BASEを照合する。再計算は一致検証のみで、repair / RNG / 過去Turn replayはしない。確定Bust rollback / Short reset / Clear countを復元し、二重適用しない。plan / next index / multiplier / FINAL、timer / ack / pause / 残りmsは保存しない。schema5以下はunsupported、missing preset / Turn count / eligibility補完なし、Sound schema1独立。
+
+`ZeroOneScreen`はvisibleStateからremainingScore / active / Turns / outcome / player進行を表示し、未ClearにFinal Rankを付けない。committed diceとBust / Short outcomeはstaged presenterへ渡す。Renderer / UIは結果決定やRandomSource消費を行わず、通常ROLLはpreset-derived layout、Penaltyは独立max10 chunk layoutと同じ結果fallbackを使う。Replayは設定固定 / orderのみ、New Gameはconfigのみeditable carry、Full Resetは既存Normal defaults。`tests/game/zeroOne.test.ts`と`tests/ui/zeroOne.test.tsx`がdomain / Recovery / shared coordinator / staged UIを検証する。

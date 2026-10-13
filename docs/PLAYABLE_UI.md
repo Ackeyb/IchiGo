@@ -1,8 +1,8 @@
-# Playable UI — v5 current implementation
+# Playable UI — v6 current implementation
 
-main / 62fe415のv5機能は実装済み。実機通しプレイ・実Rendererの視覚確認・その他ユーザー自身の最終プレイ確認・Human Push判断は残件。本書は現行UIの接続契約を説明する。正式仕様は[SPEC](SPEC.md)、現在の保守フローと過去STEP記録は[実装進行ガイド](../実装進行ガイド.md)。
+main / 02ce541のv6機能は実装済み。実機通しプレイ・実Rendererの視覚確認・その他ユーザー自身の最終プレイ確認・Human Push判断は残件。本書は現行UIの接続契約を説明する。正式仕様は[SPEC](SPEC.md)、現在の保守フローと過去STEP記録は[実装進行ガイド](../実装進行ガイド.md)。
 
-## Current: v5
+## Current: v6
 
 ## フロー
 
@@ -14,7 +14,7 @@ main / 62fe415のv5機能は実装済み。実機通しプレイ・実Renderer�
 - 最終結果から「同じメンバーでもう一度」は確認後にReplay Preparationへ進み、順番だけを変更して明示的に再戦を開始する。「新しいゲーム」は前ゲームの人物・internal ID・名前・順番・Game Modeと固有設定・Dice Mode・投げ方・ROLL上限を引き継いだ編集可能なSetupへ進む。
 - ゲーム中の「ゲームを終了する」も確認後に初期Setupへ戻る。
 
-継続ROLL、次プレイヤー、次Round / Series Game、各敗者の初回Penalty ROLLは明示的なユーザー操作。Series Penaltyの後続chunkだけはpresentation complete後1500msを経て自動進行する。
+継続ROLL、次プレイヤー、次Round / Series Game、各敗者の初回Penalty ROLLは明示的なユーザー操作。Series / Zero-One Penaltyの後続chunkだけはpresentation complete後1500msを経て自動進行する。
 描画完了は確定結果のrevealと操作ロック解除を行う。後続chunkはcoordinatorが別のguarded actionを送る。描画側で既存resultを再計算しない。
 
 ## 状態と接続契約
@@ -48,7 +48,7 @@ main / 62fe415のv5機能は実装済み。実機通しプレイ・実Renderer�
 ## 3D Dice接続
 
 依存方向はGame Engine → committed `DieResult[]` → `DicePresentationController` → `DiceRenderer`。
-Three.jsはdynamic importし、RendererからEngineへ結果を返さない。通常ROLLとPenalty（Seriesは現在chunk）は、Engineが確定した配列順と値をそのまま表示する。
+Three.jsはdynamic importし、RendererからEngineへ結果を返さない。通常ROLLとPenalty（Series / Zero-Oneは現在chunk）は、Engineが確定した配列順と値をそのまま表示する。
 
 - SAFEは複数回バウンドしながら指定面を上にする最終quaternionへ収束させる。OUTは数値面を持たない専用色で盤面を転がり、縁を越えて重力落下する。
 - `DiceRenderer`は`initialize / present / clear / dispose`を持ち、同一request IDを重複実行しない。
@@ -69,11 +69,11 @@ Three.jsはdynamic importし、RendererからEngineへ結果を返さない。�
 
 ## Session Recovery
 
-`src/storage/sessionRecovery.ts`が`sessionStorage`との境界、game/draft schema version 5の保存形式、復旧validationを担当する。`gameStore`はEngineまたはFlowが返した次のauthoritative state / draftをまずmemoryへcommitし、その直後に保存を試みてからsubscriberへ通知する。保存成否はゲームルール、Presentation、interaction unlockへ影響させない。
+`src/storage/sessionRecovery.ts`が`sessionStorage`との境界、game/draft schema version 6の保存形式、復旧validationを担当する。`gameStore`はEngineまたはFlowが返した次のauthoritative state / draftをまずmemoryへcommitし、その直後に保存を試みてからsubscriberへ通知する。保存成否はゲームルール、Presentation、interaction unlockへ影響させない。
 
 - ゲーム中はauthoritative `FlowState`、Setup / Replay Preparationでは現在のdraftを保存する。`visibleState`、busy、animation stage、Three.js resource、Promise、timer、RAF、AudioContextは保存しない。
-- reload時は保存済みstateを`visibleState`にも設定し、busy=falseで開始する。確定済みROLL／Penaltyを再抽選せず、次の有効な操作から再開する。Series Penaltyのrunningだけは復元表示のpaint acknowledgment後fresh 1500msで次未実行chunkを自動再開する。pending loserは自動開始しない。完走指定の終端Playは未達の次Game / 達成後の真のSudden Death / 決着結果待ちを区別する。非最終SeriesはPlayの「次の試合へ」待ちを復元し、累積を再加算しない。最終SeriesはPlayのmaskを維持し、Final Rankingで実値を表示する。
-- プレイヤー数・ID・順序、Game Modeと固有設定・Dice Mode・ROLL上限、ダイス不変条件、得点・完走、手番、phase、累積完走数、turnId・roll番号、penaltyId・計算結果を検証する。不正値は補正せず破棄し、schema 4を含む旧game saveはmigrationなしで拒否し、mode / ROLL ∞ / continuation identityを推測補完しない。schema 4 → 5 migrationは行わない。
+- reload時は保存済みstateを`visibleState`にも設定し、busy=falseで開始する。確定済みROLL／Penaltyを再抽選せず、次の有効な操作から再開する。Series / Zero-One Penaltyのrunningだけは復元表示のpaint acknowledgment後fresh 1500msで次未実行chunkを自動再開する。pending loserは自動開始しない。完走指定の終端Playは未達の次Game / 達成後の真のSudden Death / 決着結果待ちを区別する。非最終SeriesはPlayの「次の試合へ」待ちを復元し、累積を再加算しない。最終SeriesはPlayのmaskを維持し、Final Rankingで実値を表示する。
+- プレイヤー数・ID・順序、Game Modeと固有設定・Dice Mode・ROLL上限、ダイス不変条件、得点・完走、手番、phase、累積完走数、turnId・roll番号、penaltyId・計算結果を検証する。不正値は補正せず破棄し、schema 5以下の旧game saveはmigrationなしで拒否し、mode / ROLL ∞ / continuation identityを推測補完しない。schema 5以下 → 6 migrationは行わない。
 - `newGame`は設定を引き継いだ編集可能なSetup draft、`replay`は順序だけ変更できるPreparation draft、`fullReset`はノーマル・2人・空欄・7 DICE・normal・ROLL ∞のSetup draftを保存する。
 - Sound設定はschema 1でゲームstateと別キーに保存し、reload後も同一タブ内で維持する。
 - access／read／write／remove失敗時は非侵襲的な警告を表示し、memory-onlyでゲームを継続する。
@@ -87,7 +87,7 @@ Three.jsはdynamic importし、RendererからEngineへ結果を返さない。�
 - ブラウザー確認用の生成物は`output/playwright/`に置き、コミットしない。
 
 振動・シェイク操作は対象外。
-v5の最終通しプレイQA・OUT実画面目視・最終Push判断は人間が行う。追加AI最終監査を必須工程にしない。v1当時の監査は履歴資料FINAL_AUDITを参照する。
+v6の最終通しプレイQA・OUT実画面目視・最終Push判断は人間が行う。追加AI最終監査を必須工程にしない。v1当時の監査は履歴資料FINAL_AUDITを参照する。
 
 ## Responsive / Final UI Polish
 
@@ -102,11 +102,13 @@ v5の最終通しプレイQA・OUT実画面目視・最終Push判断は人間が
 
 Setupは2〜10人のparticipant行を正とし、追加・中間削除・並べ替え・名前・Game Modeと固有設定・Dice Mode 5 / 7 / 10 / 14・throwStyle・ROLL上限を編集する。IDを維持しdraft変更を保存する。「ROLL上限」のvisible optionsは∞ / 1 / 2 / 3 / 4 / 5、default∞。
 
-Game Modeはプレイヤー設定の下にノーマル（default） / 完走指定 / 連続試合を配置する。完走指定だけ「最低完走者数」1〜5、連続試合だけ「試合数」2〜5を表示する。モード切替は完走指定target=1、連続試合gameCount=2へresetし、同一mode再選択は現在値を維持する。非選択modeのhidden設定は保持しない。完走指定はROLL∞固定でROLL上限fieldset自体を非表示にし、離れた後も以前の有限値を復活させない。
+Game Modeはプレイヤー設定の下にノーマル（default） / 完走指定 / 連続試合 / ゼロワンを配置する。完走指定だけ「最低完走者数」1〜5、連続試合だけ「試合数」2〜5を表示する。モード切替は完走指定target=1、連続試合gameCount=2へresetし、同一mode再選択は現在値を維持する。非選択modeのhidden設定は保持しない。完走指定はROLL∞固定でROLL上限fieldset自体を非表示にし、離れた後も以前の有限値を復活させない。
 
 Replay Preparationは人物・ID・名前・Game Modeと固有設定・Dice Mode・throwStyle・ROLL上限を固定し、順番だけ変更して明示開始する。有限は「ROLL 3回」等、無制限は「ROLL ∞」。New Gameはこれらを引き継いだ編集可能Setup。Full Resetは確認後ノーマル・2人・空欄・初期順・7 DICE・normal・ROLL ∞へ戻り、Soundを維持する。
 
-## ROLL counter / Turn End
+ゼロワンはpreset 350 / 500 / 700 / 1000と投げ方を表示し、Dice Mode selector / ROLL上限fieldsetは非表示。default 500 / 7 DICE、別modeから戻るとdefault、同一mode再選択は現在presetを維持する。Replayはmode / preset / derived Dice Count / Throw Style固定でorderのみ変更可、全進行をresetする。New Gameはこれらをeditable Setupへcarryし、Full Resetは上記Normal defaultsへ戻る。ゼロワンのReplayではpreset / derived Dice Count / Throw Styleを表示し、ROLL上限表示は置かない。
+
+## ROLL counter / Turn End（ノーマル / 完走指定 / 連続試合）
 
 有限時のみPLAYERと同じ`.player-roll-line`内の`.roll-counter`へROLL n/limitを表示する。PLAYER行を折り返さずAction位置を維持する。∞ではcounter DOMを置かない。
 
@@ -121,6 +123,8 @@ Engineの終了優先順位はCOMPLETE > no-score > ROLL上限 > no-active-dice 
 | 5 / 7 DICE | 1行 |
 | 10 DICE | 10→5+5、9→5+4、8→5+3、7→5+2、6→5+1、5以下→1行 |
 | 14 DICE | 14→7+7、13→7+6、12→7+5、11→7+4、10→7+3、9→7+2、8→7+1、7以下→1行 |
+
+ゼロワン通常Playもpreset由来のDice Modeでこの表を適用する。
 
 2D結果カードとThree.js animationの物理配置は別仕様。Three.jsへ厳密7+7を要求しない。
 
@@ -173,3 +177,31 @@ Recoveryはmodeと固有設定、Seriesの試合番号・累積値・現Turn、S
 SetupヘッダーのSound左隣に「ルール説明」を配置し、最下部には置かない。`RulesScreen`はユーザー向けゲーム説明で、「戻る」で同じSetup draftへ戻る。AppのUI navigation stateとして管理し、Flow phase・game / participant stateを変更せず、Recovery write・RNG消費なし。既存各画面の説明も維持する。説明は完走指定の未達通常次Game / 達成後の真のSudden Death、Series途中試合の直接次Game / 最終試合の「ヒミツ」 / Final Ranking公開に合わせる。
 
 Browser QAは320×568 / 375×667 / 390×844 / 430×932 / 768×1024 / 1280×900を対象とする。既存320×568の計測はPlay約567.81px、Normal Penalty約515.52px、Series Penalty約560.52px。v5確認ではPlay範囲約567.8125px・Action高56px、測定したROLL / continuation操作のscroll差0・Action位置差0。確認環境での実績で、全環境の寸法保証ではない。実機通しプレイ・実Rendererの視覚確認（OUTを含む）・その他ユーザー自身の最終プレイ確認・最終Push判断は残件。progressの折り返し、直接次Game、最終Seriesのmaskと公開、Action / scroll安定、auto chunk、fallback / reload、Rule Pageからdraft復帰を人間が確認する。
+
+## ゼロワンPlay / Clear / Bust / Short
+
+Setup → ゼロワンPlay。PLAYER行にpreset、metricsに残り点数 / active dice / 累積Turn数を表示する。1 ROLL = 1 Turnで、得点の有無・OUT・Bust・Short・Clearを問わず+1、同Turn内の「続けてROLL」はない。ROLL上限counterは使用しない。
+
+出目 → 今回得点 → CLEAR / BUST / SHORT / TURN ENDのstaged presentationは確定resultだけを参照する。Bustでは点数・diceがROLL前へrollback済み、Shortではpreset点数 / full diceへreset済みでも、実際のrolled diceとoutcomeを表示する。commit → save attempt → presentation → reveal / paint acknowledgment → 次Actionを維持する。
+
+Clearはちょうど残り0、Bustは超過、ShortはClear / Bustでない更新後remainingScore > activeDice × 100。Bust / ShortでもTurn数を戻さず、同RoundのClean Clear資格はfalse。Short resetで資格を復活させない。初回 / fresh GameとSudden Death startはtrue、獲得済みClean Clear累計はSDで維持する。本編OUTは0点・out/null、Penaltyの算術6換算と区別する。
+
+original orderで未Clearだけを巡回し、結果完了後「次へ」で次Turn。進行一覧はClear / Turn数を示し、未ClearのFinal Rankは未確定。全員Clear後、累積Turn数全員同じなら「サドンデスへ」でfresh Round、差があれば「結果を見る」でFINAL RANKING。順位は累積Turn数昇順のcompetition rankingで実時間順を使わない。SDは点数 / dice / Clearをresetし、Turn数とClean Clear累計をcarry、全員の資格をtrueへ戻す。最後のClear演出を飛ばさない。
+
+## ゼロワンPenalty / Recovery
+
+FINAL RANKING →「ペナルティへ」→ shared分割Penalty画面 →「最終結果を見る」→ FINAL RESULT。各loserの対象数はloserTurnCount - topTurnCount、preset diceを掛けず、Series最大70を適用しない。23個は10+10+3。各敗者の初回tap・後続1500ms自動・次敗者fresh tap・blocking confirmation・stale guardはSeriesと共通。
+
+runningは敗者 / 対象数 / 分割ROLL進捗 / 現在chunk / OUT / 累計BASE。chunk小計や式末尾小計、FINAL値は非表示。resolved後にBASE合計 × (totalCleanClearCount + 1) = FINALを表示する。OUTは表示 / 保存でout/null、算術上のみ6。Rendererは現在chunk最大10、2Dは10→5+5〜6→5+1 / ≤5一行でpreset独立。同じcommitted resultのfallbackを維持する。
+
+schema 6はpreset、各playerの点数 / dice / Turn数 / Clear / eligibility、global clean count、手番 / SD、確定before / dice / outcome / result.player、ranking、Penalty prefix / BASEを検証する。schema5以前、missing preset / Turn数 / eligibility、壊れたsnapshotは補完・migration・repairしない。Bustのrollback後 / Shortのreset後 / Clearの確定値を復元し、Turnやclean countを再加算しない。committed chunkをreroll / 再加算せず、runningは復元paint ack後fresh 1500msで再開、pending loserは自動開始しない。timer / 残りms / presentation stateは保存せず、Sound schema 1を維持する。
+
+## ゼロワンRule Page / Stable Layout確認実績
+
+SetupヘッダーのSound左隣の入口とdraft保持 / Recovery writeなし / RNGなしは共通。ユーザー向け説明はShort後にClean Clear資格が戻らないこと、SD開始で資格をrenewする一方countは累積すること、Penaltyは「最下位のターン数 - トップのターン数」でpreset diceを掛けないことに合わせる。
+
+既存Play / Penaltyの主要DOM順序・reserved regions・READY / animation / status / Action Slot・staged revealをゼロワンでも維持する。sticky / fixed / absolute hack、overflow hidden、削除 / 統合 / 並べ替え、animation短縮、touch target縮小 / 極端なfont縮小は収容手段にしない。
+
+v6実装時の確認実績は、mobile 4 viewportのROLL / 次ActionでAction位置差0・scroll差0、4 presets + 既存3 modes × 6 viewportsの42初期表示でhorizontal overflowなし。23-dice Penaltyの10+10+3進行と全6 viewportのPenalty Action / scroll差0を確認。320×568はPlay範囲567.8125px / Action高56px、Penalty範囲約560.515625px。確認環境の記録であり永久保証値ではない。
+
+tablet / desktop PlayのAction位置差約5.19px・scroll差0はv4/v5でも見られるknown existing layout behaviorで、v6では変更していない。新しいv6 regressionとして扱わない。実機通しプレイ・実Renderer / OUT目視・その他Human final play QA・最終Human Push判断は残件。

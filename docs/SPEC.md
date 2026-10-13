@@ -1,6 +1,6 @@
 # Ichi-Go Game
 
-## Web Application Specification v5
+## Web Application Specification v6
 
 ### Codex Implementation Source of Truth
 
@@ -8,17 +8,19 @@
 
 # 0. この文書について
 
-本書は現在のIchiGo v5正式仕様であり、唯一のSource of Truthである。旧仕様・変更履歴・実装・テストと競合する場合は本書を優先する。
+本書は現在のIchiGo v6正式仕様であり、唯一のSource of Truthである。旧仕様・変更履歴・実装・テストと競合する場合は本書を優先する。
 
-現行実装の基準はmain / 62fe415。v5の継続・表示調整は実装済み。実機での通しプレイ、実Rendererの視覚確認（OUTを含む）、その他ユーザー自身の最終プレイ確認、最終Human Push判断は残件。
+現行実装の基準はmain / 02ce541。ゼロワンを含むv6機能は実装済み。実機での通しプレイ、実Rendererの視覚確認（OUTを含む）、その他ユーザー自身の最終プレイ確認、最終Human Push判断は残件。
 
-[v5変更仕様書](v5_変更仕様書.md)・[v4変更仕様書](v4_変更仕様書.md)・[v3変更仕様書](v3_変更仕様書.md)は設計・変更履歴、[v2変更仕様書](v2_変更仕様書.md)と[FINAL_AUDIT](FINAL_AUDIT.md)は過去の履歴資料であり、第二の正本ではない。
+[v6変更仕様書](v6_変更仕様書.md)・[v5変更仕様書](v5_変更仕様書.md)・[v4変更仕様書](v4_変更仕様書.md)・[v3変更仕様書](v3_変更仕様書.md)は設計・変更履歴、[v2変更仕様書](v2_変更仕様書.md)と[FINAL_AUDIT](FINAL_AUDIT.md)は過去の履歴資料であり、第二の正本ではない。
 
 独自のゲームルールを追加しない。具体的な7個の例は、明記がない限り7 DICEの例であり、全Modeの初期個数を7に限定しない。
 
 ---
 
 # 1. ゲーム概要
+
+Game Modeはノーマル（default）・完走指定・連続試合・ゼロワンの4種類。以下の加点・完走・同Turn内継続の説明は既存3モードの基本ルールであり、完走指定 / 連続試合の進行差は§113〜117に従う。ゼロワンの残り点数・1 ROLL = 1 Turn・Clear / Bust / Short・Turn数順位・専用倍率は§119〜124に従い、既存3モードへ逆適用しない。OUTの生成順、DieResult、commit / save / presentation、Sound・Renderer・Stable Layoutの共通契約はゼロワンにも適用する。
 
 2～10人でプレイするダイスゲーム。
 
@@ -67,9 +69,11 @@ const initialDiceCount = diceMode;
 
 初回SetupはGame Mode「ノーマル」・2人・空欄name・初期順・7 DICE・throwStyle=normal・ROLL上限=∞。行追加は空欄nameで最大10人まで。各行を削除でき、中間行の削除も許可する。2人のとき削除不可。追加・削除・並べ替え後は配列順から表示順を正常化し、残ったinternal Player IDを振り直さない。IDは一意で名前や表示位置とは独立する。同名を許可する。
 
-通常Setupでは名前・人数・順番・Game Modeと固有設定・Dice Mode・投げ方・ROLL上限を編集可能（完走指定は∞固定・上限UI非表示）。開始時の名前検証は§85・97に従う。再戦準備の制限は§56に従う。
+通常Setupでは名前・人数・順番・Game Modeと固有設定・Dice Mode・投げ方・ROLL上限を編集可能（完走指定は∞固定・上限UI非表示、ゼロワンはpreset選択でDice Mode selector / 上限UI非表示）。開始時の名前検証は§85・97に従う。再戦準備の制限は§56に従う。
 
-Dice Modeはゲーム全体のauthoritative configuration。現在のdice countsやその合計から推測しない。ゲーム開始後は人物・名前・順番・Game Modeと固有設定・Dice Mode・投げ方・ROLL上限を変更不可。対応Modeは5 / 7 / 10 / 14のみ。15 DICE以上は非対応。Dice Modeで変わるゲームルールは初期個数だけで、得点・OUT確率・継続・順位・倍率は共通。
+ノーマル / 完走指定 / 連続試合のDice Modeはゲーム全体のauthoritative configuration。現在のdice countsやその合計から推測しない。ゲーム開始後は人物・名前・順番・Game Modeと固有設定・Dice Mode・投げ方・ROLL上限を変更不可。対応Modeは5 / 7 / 10 / 14のみ。15 DICE以上は非対応。Dice Modeで変わるゲームルールは初期個数だけで、得点・OUT確率・継続・順位・倍率は共通。
+
+ゼロワンはpresetが初期点数と個数を決定する。個数は350→5、500→7、700→10、1000→14でdefault 500 / 7 DICE。独立したDice Modeを選択せず、現在個数からpresetを推測しない（§119）。
 
 ノーマル・連続試合の設定「ROLL上限」は表示選択肢∞ / 1 / 2 / 3 / 4 / 5、default∞。各Playerのターンへ適用し、Penaltyには適用しない。Game Modeと切替defaultは§113、連続試合は§114参照。
 
@@ -162,9 +166,9 @@ removedDice
 activeDice + strandedDice + removedDice === initialDiceCount
 ```
 
-を14 DICEを含む全Modeで満たすこと。initialDiceCountはdiceModeから派生するため、合計はdiceModeと一致する。
+を14 DICEを含む全Modeで満たすこと。既存3モードではinitialDiceCountはdiceMode、ゼロワンではpresetから導出した個数であり、合計はその初期個数と一致する。
 
-順位判定・ペナルティ判定に使用する「残りダイス数」は、
+既存3モードの順位・ペナルティ判定に使用する「残りダイス数」は、
 
 ```ts
 remainingDice = activeDice + strandedDice;
@@ -174,7 +178,7 @@ remainingDice = activeDice + strandedDice;
 
 ---
 
-# 6. ターン開始
+# 6. ターン開始（ノーマル / 完走指定 / 連続試合）
 
 各ラウンドのターン開始時：
 
@@ -352,7 +356,7 @@ remainingDice = activeDice + strandedDice;
 
 ---
 
-# 13. ROLL継続条件
+# 13. ROLL継続条件（ノーマル / 完走指定 / 連続試合）
 
 SAFEな1または5が最低1個あり、未完走でactiveDice > 0、ROLL上限が∞または有限上限に未到達なら継続する。OUT自体は継続条件にならない。終了判定の優先順位は§63に従う。
 
@@ -458,7 +462,7 @@ remainingDice = 7
 
 ---
 
-# 18. 完走
+# 18. 完走（ノーマル / 完走指定 / 連続試合）
 
 完走条件：
 
@@ -583,11 +587,11 @@ totalCompletionCount += 1;
 
 この値はサドンデスでもリセットしない。
 
-全モードでcompletion eventの回数を累積する。unique player数ではなく、同一プレイヤーが別Round / Series Gameで完走すれば毎回+1する。完走指定のtargetを超えてよい。
+ノーマル / 完走指定 / 連続試合でcompletion eventの回数を累積する。unique player数ではなく、同一プレイヤーが別Round / Series Gameで完走すれば毎回+1する。完走指定のtargetを超えてよい。
 
 ---
 
-# 23. ペナルティ倍率
+# 23. ペナルティ倍率（ノーマル / 完走指定 / 連続試合）
 
 ```ts
 penaltyMultiplier =
@@ -755,7 +759,7 @@ remainingDiceが全員同じ
 
 ---
 
-# 31. サドンデス
+# 31. サドンデス（ノーマル / 完走指定）
 
 サドンデスにはoriginal players全員がoriginal orderで参加する。Dice Mode・throwStyle・ROLL上限を維持する。activeDiceは選択Modeの初期個数（5 / 7 / 10 / 14）へ戻す。各Playerの新しいターンはROLL 1から開始する。
 
@@ -851,11 +855,11 @@ Penaltyにも通常Playと同じthrowStyleのOUT確率（rough 3% / normal 1% / 
 
 OUTのauthoritative resultは `status: "out", value: null`。計算時だけ6換算し、表示・保存結果はOUTを維持する。
 
-ノーマル / 完走指定は各敗者について1回だけROLLする。連続試合は§115のchunk sequenceを用いる。1/5特殊得点・除外・再ROLLはなく、通常PlayのROLL上限は適用しない。
+ノーマル / 完走指定は各敗者について1回だけROLLする。連続試合は§115、ゼロワンは§122のchunk sequenceを用いる。1/5特殊得点・除外・再ROLLはなく、通常PlayのROLL上限は適用しない。
 
 ---
 
-# 36. ペナルティ計算
+# 36. ペナルティ計算（ノーマル / 完走指定 / 連続試合）
 
 例：
 
@@ -961,7 +965,7 @@ FINAL_RESULT
 
 暫定最下位は強調。
 
-同率暫定最下位なら全員強調。
+同率暫定最下位なら全員強調。最終Series Gameは§114の秘匿を優先する。ゼロワンは進行一覧を表示し、全員Clear前に確定Final Rankを付けない（§123）。
 
 ---
 
@@ -1148,7 +1152,7 @@ Sound ON / OFF
 
 # 48. 操作方法
 
-通常PlayのROLL、ノーマル / 完走指定のPenalty ROLL、連続試合Penaltyの敗者ごとの初回ROLLは画面上のボタン操作。連続試合Penaltyの後続chunkだけは§116に従って自動実行する。
+通常PlayのROLL、ノーマル / 完走指定のPenalty ROLL、連続試合 / ゼロワンPenaltyの敗者ごとの初回ROLLは画面上のボタン操作。連続試合 / ゼロワンPenaltyの後続chunkだけは§116に従って自動実行する。
 
 スマートフォンのシェイク・モーションセンサーは使用しない。
 
@@ -1158,7 +1162,7 @@ Sound ON / OFF
 
 ROLL要求の妥当性確認→同期interaction lock→論理結果生成・ルール解決→authoritative state確定→保存試行→演出→同じoperation/revisionの結果表示→次の有効操作を受付、の順とする。
 
-演出中はvisible stateとauthoritative stateを分離する。古い非同期完了を拒否し、演出完了は表示反映・unlockを行う。連続試合Penaltyの後続chunkはその後のpaint acknowledgmentと1500ms待機を経て、別のguarded actionで進める（§116）。二重ROLL・二重加点・二重OUT・二重完走更新は禁止。Storage/Sound/3D障害でも確定結果を変えずfail-openとする。詳細は§91〜93・100〜103・106・109。
+演出中はvisible stateとauthoritative stateを分離する。古い非同期完了を拒否し、演出完了は表示反映・unlockを行う。連続試合 / ゼロワンPenaltyの後続chunkはその後のpaint acknowledgmentと1500ms待機を経て、別のguarded actionで進める（§116）。二重ROLL・二重加点・二重OUT・二重完走更新は禁止。Storage/Sound/3D障害でも確定結果を変えずfail-openとする。詳細は§91〜93・100〜103・106・109。
 
 ---
 
@@ -1299,7 +1303,7 @@ sessionStorage保存
 
 Final Resultから選ぶと、即ゲーム開始せず再戦準備へ移動する。人物・internal ID・名前・Game Modeと固有設定・Dice Mode・throwStyle・ROLL上限・Soundを維持する。編集可能なのはplayer orderのみ。rename・add・delete・Game Modeと固有設定変更・Dice Mode変更・throwStyle変更・ROLL上限変更は禁止し、UIだけでなくFlowでも制限する。
 
-準備後の明示的な開始操作で、選択した順番を次ゲームの固定順として開始する。開始時はscore、dice state、completed、turnFinished、rank、round results、penalty results、totalCompletionCount、suddenDeathCountを新規化し、倍率は累積完走数0から×1へ派生する。Series累積値・試合進行・chunk進行もresetする。activeDiceは維持したDice Modeから初期化し、ROLL番号は1から開始する。設定表示は有限時「ROLL 3回」等、無制限時「ROLL ∞」。
+準備後の明示的な開始操作で、選択した順番を次ゲームの固定順として開始する。開始時はscore、dice state、completed、turnFinished、rank、round results、penalty results、totalCompletionCount、suddenDeathCountを新規化し、倍率は累積完走数0から×1へ派生する。Series累積値・試合進行・chunk進行もresetする。ゼロワンのpreset / derived Dice Count / throwStyleは固定し、remainingScore・dice・Turn Count・Clear・Clean Clear累計・SD・Penaltyを新規化する。資格はtrueから開始し、ROLL counterは使用しない（§124）。既存3モードのactiveDiceは維持したDice Modeから初期化し、ROLL番号は1から開始する。これらの設定表示は有限時「ROLL 3回」等、無制限時「ROLL ∞」。
 
 準備中・並べ替え途中もdraft recovery対象。操作revision・ゲーム識別子を巻き戻して旧要求を再利用してはならない。
 
@@ -1309,13 +1313,13 @@ Final Resultから選ぶと、即ゲーム開始せず再戦準備へ移動す�
 
 Final Resultから選ぶと、人数・名前・internal ID・順番・Game Modeと固有設定・Dice Mode・throwStyle・ROLL上限・Soundを引き継いだ通常Setupへ戻る。以後rename・add・delete・reorder・Game Modeと固有設定変更・Dice Mode変更・throwStyle変更・ROLL上限変更を許可する。人数は行数から派生する。
 
-前ゲームのscore・順位・OUT・完走・累積完走数・SD・Series累積値 / 試合進行・Penalty / chunk結果は次ゲームへ持ち越さない。Setupへの遷移と編集draftを保存し、明示的な開始で新しい進行stateを作る。§104のfull resetとは別操作。
+前ゲームのscore・順位・OUT・完走・累積完走数・SD・Series累積値 / 試合進行・Penalty / chunk結果は次ゲームへ持ち越さない。ゼロワンもpreset / throwStyle / participantsをeditable Setupへ引き継ぎ、Turn Count・Clear・Clean Clear累計等の進行を持ち越さない。Setupへの遷移と編集draftを保存し、明示的な開始で新しい進行stateを作る。§104のfull resetとは別操作。
 
 ゲーム途中の「ゲームを終了する」は従来どおり確認後に初期Setupへ戻る（Sound維持）。Final Resultの設定引き継ぎ操作と混同しない。戻ったSetupも保存対象。
 
 ---
 
-# 58. Player state
+# 58. Player state（ノーマル / 完走指定 / 連続試合）
 
 Playerはscore・activeDice・strandedDice・removedDice・completed・turnFinishedを持つ。ID・名前・順序はparticipantsを基準とする。remainingDiceはactiveDice + strandedDiceから派生する。
 
@@ -1325,7 +1329,7 @@ Ranking・Penalty結果・現在ターンのROLL進行はそれぞれのEngine /
 
 # 59. 設定・Flow・Presentationの責務
 
-概念上のゲーム設定は以下。具体的な型/APIはsrc/game/types.ts・setup.ts・gameFlow.tsを参照する。ModeConfigurationは選択中Game Modeだけを保持し、completionTargetとrollLimit=nullの相関を型とvalidatorで保証する。
+既存3モードの概念上のゲーム設定は以下。具体的な型/APIはsrc/game/types.ts・setup.ts・gameFlow.tsを参照する。ModeConfigurationは選択中Game Modeだけを保持し、completionTarget / zeroOneとrollLimit=nullの相関を型とvalidatorで保証する。
 
 ```ts
 type GameConfiguration = Readonly<{
@@ -1334,9 +1338,9 @@ type GameConfiguration = Readonly<{
 }> & ModeConfiguration;
 ```
 
-Setup/preparation draftが編集中設定を所有し、開始後はゲームのauthoritative configurationを使用する。同じ設定をUI・Player・Storageで独立更新しない。initialDiceCount=diceMode、OUT確率はthrowStyleから導出する。
+Setup/preparation draftが編集中設定を所有し、開始後はゲームのauthoritative configurationを使用する。同じ設定をUI・Player・Storageで独立更新しない。既存3モードはinitialDiceCount=diceMode、ゼロワンはpresetから導出する。SetupのゼロワンdiceModeは対応表との一致を検証するprojectionであり、running gameにはdiceMode / rollLimitを重複保存しない。OUT確率はthrowStyleから導出する。
 
-Flowはsetup、replay preparation、turn、ranking、suddenDeath、loserReveal、penalty、finishedに加え、seriesIntermediate、seriesRanking、seriesPenalty、seriesFinishedを明示的に区別する。Rule PageはUI navigationでありFlow phaseではない。再戦準備は専用phase等の判別可能な状態で表現し、順番以外の編集を拒否する。
+Flowはsetup、replay preparation、turn、ranking、suddenDeath、loserReveal、penalty、finishedに加え、seriesIntermediate、seriesRanking、seriesPenalty、seriesFinished、zeroOneTurn、zeroOneRanking、zeroOnePenalty、zeroOneFinishedを明示的に区別する。Rule PageはUI navigationでありFlow phaseではない。再戦準備は専用phase等の判別可能な状態で表現し、順番以外の編集を拒否する。
 
 ROLL中の演出stage・interaction lock・visibleStateは確定ゲーム状態から分離する。古いrevision/operation IDによるaction・Promise完了を拒否する。Soundは独立した環境設定。Rendererにゲーム判定を移さない。
 
@@ -1370,7 +1374,7 @@ type DieResult =
 
 rollGameDice(count, throwStyle, random, diceMode)はRandomSourceを注入し、各dieにOUT判定を1回行い、SAFEのみD6用のnext()を追加消費する。carefulもOUT判定用のdrawを行うが、OUT確率0%なので必ずSAFE。Penaltyも同じ生成順を使用する。
 
-Renderer・UI・Recoveryは抽選しない。Series Penaltyのchunk generatorも同じrollDieを使用し、元Dice Modeと独立に1〜10個を生成する。低水準APIの引数・検証はsrc/game/rollGenerator.tsを参照する。
+Renderer・UI・Recoveryは抽選しない。Series / Zero-One Penaltyのchunk generatorも同じrollDieを使用し、元Dice Modeと独立に1〜10個を生成する。低水準APIの引数・検証はsrc/game/rollGenerator.tsを参照する。
 
 ---
 
@@ -1384,7 +1388,7 @@ SAFEな1/5のscore・scoringCount、OUTのoutCountを計算し、activeDiceをou
 
 ---
 
-# 63. ROLL後の判定順
+# 63. ROLL後の判定順（ノーマル / 完走指定 / 連続試合）
 
 得点・除外・OUT・remainingを確定後、Engineで次の優先順位に従って結果を決める。
 
@@ -1481,7 +1485,7 @@ function shouldStartSuddenDeath(
 
 ---
 
-# 66. ペナルティ計算
+# 66. ペナルティ計算（ノーマル / 完走指定 / 連続試合）
 
 ```ts
 function calculatePenalty(
@@ -1589,7 +1593,7 @@ Engine/UI reveals result
 
 ---
 
-# 70. UI表示
+# 70. UI表示（ノーマル / 完走指定 / 連続試合）
 
 ゲーム中は最低限、
 
@@ -1655,6 +1659,8 @@ Mobile Stable Layout対象は320x568 / 375x667 / 390x844 / 430x932。PlayはPLAY
 
 # 73. 実装禁止事項
 
+以下の同Turn内継続・COMPLETE・ROLL回数のRanking除外は既存3モードの契約。ゼロワンには§119〜124の1 ROLL = 1 Turn・Clear・累積Turn数順位・reset境界を適用する。OUTの再ROLL禁止はresetまでの現在ダイス状態を指し、Short / Sudden Deathによる復活を妨げない。
+
 以下は禁止。
 
 ```text
@@ -1718,7 +1724,7 @@ remainingDice <= initialDiceCount;
 
 ---
 
-# 75. COMPLETE invariant
+# 75. COMPLETE invariant（ノーマル / 完走指定 / 連続試合）
 
 ```ts
 completed === true
@@ -1737,7 +1743,7 @@ remainingDice === 0
 
 ---
 
-# 76. OUT invariant
+# 76. OUT invariant（ノーマル / 完走指定 / 連続試合）
 
 ```ts
 strandedDice > 0
@@ -1804,7 +1810,7 @@ completed === false
 
 確率テストは大量乱数による統計テストだけに依存せず、RandomSourceをモックして境界条件をテストすること。
 
-Game Modeの排他性・切替default・同一mode保持、完走指定の未達通常次Game / 未達優先（全員Complete・完全同率でもSudden Deathではない） / 途中到達 / 超過 / 到達後の真のSudden Death / 決着Gameのみ、Seriesのatomic累積 / reset / 暫定累積順位（二重加算なし） / Intermediate保持と標準bypass / 最終Gameの表示mask / all tieを検証する。Series Penaltyは0 / 1 / 10 / 11 / 15 / 20 / 24 / 70、OUT保持、倍率1回、chunk layout、chunk小計非表示、FINAL表示境界、1500ms開始時点、stale / double tap / StrictMode、確認OPEN / CANCEL / ACCEPT、running復旧 / pending非自動開始を検証する。schema 5とmode別corrupt拒否、Replay固定 / New Game editable / Full Reset、Rule Pageの上部配置・draft保持・RNG / Recovery writeなしも対象。
+Game Modeの排他性・切替default・同一mode保持、完走指定の未達通常次Game / 未達優先（全員Complete・完全同率でもSudden Deathではない） / 途中到達 / 超過 / 到達後の真のSudden Death / 決着Gameのみ、Seriesのatomic累積 / reset / 暫定累積順位（二重加算なし） / Intermediate保持と標準bypass / 最終Gameの表示mask / all tieを検証する。Series Penaltyは0 / 1 / 10 / 11 / 15 / 20 / 24 / 70、OUT保持、倍率1回、chunk layout、chunk小計非表示、FINAL表示境界、1500ms開始時点、stale / double tap / StrictMode、確認OPEN / CANCEL / ACCEPT、running復旧 / pending非自動開始を検証する。schema 6とmode別corrupt拒否、Replay固定 / New Game editable / Full Reset、Rule Pageの上部配置・draft保持・RNG / Recovery writeなしも対象。
 
 ---
 
@@ -1862,7 +1868,7 @@ Game Modeの排他性・切替default・同一mode保持、完走指定の未達
 
 # 79. 実装・保守フロー
 
-v5の継続・表示調整は実装済み。実機通しプレイ・実Rendererの視覚確認・その他ユーザー自身の最終プレイ確認・Push判断は人間の残件。追加のAI最終監査を必須工程にしない。今後の依頼ごとにAGENTS・該当SPEC・Git status/diff・関連実装とテストを確認し、狭いレビュー単位で作業する。詳細・過去STEP記録は[実装進行ガイド](../実装進行ガイド.md)を参照。
+ゼロワンを含むv6機能は実装済み。実機通しプレイ・実Rendererの視覚確認・その他ユーザー自身の最終プレイ確認・Push判断は人間の残件。追加のAI最終監査を必須工程にしない。今後の依頼ごとにAGENTS・該当SPEC・Git status/diff・関連実装とテストを確認し、狭いレビュー単位で作業する。詳細・過去STEP記録は[実装進行ガイド](../実装進行ガイド.md)を参照。
 
 未依頼の機能・UI再設計・次段階を追加しない。関連検証・差分レビューを行い、commit・pushは明示許可に従う。文書のみの作業ではコードを変更しない。
 
@@ -1894,9 +1900,12 @@ v5の継続・表示調整は実装済み。実機通しプレイ・実Renderer�
 
 # 81. Definition of Done
 
-現行v5の維持・変更検証では最低限以下を満たすこと。文書統合だけでは達成扱いにしない。
+現行v6の維持・変更検証では最低限以下を満たすこと。文書統合だけでは達成扱いにしない。
 
 ```text
+✓ 既存3モードのチェックとゼロワン専用§119〜124をそれぞれ維持
+✓ ゼロワンpreset・1 ROLL = 1 Turn・Clear > Bust > Short・Clean Clear資格
+✓ ゼロワンTurn数順位・同率SDでTurn/clean累計維持・Turn差Penalty
 ✓ 2～10人
 ✓ プレイヤー名設定
 ✓ プレイ順変更
@@ -1958,11 +1967,11 @@ v5の継続・表示調整は実装済み。実機通しプレイ・実Renderer�
 
 ✓ Sound ON/OFF
 ✓ 振動なし
-✓ 通常Play / 各敗者初回PenaltyはROLLボタン、Series後続chunkのみ自動
+✓ 通常Play / 各敗者初回PenaltyはROLLボタン、Series / Zero-One後続chunkのみ自動
 ✓ 操作ロック
 ✓ モーダル背面操作防止
 
-✓ schema 5でmode別game / setup / preparation draft復旧・旧schema拒否・Sound schema 1保持
+✓ schema 6でmode別game / setup / preparation draft復旧・旧schema拒否・Sound schema 1保持
 ✓ 過去ゲーム履歴なし
 ✓ SAME PLAYERS再戦準備・順番のみ編集・明示開始
 ✓ NEW GAME設定引き継ぎ
@@ -2010,7 +2019,7 @@ OUTは
 
 ---
 
-## 83. 継続ROLLの操作（全モードの通常Play）
+## 83. 継続ROLLの操作（ノーマル / 完走指定 / 連続試合）
 
 §16の「必ず次のROLLを行う」とは、プレイヤーが任意にターン終了を選択できないことを意味する。
 
@@ -2157,7 +2166,7 @@ rollLimit
 PenaltyのDieResult配列・計算結果
 ```
 
-等を検証する。
+等をmode別に検証する。ゼロワンはpreset・remainingScore・Turn Count・Clear / eligibility・Clean Clear累計・保存before/result・chunk stateを§124に従って検証する。
 
 特に各プレイヤーについて、
 
@@ -2208,9 +2217,9 @@ removedDice = 4
 
 # 89. 保存データのバージョン
 
-Game / Setup / Replay PreparationのSession Recovery schemaは5。Sound schemaは1で、別キー・独立validationを使用する。
+Game / Setup / Replay PreparationのSession Recovery schemaは6。Sound schemaは1で、別キー・独立validationを使用する。
 
-schema 4を含む旧Game Recoveryはmigrationせずunsupportedとして安全に拒否し、破棄を試み、初期Setupを利用可能にする。missing modeをノーマルへ、missing ROLL上限を∞へ推測補完しない。schema 4 → 5 migrationやmissing continuation typeの推測補完も行わない。不正・unsupportedデータの推測修復は禁止。Game schema変更・拒否を理由に有効なSound ON/OFFを初期化しない。
+schema 5以下の旧Game Recoveryはmigrationせずunsupportedとして安全に拒否し、破棄を試み、初期Setupを利用可能にする。missing modeをノーマルへ、missing ROLL上限を∞へ推測補完しない。schema 5以下 → 6 migration、missing continuation type / preset / Turn Count / cleanClearEligibleの推測補完も行わない。不正・unsupportedデータの推測修復は禁止。Game schema変更・拒否を理由に有効なSound ON/OFFを初期化しない。
 
 ---
 
@@ -2250,7 +2259,7 @@ OUT処理
 新しい通常ROLLや大きなフェーズへの進行
 = プレイヤー操作
 
-Series Penaltyの後続chunk
+Series / Zero-One Penaltyの後続chunk
 = presentation complete後1500msを経たguarded auto action
 ```
 
@@ -2305,7 +2314,7 @@ interaction unlock
 
 §43～45および§49等に記載される演出手順中の「状態更新」「得点処理」「OUT処理」「完走数更新」等は、**確定済み論理状態の表示反映**を意味する。
 
-演出完了時に同じゲームロジックを再実行してはならない。Series Penaltyの後続chunkは別requestとして§116の順序とguardに従う。
+演出完了時に同じゲームロジックを再実行してはならない。Series / Zero-One Penaltyの後続chunkは別requestとして§116の順序とguardに従う。
 
 特に、
 
@@ -2429,6 +2438,8 @@ LOSER REVEAL終了後、
 
 ## 96. ペナルティ終了後
 
+以下の累積完走数は既存3モードの表示。ゼロワンはtotalCleanClearCountと専用倍率を表示する（§122〜123）。
+
 最後の敗者のペナルティROLLおよびFINAL PENALTY表示が完了した後、自動で最終画面へ切り替えない。
 
 ```text
@@ -2479,7 +2490,7 @@ Web実装では `Intl.Segmenter` 等を利用してよい。
 
 ---
 
-## 98. サドンデス開始時のturnFinished
+## 98. サドンデス開始時のturnFinished（ノーマル / 完走指定）
 
 サドンデス開始時、全プレイヤーについて、
 
@@ -2556,7 +2567,7 @@ sessionStorage保存
 新しい通常ROLL / 各敗者の初回Penalty ROLL
 → プレイヤー操作
 
-Series Penaltyの後続chunk
+Series / Zero-One Penaltyの後続chunk
 → presentation complete後1500msでguarded auto action
 
 次プレイヤー
@@ -2888,7 +2899,7 @@ Sound失敗
 
 Draft validationは保存・復元可能な構造を検証する。2〜10行、一意な空でないID、nameが文字列であること、配列順、Game Modeと固有設定、Dice Mode、throwStyle、ROLL上限、準備種別を確認する。空欄や開始条件を満たさない編集中nameは、それだけでcorrupt扱いしない。Start validationは別にtrim後1〜12 grapheme等を要求する。再戦準備では保持した人物・名前・設定を変更できず、順序だけを変更する。
 
-ゲーム復旧では全Playerの個数合計を保存されたDice Modeと照合し、ready・未プレイPlayer・初回ROLL前の逆算状態もinitialDiceCountで検証する。Turn/Game/result.playerの整合、操作ID、手番、ROLL番号・上限・Engine終了理由、累積完走数、carefulでOUTなし、Penaltyのdecisive remaining・配列長・計算結果の検証を維持する。
+既存3モードのゲーム復旧では全Playerの個数合計を保存されたDice Modeと照合し、ready・未プレイPlayer・初回ROLL前の逆算状態もinitialDiceCountで検証する。Turn/Game/result.playerの整合、操作ID、手番、ROLL番号・上限・Engine終了理由、累積完走数、carefulでOUTなし、Penaltyのdecisive remaining・配列長・計算結果の検証を維持する。
 
 メモリ上のgame/draft確定→保存試行→表示通知の順を守る。ゲームROLLはその後に演出する。復旧時は確定結果を直ちに表示し、再ROLL・再加点・再OUT・二重完走更新をしない。有限ゲームは保存したROLL進行を復元し、reload前がROLL 2/3なら復元後も2/3。確定Penalty OUTもstatus out / value nullのまま復元し、再抽選・face再生成・RandomSource再消費を行わない。draft復旧で自動STARTしない。
 
@@ -2896,7 +2907,7 @@ Storageのread/write/delete失敗でもapp/gameは継続可能。警告し、最
 
 # 111. Dice Result Layout・Visual・Action Slot
 
-結果カードの列数はDice Modeと現在表示個数から決め、表示個数だけからModeを推測しない。全モードの通常Playとノーマル / 完走指定のPenalty ROLLで共通。Series Penalty chunkは元Dice Modeと独立に最大5列（10→5+5、9→5+4、8→5+3、7→5+2、6→5+1、5以下1行）。5 / 7 DICEでも10個chunkは合法。このchunk規則を通常Playへ逆適用しない。
+結果カードの列数はDice Modeと現在表示個数から決め、表示個数だけからModeを推測しない。全モードの通常Play（ゼロワンはpreset由来のDice Mode）とノーマル / 完走指定のPenalty ROLLで共通。Series / Zero-One Penalty chunkは元Dice Modeと独立に最大5列（10→5+5、9→5+4、8→5+3、7→5+2、6→5+1、5以下1行）。5 / 7 DICEでも10個chunkは合法。このchunk規則を通常Playへ逆適用しない。
 
 | Dice Mode | 結果カード |
 | --- | --- |
@@ -2929,7 +2940,7 @@ Presentation領域はDice→Result/Message→Action Slotを基本に、次へ・
 
 # 113. Game Modeと完走指定
 
-Game Modeはノーマル（default）、完走指定、連続試合の相互排他的設定。非選択モードの設定は保持しない。完走指定へ切り替えるとtarget=1・ROLL上限∞、連続試合へ切り替えるとgameCount=2。同じモードの再選択は現在値を保持し、別モードから戻るとdefaultから再開する。完走指定から離れても以前の有限ROLL上限は復活しない。
+Game Modeはノーマル（default）、完走指定、連続試合、ゼロワンの相互排他的設定。非選択モードの設定は保持しない。完走指定へ切り替えるとtarget=1・ROLL上限∞、連続試合へ切り替えるとgameCount=2。同じモードの再選択は現在値を保持し、別モードから戻るとdefaultから再開する。完走指定から離れても以前の有限ROLL上限は復活しない。ゼロワンへ入るとpreset=500 / 7 DICE、rollLimit=nullで独立Dice Mode selectorとROLL上限UIを非表示にする。離れたpresetは保持せず、戻るとdefault、同一mode再選択では現在値を保持する（§119）。
 
 完走指定の「最低完走者数」1〜5はcompletion eventの累計目標。ROLL上限は∞固定でSetupの上限UIを非表示にする。同一playerの別Gameでの完走も毎回+1し、targetでclampしない（target 3 / count 4も合法）。目標へ途中到達しても全員のTurn終了まで続行する。
 
@@ -3000,7 +3011,7 @@ blocking confirmationのOPENでpending timerをcancelする。dialog中はRNG消
 
 # 117. mode別Session Recovery
 
-schema 5でGame Mode / 固有設定と進行の整合性を検証する。completionTarget + finite limit、hidden mode設定、Series範囲外gameCount / currentGameNumber、phaseと累積値の不整合、chunkサイズ超過 / 順序 / status不整合、0個PenaltyのROLL結果を拒否する。推測repair / migrationはしない。
+schema 6でGame Mode / 固有設定と進行の整合性を検証する。completionTarget + finite limit、hidden mode設定、Series範囲外gameCount / currentGameNumber、phaseと累積値の不整合、chunkサイズ超過 / 順序 / status不整合、0個PenaltyのROLL結果を拒否する。推測repair / migrationはしない。
 
 完走指定はGameの番号とregular / suddenDeathのidentityを保存・検証する。全員終了後のtarget未達「次の試合へ」待ち、target達成 + 同率「サドンデスへ」待ち、決着「結果を見る」待ちを区別して復元し、未達をSudden Deathへ変換しない。missing continuation identityを推測補完しない。具体的なstate契約は[src/game/README.md](../src/game/README.md)参照。
 
@@ -3019,3 +3030,95 @@ Rule Pageは純粋なUI navigation state。閲覧と復帰でgame / participant 
 Browser QA対象は320×568 / 375×667 / 390×844 / 430×932 / 768×1024 / 1280×900。Play / Penaltyの主要DOM・順序・reserved regions・staged presentation・Action位置・scroll安定性を維持する。要素削除 / 統合 / 並べ替え、sticky / fixed / absolute Action hack、overflow hiddenやclipping、animation短縮、touch target縮小で収容しない。構造変更が必要なら人間判断へ戻す。
 
 320×568での既存計測実績はPlay約567.81px、Normal Penalty約515.52px、Series Penalty約560.52px。v5確認ではPlay範囲約567.8125px・Action高56px、測定したROLL / continuation操作のscroll差0・Action位置差0。確認環境・操作での実績であり、すべての環境での寸法保証ではない。実機通しプレイ、実Rendererの視覚確認（OUTを含む）、その他ユーザー自身の最終プレイ確認、最終Push判断は人間の残件。
+
+---
+
+# 119. ゼロワン設定・Turn・得点
+
+ゼロワンは残り点数をちょうど0にする独立したGame Mode。ノーマル / 完走指定 / 連続試合の加点・COMPLETE・同Turn内継続・順位条件は使用しない。
+
+| Preset | Start Score | Dice Count |
+| --- | ---: | ---: |
+| 350 | 350 | 5 |
+| 500 | 500 | 7 |
+| 700 | 700 | 10 |
+| 1000 | 1000 | 14 |
+
+初期選択は500 / 7 DICE。presetから初期個数を導出し、独立Dice Mode selectorとROLL上限UIは非表示。Throw Styleは共通の乱暴3% / 普通1% / 丁寧0%を使用する。別modeから入ると500、同じゼロワンの再選択は現在presetを保持し、離れたpresetをhidden settingとして保持しない。以前の有限ROLL上限を復活させない。
+
+**1 ROLL = 1 Turn。** 得点あり・得点なし・OUT・Bust・Short・Clearのすべてで、そのplayerのaccumulatedTurnCountを1回だけ+1し、Turnを終了する。ClearしたROLLも含み、同Turn内の追加ROLLはない。
+
+SAFEな1=100点、5=50点をすべて合算し、remainingScoreから引く。得点diceはremovedDiceへ、OUTはstrandedDiceへ移してactiveDiceから除外する。OUTはout/nullのまま0点であり、次回自分のTurnでも振らない。2 / 3 / 4 / 6は得点なしでactiveに残る。各dieのOUT-check → SAFEのみD6生成の乱数契約は§61と同じ。
+
+playerごとにremainingScore、activeDice、strandedDice、removedDice、accumulatedTurnCount、isCleared、cleanClearEligibleを保持する。自分の次Turnへ点数とdice状態をcarryし、active + stranded + removed = preset Dice Countを常に維持する。original player orderで未Clearだけを巡回し、Clear済みplayerはskipする。全員Clearまで続行し、先にClearした人がいてもゲーム全体を終了しない。
+
+# 120. Clear / Bust / Short
+
+判定優先順位は **Clear > Bust > Short > ordinary Turn end**。UIではなくdomainが確定する。
+
+| 判定 | 条件と確定処理 |
+| --- | --- |
+| Clear | rollScoreがROLL前remainingScoreと等しい。remainingScore=0、isCleared=true。activeDiceが0でもShortにしない |
+| Bust | rollScoreがROLL前remainingScoreを超える。ROLL前の点数・active / removed / strandedすべてへrollback。ただしTurn+1は維持し、cleanClearEligible=false |
+| Short | Clear / Bustでない更新後stateでremainingScore > activeDice × 100。そのplayerだけpreset初期点数・full active dice・removed / stranded=0・isCleared=falseへreset。Turn数・identity / order・global countを維持し、cleanClearEligible=false |
+| ordinary Turn end | 上記以外。減算・除外・OUTを確定して次の手番待ち。得点0でも終了し、同Turn内継続なし |
+
+Shortの境界は300点 / active 2個、201点 / 2個がShort、200点 / 2個はShortではない。positive remaining / active 0個はShort。201はfeasibility helperの境界例であり、保存playerのremainingScoreは得点単位に整合する値を要求する。
+
+Bustは「Turn開始snapshotへのrollback」、Shortは「preset初期値へのreset」であり、別処理。Bust中のOUT / scoring removalもrollbackする。ShortとSudden Death resetはOUT diceを復活させる。いずれも累積Turn数を減らさない。
+
+# 121. Clean Clear
+
+Clean Clearは**そのRound開始からClearまでBustもShortも一度もしていないClear**。Round開始は初回 / fresh Zero-One Game start、またはSudden Death start。初期資格は全員true。
+
+Bust / ShortはそのRoundの資格をfalseにする。Shortで点数・diceを初期化しても資格はfalseのまま、その後ノーミスでClearしてもClean Clearではない。得点0やOUT自体は資格を失わせないが、結果としてShortなら失う。
+
+資格ありのClear commit時にtotalCleanClearCountを一度だけ+1する。このglobal countはplayer間、Bust、Short、Sudden Death、繰り返しSudden Deathを跨いで累積する。演出完了 / reloadで再加算しない。Sudden Deathは全員の資格をtrueへ戻すが、獲得済みcountをresetしない。Replay / fresh New Gameは進行を新規化し、count=0 / eligibility=trueで開始する。
+
+# 122. ゼロワンRanking・Sudden Death・Penalty
+
+全員Clear後、accumulatedTurnCount昇順でcompetition rankingを計算する。同数は同順位で実時間のClear順はtie-breakにしない。A=4、B=6、C=6なら1 / 2 / 2位、B/Cが同率loser。
+
+全員の累積Turn数が同じならPenaltyへ進まず、最後のClear presentation完了後の「サドンデスへ」で全員のfresh Roundを開始する。残り点数・dice・removed / OUT・Clearを初期化し、全員のcleanClearEligible=true、現在playerを元順序の先頭へ戻す。Turn Count、totalCleanClearCount、participants / IDs / original order、preset、Throw Styleを維持する。SD後も全員同数なら回数制限なく繰り返す。本戦A/B/C=5、SD追加+3/+4/+4なら累積8/9/9で順位を決める。
+
+決着時は最下位全員を元の順序でPenalty対象とする。各loserの対象数は **loserTurnCount - topTurnCount**。preset Dice Countを掛けず、Seriesの70個上限を適用しない。Turn差に人工上限を設けず、計算値は正確な数値表現の範囲で検証する。
+
+10個を超えれば最大10個ずつchunk化する（23→10+10+3）。各loserの初回だけtap、後続chunkは§116と同じcommit → save attempt → presentation → reveal / paint acknowledgment →1500ms → guarded auto action。1 callbackで1 chunk。次loserは新しい初回tapを必要とする。stale identity / revisionはRNG前に拒否し、blocking confirmation OPENでtimer取消、dialog中draw / commitなし、CANCELはfresh wait、ACCEPTは再開しない。
+
+PenaltyではOUTをout/nullのまま保持・表示し、BASE計算時だけ6換算する。本編のOUT=0点と混同しない。全chunkのBASE合計に **totalCleanClearCount + 1** を最後に一度だけ掛けてFINALを導出する。chunkごとの倍率適用・共通ROLL・表示失敗でのrerollは禁止。
+
+runningは対象loser / 対象数 / chunk進捗 / 現在chunkの出目・OUT / 累計BASEを表示し、chunk BASE小計・式末尾小計・FINAL値を表示しない。resolved後に合計BASE / MULTIPLIER / FINALを表示する。内部chunk BASE計算は累計更新とvalidationに使用する。
+
+Rendererへは現在chunkだけ（最大10個）。2D chunk layoutは10→5+5、9→5+4、8→5+3、7→5+2、6→5+1、5以下1行でpresetと独立。通常Playはpreset由来の§111配置を使う。Three.js / 2Dは表示専用、同じcommitted resultのfallbackを維持し、RNG非消費・結果変更なし。
+
+# 123. ゼロワンPlay・Action・presentation
+
+PlayはPLAYER、preset、現在player、remainingScore、activeDice、累積Turn数、ROLL出目とCLEAR / BUST / SHORT / TURN ENDを表示する。ROLL上限counterは置かない。進行一覧はoriginal orderを維持し、Clear済みplayerのClear / Turn数を示す。未Clearの確定Final Rankは表示しない。
+
+| 状態（結果presentation完了後） | Action |
+| --- | --- |
+| 次の未Clear playerあり | 次へ |
+| 全員Clear・累積Turn数が全員同じ | サドンデスへ |
+| 全員Clear・順位に差あり | 結果を見る |
+
+「次へ」は未Clearのみを巡回する。未Clearが1人ならその人の次Turnへ進む。「結果を見る」でゼロワン FINAL RANKING、「ペナルティへ」で分割Penalty、最後の結果確認後「最終結果を見る」でFINAL RESULTへ進む。
+
+結果はauthoritative commit → save attempt → presentation → acknowledgment → 次Actionの順。Bustのrollback / Shortのresetは既にcommit済みだが、rolled diceとそのoutcomeを段階表示で確認可能にする。rolled resultをrollback後 / reset後のdiceへ置換しない。結果をrevealするまでvisibleStateの値を維持し、表示完了でTurn数やClean Clear累計を再計算しない。
+
+既存Play / Penaltyの主要DOM、reserved presentation region、READY・status・Action Slotとstaged presentationを維持する。§118のviewport / 禁止事項はゼロワンにも適用し、追加情報を理由に削除・統合・並べ替え・touch target縮小・極端なfont縮小をしない。Rule Pageではpreset、1 ROLL = 1 Turn、Bust / Short / Clear、Turn数順位、Round単位のClean Clear資格とSD累積、Turn差Penaltyをユーザー向けに説明する。
+
+# 124. ゼロワンReplay・New Game・Recovery
+
+Replay Preparationはmode / preset / derived Dice Count / Throw Styleを固定してorderのみ編集可能。明示開始でremainingScore / dice / Turns / Clear / Clean Clear count / SD / Penaltyを新規化する。New Gameはparticipantsとmode / preset / Throw Styleをeditable Setupへcarryし、進行はcarryしない。Full Resetは§104のノーマル・2人blank・7 DICE・normal throw・ROLL∞、Sound維持。
+
+Game / draft Recoveryはschema 6、schema 5以前はunsupported / migrationなし。Sound schema 1は独立。missing preset / Turn Count / cleanClearEligibleをdefaultや旧stateから推測せず、corrupt stateを修復しない。既存3モードのvalidatorと継続 / 累積 / chunk整合性を維持する。
+
+ゼロワンではphase / revision / gameNumber、mode / preset / Throw Style、participants / IDs / original order、各playerのremainingScore / active / stranded / removed / accumulatedTurnCount / isCleared / cleanClearEligible、totalCleanClearCount、currentPlayerIndex、suddenDeathCount、確定before / dice / result.player / rollScore / outcome / cleanClear、確定ranking、Penalty state / committedChunksを保存する。
+
+validatorはpreset個数不変条件・点数と除外数の整合・Turn数 / SD / Clean Clear countの整合・carefulでOUTなし・現在playerとphaseを照合する。保存beforeとdiceからpure resolverを再計算して結果を比較するだけで、RNG消費やTurn / Bust / Short / Clean Clearの再適用はしない。Bustはrollback後、Shortはreset後、Clearは確定Clear / Turn / countを復元する。
+
+PenaltyはpenaltyId、元順序のentries（playerId / totalDice / status / committedChunks / basePenalty）、currentLoserIndexを保存する。Turn差による対象数、chunk prefix / サイズ / status / loser順、保存BASEの算術一致を検証し、不一致は拒否する。chunk数 / 次index / multiplier / resolved FINALはderived。committed diceの順序とOUTを保持し、再抽選・BASE再加算しない。
+
+running Recoveryは復元表示のpaint acknowledgment後fresh 1500msで未実行chunkを自動再開し、追加tap不要。pending loserは自動開始しない。残りms、timer、ack、pause、animation / busy / visible stateは保存しない。sessionStorage失敗は既存fail-open、復旧保証は最後の正常saveまで。
+
+Zero-One回帰テストはpreset / switch、全outcomeのTurn+1、carry / skip、Clear > Bust > Short、Short境界・資格非復活、Round開始 / SD資格resetとcount累積、Turn数順位 / 繰り返しSD、Turn差Penalty（70超を含む） / OUT / chunk / multiplier1回、stale RNG拒否 / blocking / recovery fresh wait、Replay / New Game / Full Reset、schema6と旧形式 / malformed snapshot拒否、staged UI / Rules / layoutを検証する。既存3モードの回帰を維持し、14 DICE exhaustive探索を追加しない。

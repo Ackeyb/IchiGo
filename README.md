@@ -1,11 +1,13 @@
 # Ichi-Go Game
 
-Current: IchiGo v5機能は実装済みです（実装基準: main / 62fe415）。ノーマル・完走指定・連続試合の3 Game Mode、連続試合の累積順位と自動分割Penalty、ルール説明に対応しています。実機通しプレイ・実Rendererの視覚確認・その他ユーザー自身の最終プレイ確認・最終Human Push判断は残件です。5 / 7 / 10 / 14 DICE、通常PlayとPenaltyのOUT、ROLL上限（∞ / 1〜5、完走指定は∞固定）、Replay Preparation、設定を引き継ぐNew Game、Full Resetに対応しています。同一タブのSession Recoveryと独立Sound設定、Three.js表示と同じ確定結果の2D fallbackを備えます。
+Current: IchiGo v6機能は実装済みです（実装基準: main / 02ce541）。ノーマル・完走指定・連続試合・ゼロワンの4 Game Mode、連続試合の累積順位と自動分割Penalty、ルール説明に対応しています。実機通しプレイ・実Rendererの視覚確認・その他ユーザー自身の最終プレイ確認・最終Human Push判断は残件です。5 / 7 / 10 / 14 DICE、通常PlayとPenaltyのOUT、ROLL上限（∞ / 1〜5、完走指定は∞固定、ゼロワンは上限を使わず1 ROLL = 1 Turn）、Replay Preparation、設定を引き継ぐNew Game、Full Resetに対応しています。同一タブのSession Recoveryと独立Sound設定、Three.js表示と同じ確定結果の2D fallbackを備えます。
 
 得点・OUT・順位・サドンデス・ペナルティには監査済みのPure Game Logicを使用します。Runtime / dependency maintenanceも完了し、Node.js 24 LTSを対象としています。
-現行仕様の唯一の正本は [docs/SPEC.md](docs/SPEC.md)、開発規約は [AGENTS.md](AGENTS.md) です。[実装進行ガイド](実装進行ガイド.md)は現在の保守フローと過去STEP記録、[v5変更仕様書](docs/v5_変更仕様書.md)・[v4変更仕様書](docs/v4_変更仕様書.md)・[v3変更仕様書](docs/v3_変更仕様書.md)は設計・変更履歴です。
+現行仕様の唯一の正本は [docs/SPEC.md](docs/SPEC.md)、開発規約は [AGENTS.md](AGENTS.md) です。[実装進行ガイド](実装進行ガイド.md)は現在の保守フローと過去STEP記録、[v6変更仕様書](docs/v6_変更仕様書.md)・[v5変更仕様書](docs/v5_変更仕様書.md)・[v4変更仕様書](docs/v4_変更仕様書.md)・[v3変更仕様書](docs/v3_変更仕様書.md)は設計・変更履歴です。
 
-v5では連続試合の途中試合から直接「次の試合へ」進み、最終試合の暫定順位・累計Scoreは「ヒミツ」として最終順位画面で公開します。完走指定の目標未達は通常次Gameへ進み、目標達成後の全員Complete、または全員non-completeで得点・残りが完全一致する場合だけSudden Deathになります。詳細はSPECを参照してください。
+連続試合の途中試合から直接「次の試合へ」進み、最終試合の暫定順位・累計Scoreは「ヒミツ」として最終順位画面で公開します。完走指定の目標未達は通常次Gameへ進み、目標達成後の全員Complete、または全員non-completeで得点・残りが完全一致する場合だけSudden Deathになります。詳細はSPECを参照してください。
+
+ゼロワンは350 / 5、500 / 7（default）、700 / 10、1000 / 14から選び、1と5の得点を残り点数から引いてちょうど0でClearします。1 ROLL = 1 Turn、超過はBust、残りダイスで到達不能ならShort。全員Clear後は累積Turn数が少ない方が上位で、全員同数ならSudden Deathです。PenaltyはトップとのTurn差のダイス数を分割ROLLし、Clean Clear累積数 + 1の倍率を使用します。
 
 ## 開発環境
 
@@ -44,8 +46,9 @@ npm run dev
 ノーマル / 完走指定の順位は `src/game/ranking.ts`、Seriesの累積最終順位・暫定順位は `seriesRanking.ts`・`seriesProvisional.ts` に分離しています。
 サドンデス判定・全員のラウンドリセットは `src/game/suddenDeath.ts`、完走指定の通常次Game / 真のSudden Deathの終了方針は `roundPolicy.ts`、専用進行identityは `completionTarget.ts` に分離しています。
 敗者のsingle-roll Penaltyは `src/game/penalty.ts`、Seriesの最大70個を10個以下に分ける処理は `seriesPenalty.ts` に分離しています。
+ゼロワンの独立したルールと進行は `zeroOne.ts`・`zeroOneFlow.ts`、Turn数順位とPenalty対象数は `zeroOneRanking.ts`・`zeroOnePenalty.ts` が担当し、出目生成と分割Penalty表示を共有します。
 画面間の進行は `src/game/gameFlow.ts` で管理します。接続契約は [docs/PLAYABLE_UI.md](docs/PLAYABLE_UI.md) を参照してください。
-再戦準備・設定を引き継ぐ新ゲーム・専用full resetを分離し、game/draft schema 5と独立したSound設定を使用します。通常SetupではPlayer追加・中間削除・並べ替え・名前・Game Modeと固有設定・Dice Mode・throwStyle・ROLL上限を編集でき、再戦準備では順番だけを変更できます。
+再戦準備・設定を引き継ぐ新ゲーム・専用full resetを分離し、game/draft schema 6と独立したSound設定を使用します。通常SetupではPlayer追加・中間削除・並べ替え・名前・Game Modeと固有設定・Dice Mode・throwStyle・ROLL上限を編集でき、再戦準備では順番だけを変更できます。
 
-[v1 Final Audit](docs/FINAL_AUDIT.md)は歴史的な回帰記録です。v5自動検証の基準は901 tests passed、typecheck・lint・build成功です。最終Human QAとPushは別工程です。
+[v1 Final Audit](docs/FINAL_AUDIT.md)は歴史的な回帰記録です。v6自動検証の基準は968 tests passed、typecheck・lint・build成功です。最終Human QAとPushは別工程です。
 依存関係は `package-lock.json` で固定し、生成物はGit管理から除外します。

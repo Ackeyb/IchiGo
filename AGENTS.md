@@ -18,9 +18,9 @@ Before making any implementation decision, read this file and `docs/SPEC.md`.
 
 ## 2. Source of Truth
 
-`docs/SPEC.md` is the **single source of truth for current v5 game behavior**.
+`docs/SPEC.md` is the **single source of truth for current v6 game behavior**.
 
-The current v5 implementation baseline is main / 62fe415. Real-device full play QA, actual Renderer visual checks (including OUT), the user's final play checks and the Human Push decision remain. `docs/v5_変更仕様書.md`, `docs/v4_変更仕様書.md` and `docs/v3_変更仕様書.md` record design/change history; `docs/v2_変更仕様書.md`, past STEP records, and `docs/FINAL_AUDIT.md` are historical material, not a second authority.
+The current v6 implementation baseline is main / 02ce541. Real-device full play QA, actual Renderer visual checks (including OUT), the user's final play checks and the Human Push decision remain. `docs/v6_変更仕様書.md`, `docs/v5_変更仕様書.md`, `docs/v4_変更仕様書.md` and `docs/v3_変更仕様書.md` record design/change history; `docs/v2_変更仕様書.md`, past STEP records, and `docs/FINAL_AUDIT.md` are historical material, not a second authority.
 
 If any of the following conflict with `docs/SPEC.md`:
 
@@ -82,7 +82,7 @@ Visual polish must never override game correctness.
 
 ## 5. Development Phases
 
-v5 implementation is complete; final human QA and the Human Push decision remain. Do not add a mandatory AI final audit. Consult `実装進行ガイド.md` for the current maintenance workflow and historical STEP records. Preserve the working application; do not rebuild it from scratch.
+v6 implementation, including Zero-One, is complete; final human QA and the Human Push decision remain. Do not add a mandatory AI final audit. Consult `実装進行ガイド.md` for the current maintenance workflow and historical STEP records. Preserve the working application; do not rebuild it from scratch.
 
 Work only on the requested scope. Documentation-only work must not modify implementation, tests, CSS, dependencies, configuration, or assets. Do not rewrite historical documents as current specifications.
 
@@ -201,7 +201,7 @@ strandedDice +
 removedDice === initialDiceCount;
 ```
 
-Dice Mode (`5 | 7 | 10 | 14`, default 7; maximum 14) is explicit authoritative game configuration. Derive `initialDiceCount` from `diceMode`; do not maintain a second independently mutable value. Never infer Dice Mode from current counts or their sum, including during recovery. Reject unsupported modes, including 15. Player count remains 2–10; do not confuse the player maximum with the dice maximum.
+For Normal / Completion Target / Series, Dice Mode (`5 | 7 | 10 | 14`, default 7; maximum 14) is explicit authoritative game configuration. Derive `initialDiceCount` from `diceMode`; do not maintain a second independently mutable value. Never infer Dice Mode from current counts or their sum, including during recovery. Reject unsupported modes, including 15. Player count remains 2–10; do not confuse the player maximum with the dice maximum.
 
 Remaining dice are:
 
@@ -211,6 +211,8 @@ remainingDice =
 ```
 
 Do not use `strandedDice` as an additional ranking tiebreaker.
+
+Zero-One derives initial dice count from its authoritative preset (350→5, 500→7, 700→10, 1000→14; default 500). Setup stores a validated diceMode projection, not a separately editable choice; the running ZeroOneGame stores neither diceMode nor rollLimit. Maintain the same dice-bucket invariant against the preset count. Do not infer or repair the preset from current counts.
 
 ---
 
@@ -238,7 +240,7 @@ Game state transitions must be explicit.
 
 Avoid hidden transitions caused by UI side effects.
 
-Important transitions include:
+Normal / Completion Target / Series Turn transitions include:
 
 ```text
 ROLL_READY
@@ -261,19 +263,31 @@ Do not allow UI components to independently mutate game rules.
 
 Keep replay preparation, new-game setup, and full reset separate. Replay preparation preserves participants/IDs/names/Game Mode and mode-specific settings/Dice Mode/throwStyle/ROLL上限 and permits only reordering before explicit start. New game carries settings to editable setup. Full reset requires confirmation and restores two blank rows, initial order, Normal Game Mode, Dice Mode 7, normal throw style, ROLL ∞; Sound persists. Derive player count/order from the participant array and never renumber surviving IDs. Enforce preparation restrictions in Flow, not only disabled UI controls.
 
-ROLL上限 is game-wide configuration: `RollLimit = null | 1 | 2 | 3 | 4 | 5`, default null (∞). Setup drafts own editable settings; running games own authoritative settings. Do not duplicate mutable limits on players/turns or infer them from UI. `TurnState.nextRollNumber` starts at 1; committed results also retain `rollNumber`. Counts reset for each new player turn, including Sudden Death. Penalty does not use this limit.
+For the existing three modes, ROLL上限 is game-wide configuration: `RollLimit = null | 1 | 2 | 3 | 4 | 5`, default null (∞). Setup drafts own editable settings; running games own authoritative settings. Do not duplicate mutable limits on players/turns or infer them from UI. `TurnState.nextRollNumber` starts at 1; committed results also retain `rollNumber`. Counts reset for each new player turn, including Sudden Death. Penalty does not use this limit.
 
-After committing scoring/removal/OUT, Engine priority is COMPLETE > no-score > ROLL上限 > no-active-dice > continuation. Turn-end reasons are `noScore | rollLimit | noActiveDice`; UI displays the authoritative reason. Ranking excludes roll count/limit. Normal and Completion Target retain complete-first ranking; Series uses cumulative score descending and cumulative remaining dice ascending, without Complete priority.
+For the existing three modes, after committing scoring/removal/OUT, Engine priority is COMPLETE > no-score > ROLL上限 > no-active-dice > continuation. Turn-end reasons are `noScore | rollLimit | noActiveDice`; UI displays the authoritative reason. Ranking excludes roll count/limit. Normal and Completion Target retain complete-first ranking; Series uses cumulative score descending and cumulative remaining dice ascending, without Complete priority.
 
 For finite games, show the next ROLL number near PLAYER, keep the current number throughout animation/result presentation, and advance only when continuation becomes available. Hide the counter for ∞ and after turn end.
 
-Game Mode is an exclusive discriminated configuration: Normal (default), Completion Target (target 1–5), or Series (2–5 Games). Do not retain hidden settings for inactive modes. Switching into Completion Target resets target to 1 and forces rollLimit=null; hide the ROLL limit control entirely. Leaving it keeps ∞, never restores an old finite limit. Switching into Series resets gameCount to 2. Reselecting the same mode retains its value.
+Game Mode is an exclusive discriminated configuration: Normal (default), Completion Target (target 1–5), Series (2–5 Games), or Zero-One (preset 350 / 500 / 700 / 1000). Do not retain hidden settings for inactive modes. Switching into Completion Target resets target to 1 and forces rollLimit=null; hide the ROLL limit control entirely. Leaving it keeps ∞, never restores an old finite limit. Switching into Series resets gameCount to 2. Switching into Zero-One resets preset to 500 / 7 DICE and rollLimit=null; hide both Dice Mode and ROLL limit controls. Leaving discards the preset and does not restore an old finite limit. Reselecting the same mode retains its value.
 
 Completion Target counts completion events, including the same player in multiple Games, and may exceed the target. Evaluate only after all players finish: unmet target takes priority even over all-complete or exact-tie conditions, and uses “次の試合へ” for an ordinary next Game, never Sudden Death. Only after target attainment evaluate Normal Sudden Death conditions; use “サドンデスへ” for true SD, otherwise “結果を見る” for the decisive Game. Both continuations start a fresh Game directly from Play after presentation unlock. Preserve configuration/completion count, reset per-Game state, and rank only the decisive Game. Reaching the target mid-Game never ends it immediately.
 
 Series has no per-Game winner/loser/Penalty or Sudden Death. Commit each Game's score and active+stranded remaining once, atomically with the last terminal ROLL. The standard non-final path uses “次の試合へ” directly from Play after the last presentation, bypassing Intermediate. Retain Intermediate components/helpers/phase/Recovery for potential reuse; no intermediate display option is currently implemented. Intermediate and Next Game must not re-add contributions. Next Game resets current players/Turn/ROLL while preserving cumulative values and completion count. Final ranking uses cumulative score/remaining only; all lowest-ranked players receive Penalty, even an all-player tie.
 
 Series provisional ranking uses previous cumulative values plus the current Game's finished turns, without Complete priority. Unfinished current turns remain outside ranking. An all-finished game already has its contribution committed: do not add it again. Derive displays from visibleState so results do not leak before staged reveal. From final Series Game start through its last ended Turn, Play masks rank/cumulative Score as “ヒミツ”, retains remaining dice, original row order and ordinary Turn information, and suppresses provisional bottom highlights. Keep internal provisional calculations unchanged; “結果を見る” reveals actual values in Final Ranking.
+
+---
+
+## 11.1. Zero-One contracts
+
+Zero-One owns separate domain/Flow/ranking rules. Reuse DieResult, Throw Style, RandomSource and presentation infrastructure without applying Normal continuation/Complete rules. Every accepted ROLL is exactly one Turn, including no-score, OUT, Bust, Short and Clear; increment accumulatedTurnCount once, including the clearing ROLL. Carry player score/dice/OUT/removals between their own Turns and rotate uncleared players in original order.
+
+Resolve Clear > Bust > Short > ordinary Turn end. SAFE 1/5 contribute 100/50 and are removed; OUT is out/null, zero points and stranded. Clear is exact subtraction to zero and wins even with no active dice. Bust restores pre-Turn remainingScore and all dice buckets, but retains Turn+1 and sets cleanClearEligible=false. Short checks updated remainingScore > activeDice*100, resets only that player's preset score/full dice/removals/OUT/Clear state, and retains Turn count and eligibility=false. Short is not a rollback or a new Round.
+
+Clean Clear means no Bust or Short from Round start through Clear. Only initial/fresh Game start or Sudden Death start initializes eligibility=true; Short never renews it. Commit each qualifying Clear once to totalCleanClearCount. Keep this global count through Bust, Short and repeated Sudden Death. Do not substitute totalCompletionCount.
+
+After all players Clear, rank by accumulatedTurnCount ascending with competition ranks; actual Clear timing is not a tiebreak. All tied goes directly from the presented final Clear to “サドンデスへ”, never Penalty. Reset preset score/dice/OUT/removals/Clear and renew eligibility for everyone, but preserve accumulated Turns, totalCleanClearCount, preset/style/identities/original order. Replay resets all progress; New Game carries editable mode/preset/style/participants only. Full Reset retains the Normal defaults above.
 
 ---
 
@@ -327,13 +341,15 @@ For session recovery:
 - do not repeat already committed score changes
 - do not repeat already committed OUT results
 - do not increment completion twice
-- do not reroll committed results; running Series Penalty resumes only an unexecuted chunk after restored paint acknowledgment and a fresh 1500ms wait
+- do not reroll committed results; running Series / Zero-One Penalty resumes only an unexecuted chunk after restored paint acknowledgment and a fresh 1500ms wait
 
 Treat persistence as a state transaction problem, not an animation restoration problem.
 
-Save initial setup, new-game setup, replay preparation (including edits/order changes), and full-reset setup. Separate draft validation from start validation: blank or unfinished names are not corrupt merely because START is invalid. Game recovery uses schema version 5; reject unsupported older game data, including schema 4, without migration or guessing missing Game Mode / ROLL ∞ / continuation identity. Completion Target requires completionTargetRound { number, kind: regular | suddenDeath }; ordinary target-unmet continuation must not increment suddenDeathCount. Restore terminal Play as next-Game / true-SD / result waiting according to the validated policy. Standard non-final Series recovery stays in Play, never auto-enters Intermediate or re-adds cumulative values. Storage failures remain fail-open. Sound format/version management is independent; Sound schema remains version 1; a game schema bump must not reset valid Sound settings.
+Save initial setup, new-game setup, replay preparation (including edits/order changes), and full-reset setup. Separate draft validation from start validation: blank or unfinished names are not corrupt merely because START is invalid. Game recovery uses schema version 6; reject unsupported older game data, including schema 5 and earlier, without migration or guessing missing Game Mode / ROLL ∞ / continuation identity. Completion Target requires completionTargetRound { number, kind: regular | suddenDeath }; ordinary target-unmet continuation must not increment suddenDeathCount. Restore terminal Play as next-Game / true-SD / result waiting according to the validated policy. Standard non-final Series recovery stays in Play, never auto-enters Intermediate or re-adds cumulative values. Storage failures remain fail-open. Sound format/version management is independent; Sound schema remains version 1; a game schema bump must not reset valid Sound settings.
 
-Validate saved rollLimit, nextRollNumber, rollNumber, result reason and the resolver-derived player/result together. A finite ended result may legitimately have `rollNumber = limit` and `nextRollNumber = limit + 1`; reject an over-limit ready/continuing turn, not this committed ended result. Restore Penalty OUT as status out/value null, validate BASE/MULTIPLIER/FINAL using 6 only for calculation, and never draw randomness to reconstruct committed results on recovery. Series Penalty may subsequently generate the next unexecuted chunk through its guarded auto action.
+Validate saved rollLimit, nextRollNumber, rollNumber, result reason and the resolver-derived player/result together. A finite ended result may legitimately have `rollNumber = limit` and `nextRollNumber = limit + 1`; reject an over-limit ready/continuing turn, not this committed ended result. Restore Penalty OUT as status out/value null, validate BASE/MULTIPLIER/FINAL using 6 only for calculation, and never draw randomness to reconstruct committed results on recovery. Series / Zero-One Penalty may subsequently generate the next unexecuted chunk through its guarded auto action.
+
+Zero-One Recovery validates preset, player remainingScore/dice/Turns/isCleared/cleanClearEligible, totalCleanClearCount, current player, Sudden Death and the saved before/result/player snapshot together. Missing preset/Turn count/eligibility is invalid, never inferred. Re-resolve saved dice only to compare consistency; never draw or reapply a Turn, Bust, Short or Clean Clear. Restore committed chunk prefix/status/BASE and reject discrepancies, without repair or double addition.
 
 ---
 
@@ -355,7 +371,7 @@ Sudden death must be handled by game logic, not UI shortcuts.
 
 Normal Sudden Death and Completion Target ordinary next Games / true Sudden Death reset the same per-round state, but retain distinct continuation identities. Never apply Completion Target continuation semantics to Normal. Series never uses Sudden Death.
 
-When starting sudden death:
+When starting Normal / Completion Target sudden death (Zero-One uses §11.1):
 
 - include all original players
 - preserve original player order
@@ -392,7 +408,9 @@ Only the final penalty calculation uses the cumulative multiplier defined in `do
 
 Series Penalty is separate from single-roll Penalty. Each loser's cumulativeRemainingDice is 0–70, partitioned into chunks of at most 10 independently of Dice Mode. Zero dice resolves with BASE/FINAL 0 and no ROLL, RNG or Renderer. Retain committedChunks and cumulative BASE; validate BASE against the dice without repairing it. Derive plan/index and resolved FINAL; apply totalCompletionCount+1 once to the full BASE.
 
-Only the first chunk per loser requires a tap. The presentation coordinator waits for reveal/paint acknowledgment, then a fresh 1500ms, and dispatches one guarded next-chunk action. Reject stale Store/revision/penalty/player/chunk identities before RNG. Blocking confirmation OPEN cancels timers; no draw/commit occurs during the dialog, CANCEL schedules a fresh wait, ACCEPT does not resume. Clean up timers/subscriptions. Never auto-start a pending next loser.
+Zero-One Penalty reuses chunk infrastructure, but totalDice = loser accumulatedTurnCount - top accumulatedTurnCount, never multiplied by preset dice. Do not impose Series's 70-dice rule on it; only exact numeric representation bounds apply. Apply totalCleanClearCount+1 once to the full BASE. Main-game OUT scores zero; Penalty OUT contributes six only in arithmetic. Each rendered chunk stays at most 10 dice.
+
+Only the first chunk per loser requires a tap in Series and Zero-One. The presentation coordinator waits for reveal/paint acknowledgment, then a fresh 1500ms, and dispatches one guarded next-chunk action. Reject stale Store/revision/penalty/player/chunk identities before RNG. Blocking confirmation OPEN cancels timers; no draw/commit occurs during the dialog, CANCEL schedules a fresh wait, ACCEPT does not resume. Clean up timers/subscriptions. Never auto-start a pending next loser.
 
 Recovery restores committed chunks without reroll/re-addition. A running sequence resumes after restored paint acknowledgment and a fresh wait, with no extra tap. Never persist remaining milliseconds, timers, acknowledgment or pause state. UI shows current chunk and cumulative BASE, never chunk BASE subtotals (including expression suffixes); FINAL values appear only when resolved. Internal chunk arithmetic still exists.
 
@@ -410,11 +428,11 @@ UI components should primarily:
 
 UI components should not contain duplicated implementations of core game rules.
 
-Play in all game modes and Normal / Completion Target Penalty result-card layout uses Dice Mode plus displayed count: 5/7 DICE use one row, 10 DICE uses at most five columns, and 14 DICE uses at most seven columns (14→7+7 through 8→7+1; ≤7 one row). This 2D result-card contract is distinct from Three.js animation positions. Layout never changes engine results. Red face 1/5 is face design, not GET status. Penalty SAFE cards show faces without SAFE/GET labels; OUT remains explicitly labeled and accessible. Preserve non-color indicators for normal scoring.
+Play in all game modes (Zero-One uses preset-derived Dice Mode) and Normal / Completion Target Penalty result-card layout uses Dice Mode plus displayed count: 5/7 DICE use one row, 10 DICE uses at most five columns, and 14 DICE uses at most seven columns (14→7+7 through 8→7+1; ≤7 one row). This 2D result-card contract is distinct from Three.js animation positions. Layout never changes engine results. Red face 1/5 is face design, not GET status. Penalty SAFE cards show faces without SAFE/GET labels; OUT remains explicitly labeled and accessible. Preserve non-color indicators for normal scoring.
 
 For example, avoid implementing scoring separately inside a React component when scoring already exists in the game engine.
 
-Series Penalty has its own 2D chunk layout: 10→5+5 through 6→5+1, ≤5 one row, irrespective of original Dice Mode. Do not apply it to normal Play or conflate it with Three.js positions.
+Series / Zero-One Penalty has its own 2D chunk layout: 10→5+5 through 6→5+1, ≤5 one row, irrespective of original Dice Mode. Do not apply it to normal Play or conflate it with Three.js positions.
 
 The Setup header places 「ルール説明」 immediately left of Sound. RulesScreen is user-facing explanation and pure UI navigation, not a game Flow phase. Returning preserves the Setup draft without a game transition, Recovery write or RNG draw. Keep existing local screen guidance.
 
@@ -422,7 +440,7 @@ The Setup header places 「ルール説明」 immediately left of Sound. RulesSc
 
 ## 19. 3D Dice Integration
 
-Treat the 3D dice implementation as an adapter/renderer. It supports at most 14 dice and rejects 15. The 11–14 presentation layout balances rows; narrow-stage camera framing adapts while existing tray/dice dimensions remain unchanged. It need not match the 2D strict 7+7 result layout. Series Penalty sends only its current chunk, at most 10 dice; never create a 70-dice renderer. It does not consume RandomSource or decide results; reuse resources and preserve resize/context-loss/timeout/cleanup/2D fallback contracts.
+Treat the 3D dice implementation as an adapter/renderer. It supports at most 14 dice and rejects 15. The 11–14 presentation layout balances rows; narrow-stage camera framing adapts while existing tray/dice dimensions remain unchanged. It need not match the 2D strict 7+7 result layout. Series / Zero-One Penalty sends only its current chunk, at most 10 dice; never create a 70-dice renderer. It does not consume RandomSource or decide results; reuse resources and preserve resize/context-loss/timeout/cleanup/2D fallback contracts.
 
 Keep library-specific code isolated from game rules.
 
@@ -657,7 +675,7 @@ Use one responsive application.
 
 Preserve Mobile Stable Layout at 320x568, 375x667, 390x844 and 430x932: Play from PLAYER n/n top to main Action bottom, and Penalty from PENALTY n/n top to main Action bottom, fit in one viewport. Normal ROLL, continued ROLL and Penalty ROLL must not move scroll position, substantially move the Action, or shift layout when animation/results change.
 
-Reserved presentation space, READY areas, animation areas and Action Slot are intentional stability mechanisms, not wasted whitespace. Do not gain height by deleting/merging/reordering elements, moving status or Action Slot, using sticky/fixed or absolute Action hacks, hiding content with overflow, shortening animation duration, or shrinking touch targets. If the stable structure needs to change, stop and return the decision to the human; do not invent an alternative UI. Preserve reduced-motion behavior. Browser QA also covers 768x1024 and 1280x900.
+Reserved presentation space, READY areas, animation areas and Action Slot are intentional stability mechanisms, not wasted whitespace. Do not gain height by deleting/merging/reordering elements, moving status or Action Slot, using sticky/fixed or absolute Action hacks, hiding content with overflow, shortening animation duration, shrinking touch targets, or extreme font reduction. If the stable structure needs to change, stop and return the decision to the human; do not invent an alternative UI. Preserve reduced-motion behavior. Browser QA also covers 768x1024 and 1280x900.
 
 Prioritize visibility of:
 
